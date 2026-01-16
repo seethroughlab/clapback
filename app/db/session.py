@@ -1,10 +1,17 @@
 """Database session management."""
 
+import os
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import settings
+
+# Determine if we need SSL (Fly.io internal connections don't)
+connect_args = {}
+if os.environ.get("FLY_APP_NAME"):
+    # Running on Fly.io - disable SSL for internal postgres connection
+    connect_args["ssl"] = False
 
 # Create async engine
 engine = create_async_engine(
@@ -14,6 +21,7 @@ engine = create_async_engine(
     max_overflow=10,
     pool_pre_ping=True,
     pool_recycle=1800,
+    connect_args=connect_args,
 )
 
 # Session factory

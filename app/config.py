@@ -39,13 +39,15 @@ class Settings(BaseSettings):
         elif url.startswith("postgresql://"):
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-        # Remove sslmode parameter (asyncpg doesn't support it)
-        # Fly.io internal connections don't need SSL anyway
-        if "sslmode=" in url:
-            # Remove ?sslmode=xxx or &sslmode=xxx
-            import re
+        # Handle SSL for asyncpg
+        # Fly.io internal connections don't need SSL
+        import re
+        if "sslmode=disable" in url:
+            # Replace sslmode=disable with ssl=disable (asyncpg format)
+            url = re.sub(r"sslmode=disable", "ssl=disable", url)
+        elif "sslmode=" in url:
+            # Remove other sslmode values
             url = re.sub(r"[?&]sslmode=[^&]*", "", url)
-            # Clean up any trailing ? or &&
             url = url.rstrip("?").replace("&&", "&").rstrip("&")
 
         return url
