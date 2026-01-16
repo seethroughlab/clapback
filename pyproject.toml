@@ -12,6 +12,7 @@ dependencies = [
     "pydantic-settings>=2.0.0",
     "slowapi>=0.1.9",
     "alembic>=1.13.0",
+    "python-multipart>=0.0.6",  # For form handling in admin
 ]
 
 [tool.uv]

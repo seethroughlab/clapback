@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import DateTime, Float, Integer, String, func
+from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -73,3 +73,49 @@ class Features(Base):
     last_accessed_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )
+
+
+class BannedIP(Base):
+    """Banned IP addresses.
+
+    IPs that have been blocked from accessing the cache.
+    """
+
+    __tablename__ = "banned_ips"
+
+    ip_address: Mapped[str] = mapped_column(String(45), primary_key=True)  # IPv6 max length
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    banned_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+    banned_by: Mapped[str | None] = mapped_column(String(100), nullable=True)  # Admin identifier
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class IPStats(Base):
+    """Per-IP statistics for monitoring and scraping detection.
+
+    Tracks request patterns to identify suspicious behavior.
+    """
+
+    __tablename__ = "ip_stats"
+
+    ip_address: Mapped[str] = mapped_column(String(45), primary_key=True)
+
+    # Request counts
+    total_lookups: Mapped[int] = mapped_column(Integer, default=0)
+    total_contributions: Mapped[int] = mapped_column(Integer, default=0)
+    lookup_hits: Mapped[int] = mapped_column(Integer, default=0)  # Found in cache
+    lookup_misses: Mapped[int] = mapped_column(Integer, default=0)  # Not found
+
+    # Timestamps
+    first_seen: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+    last_seen: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    # Flags
+    flagged: Mapped[bool] = mapped_column(Boolean, default=False)
+    flag_reason: Mapped[str | None] = mapped_column(Text, nullable=True)

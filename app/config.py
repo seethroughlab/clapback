@@ -11,8 +11,11 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://cache:cache@localhost:5432/cache"
 
     # Rate limiting
-    lookup_rate_limit: str = "100/minute"
-    contribute_rate_limit: str = "10/minute"
+    lookup_rate_limit: str = "300/minute"
+    contribute_rate_limit: str = "30/minute"
+
+    # Admin dashboard
+    admin_password: str = ""  # Set via CACHE_ADMIN_PASSWORD env var
 
     # Server
     debug: bool = False

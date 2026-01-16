@@ -3,17 +3,16 @@
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
 from app.api.routes import router
-
-# Rate limiter
-limiter = Limiter(key_func=get_remote_address)
+from app.api.admin import admin_router
+from app.limiter import limiter
+from app.middleware import IPBanMiddleware
 
 
 @asynccontextmanager
@@ -35,6 +34,9 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# IP ban middleware (must be added before CORS)
+app.add_middleware(IPBanMiddleware)
+
 # CORS - allow all origins for now (embeddings are not sensitive)
 app.add_middleware(
     CORSMiddleware,
@@ -45,6 +47,7 @@ app.add_middleware(
 
 # Include API routes
 app.include_router(router)
+app.include_router(admin_router)
 
 
 @app.get("/health")
@@ -69,11 +72,3 @@ async def health_db() -> dict[str, Any]:
             status_code=503,
             content={"status": "unhealthy", "database": str(e)},
         )
-
-
-# Apply rate limiting to routes
-@app.middleware("http")
-async def rate_limit_middleware(request: Request, call_next):
-    """Apply rate limiting based on endpoint."""
-    response = await call_next(request)
-    return response

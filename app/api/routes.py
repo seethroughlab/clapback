@@ -3,13 +3,21 @@
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
 from app.api.deps import DbSession
+from app.config import settings
 from app.db.models import Embedding, Features
+from app.limiter import limiter
 
 router = APIRouter(prefix="/v1")
+
+# Valid musical keys
+VALID_KEYS = {
+    "C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab", "A", "A#", "Bb", "B",
+    "Cm", "C#m", "Dbm", "Dm", "D#m", "Ebm", "Em", "Fm", "F#m", "Gbm", "Gm", "G#m", "Abm", "Am", "A#m", "Bbm", "Bm",
+}
 
 
 # --- Embedding models ---
@@ -45,18 +53,25 @@ class ContributeResponse(BaseModel):
 
 
 class FeaturesData(BaseModel):
-    """Audio features data."""
+    """Audio features data with validation."""
 
-    bpm: float | None = None
+    bpm: float | None = Field(None, ge=20, le=400)  # Physical limits of music tempo
     key: str | None = None
-    energy: float | None = None
-    danceability: float | None = None
-    valence: float | None = None
-    acousticness: float | None = None
-    instrumentalness: float | None = None
-    speechiness: float | None = None
-    liveness: float | None = None
-    loudness: float | None = None
+    energy: float | None = Field(None, ge=0.0, le=1.0)
+    danceability: float | None = Field(None, ge=0.0, le=1.0)
+    valence: float | None = Field(None, ge=0.0, le=1.0)
+    acousticness: float | None = Field(None, ge=0.0, le=1.0)
+    instrumentalness: float | None = Field(None, ge=0.0, le=1.0)
+    speechiness: float | None = Field(None, ge=0.0, le=1.0)
+    liveness: float | None = Field(None, ge=0.0, le=1.0)
+    loudness: float | None = Field(None, ge=-60.0, le=0.0)  # dB scale
+
+    @field_validator("key")
+    @classmethod
+    def validate_key(cls, v: str | None) -> str | None:
+        if v is not None and v not in VALID_KEYS:
+            raise ValueError(f"Invalid key: {v}. Must be a valid musical key.")
+        return v
 
 
 class FeaturesRequest(BaseModel):
@@ -77,6 +92,7 @@ class FeaturesResponse(BaseModel):
 
 
 @router.get("/embeddings/{fingerprint_hash}", response_model=EmbeddingResponse)
+@limiter.limit(settings.lookup_rate_limit)
 async def lookup_embedding(
     request: Request,
     fingerprint_hash: str,
@@ -114,6 +130,7 @@ async def lookup_embedding(
 
 
 @router.post("/embeddings", status_code=201, response_model=ContributeResponse)
+@limiter.limit(settings.contribute_rate_limit)
 async def contribute_embedding(
     request: Request,
     req: EmbeddingRequest,
@@ -159,6 +176,7 @@ async def contribute_embedding(
 
 
 @router.get("/features/{fingerprint_hash}", response_model=FeaturesResponse)
+@limiter.limit(settings.lookup_rate_limit)
 async def lookup_features(
     request: Request,
     fingerprint_hash: str,
@@ -204,6 +222,7 @@ async def lookup_features(
 
 
 @router.post("/features", status_code=201, response_model=ContributeResponse)
+@limiter.limit(settings.contribute_rate_limit)
 async def contribute_features(
     request: Request,
     req: FeaturesRequest,
