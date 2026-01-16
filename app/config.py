@@ -1,5 +1,7 @@
 """Configuration for the cache server."""
 
+import os
+
 from pydantic_settings import BaseSettings
 
 
@@ -16,6 +18,28 @@ class Settings(BaseSettings):
     debug: bool = False
 
     model_config = {"env_prefix": "CACHE_"}
+
+    def get_async_database_url(self) -> str:
+        """Get database URL with asyncpg driver.
+
+        Handles Fly.io's DATABASE_URL format (postgres://) and converts
+        to asyncpg format (postgresql+asyncpg://).
+        """
+        url = self.database_url
+
+        # Also check DATABASE_URL directly (Fly.io sets this)
+        if url == "postgresql+asyncpg://cache:cache@localhost:5432/cache":
+            fly_url = os.environ.get("DATABASE_URL")
+            if fly_url:
+                url = fly_url
+
+        # Convert postgres:// to postgresql+asyncpg://
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+        elif url.startswith("postgresql://"):
+            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+        return url
 
 
 settings = Settings()

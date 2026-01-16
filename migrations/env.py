@@ -21,11 +21,17 @@ if config.config_file_name is not None:
 # Model metadata for autogenerate
 target_metadata = Base.metadata
 
-# Get database URL from environment
-database_url = os.environ.get(
-    "CACHE_DATABASE_URL",
-    "postgresql+asyncpg://cache:cache@localhost:5432/cache"
-)
+# Get database URL from environment (handle Fly.io's DATABASE_URL)
+database_url = os.environ.get("CACHE_DATABASE_URL") or os.environ.get("DATABASE_URL")
+if not database_url:
+    database_url = "postgresql+asyncpg://cache:cache@localhost:5432/cache"
+
+# Convert postgres:// to postgresql+asyncpg://
+if database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql+asyncpg://", 1)
+elif database_url.startswith("postgresql://"):
+    database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
 config.set_main_option("sqlalchemy.url", database_url)
 
 
