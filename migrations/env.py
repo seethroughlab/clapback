@@ -65,10 +65,11 @@ def do_run_migrations(connection: Connection) -> None:
 
 async def run_async_migrations() -> None:
     """Run migrations in async mode."""
-    # Fly.io internal connections don't need SSL
+    # Only disable SSL for Fly.io internal postgres (*.flycast or *.internal)
     connect_args = {}
-    if os.environ.get("FLY_APP_NAME"):
+    if ".flycast" in database_url or ".internal" in database_url:
         connect_args["ssl"] = False
+    # External databases (like Neon) need SSL - don't set ssl=False
 
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),

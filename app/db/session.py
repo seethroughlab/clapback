@@ -7,11 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.config import settings
 
-# Determine if we need SSL (Fly.io internal connections don't)
+# Determine SSL settings based on database host
 connect_args = {}
-if os.environ.get("FLY_APP_NAME"):
-    # Running on Fly.io - disable SSL for internal postgres connection
+db_url = settings.get_async_database_url()
+# Only disable SSL for Fly.io internal postgres (*.flycast or *.internal)
+if ".flycast" in db_url or ".internal" in db_url:
     connect_args["ssl"] = False
+# External databases (like Neon) need SSL - don't set ssl=False
 
 # Create async engine
 engine = create_async_engine(
