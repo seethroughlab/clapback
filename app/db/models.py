@@ -3,7 +3,8 @@
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, Float, Index, Integer, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -65,6 +66,30 @@ class Features(Base):
     liveness: Mapped[float | None] = mapped_column(Float, nullable=True)
     loudness: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    # Phase 1 deep analysis scalars
+    harmonic_complexity: Mapped[float | None] = mapped_column(Float, nullable=True)
+    key_stability: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    modal_character: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    modal_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    swing_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    syncopation: Mapped[float | None] = mapped_column(Float, nullable=True)
+    tempo_character: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    brightness: Mapped[float | None] = mapped_column(Float, nullable=True)
+    dynamic_range_db: Mapped[float | None] = mapped_column(Float, nullable=True)
+    energy_shape: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    section_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    form_string: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    avg_section_length: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Phase 1 additional scalars
+    replaygain_track_gain: Mapped[float | None] = mapped_column(Float, nullable=True)
+    track_peak: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Phase 3 melodic features
+    note_density: Mapped[float | None] = mapped_column(Float, nullable=True)
+    interval_character: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    pitch_range: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     # Metadata
     contributor_count: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(
@@ -119,3 +144,34 @@ class IPStats(Base):
     # Flags
     flagged: Mapped[bool] = mapped_column(Boolean, default=False)
     flag_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class AnalysisDetail(Base):
+    """Full structured analysis data (JSONB blob).
+
+    Separated from Features because the JSONB blob is 10-100KB vs ~500 bytes
+    for scalar features. Clients can opt-in to fetching it.
+
+    Keyed by (fingerprint_hash, analysis_version).
+    """
+
+    __tablename__ = "analysis_details"
+    __table_args__ = (
+        Index("ix_analysis_details_last_accessed", "last_accessed_at"),
+    )
+
+    # Composite primary key
+    fingerprint_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    analysis_version: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    # The full structured analysis data
+    detail: Mapped[dict] = mapped_column(JSONB, nullable=False)
+
+    # Metadata
+    contributor_count: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+    last_accessed_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )

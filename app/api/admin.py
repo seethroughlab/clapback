@@ -11,7 +11,7 @@ from sqlalchemy import func, select, update
 
 from app.api.deps import DbSession
 from app.config import settings
-from app.db.models import BannedIP, Embedding, Features, IPStats
+from app.db.models import AnalysisDetail, BannedIP, Embedding, Features, IPStats
 
 admin_router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -246,6 +246,7 @@ async def dashboard(request: Request, db: DbSession) -> HTMLResponse:
     # Get stats
     embedding_count = (await db.execute(select(func.count()).select_from(Embedding))).scalar() or 0
     features_count = (await db.execute(select(func.count()).select_from(Features))).scalar() or 0
+    analysis_detail_count = (await db.execute(select(func.count()).select_from(AnalysisDetail))).scalar() or 0
     banned_count = (await db.execute(
         select(func.count()).select_from(BannedIP).where(BannedIP.is_active == True)  # noqa: E712
     )).scalar() or 0
@@ -459,6 +460,10 @@ async def dashboard(request: Request, db: DbSession) -> HTMLResponse:
                 <div class="stat">
                     <div class="stat-value">{features_count:,}</div>
                     <div class="stat-label">Features</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">{analysis_detail_count:,}</div>
+                    <div class="stat-label">Analysis Details</div>
                 </div>
                 <div class="stat">
                     <div class="stat-value">{unique_ips:,}</div>
