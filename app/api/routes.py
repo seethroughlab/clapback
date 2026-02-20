@@ -1,9 +1,10 @@
 """API routes for the cache server."""
 
+import json
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.api.deps import DbSession
@@ -12,12 +13,6 @@ from app.db.models import AnalysisDetail, Embedding, Features
 from app.limiter import limiter
 
 router = APIRouter(prefix="/v1")
-
-# Valid musical keys
-VALID_KEYS = {
-    "C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab", "A", "A#", "Bb", "B",
-    "Cm", "C#m", "Dbm", "Dm", "D#m", "Ebm", "Em", "Fm", "F#m", "Gbm", "Gm", "G#m", "Abm", "Am", "A#m", "Bbm", "Bm",
-}
 
 
 # --- Embedding models ---
@@ -52,93 +47,12 @@ class ContributeResponse(BaseModel):
 # --- Features models ---
 
 
-VALID_KEY_STABILITIES = {"stable", "moderate", "unstable"}
-VALID_TEMPO_CHARACTERS = {"steady", "moderate", "variable", "live"}
-VALID_ENERGY_SHAPES = {"steady", "building", "declining", "dynamic", "peak_early", "peak_late"}
-VALID_INTERVAL_CHARACTERS = {"conjunct", "mixed", "disjunct"}
-
-
-class FeaturesData(BaseModel):
-    """Audio features data with validation."""
-
-    # Original 10 basic features
-    bpm: float | None = Field(None, ge=20, le=400)  # Physical limits of music tempo
-    key: str | None = None
-    energy: float | None = Field(None, ge=0.0, le=1.0)
-    danceability: float | None = Field(None, ge=0.0, le=1.0)
-    valence: float | None = Field(None, ge=0.0, le=1.0)
-    acousticness: float | None = Field(None, ge=0.0, le=1.0)
-    instrumentalness: float | None = Field(None, ge=0.0, le=1.0)
-    speechiness: float | None = Field(None, ge=0.0, le=1.0)
-    liveness: float | None = Field(None, ge=0.0, le=1.0)
-    loudness: float | None = Field(None, ge=-60.0, le=0.0)  # dB scale
-
-    # Phase 1 deep analysis scalars
-    harmonic_complexity: float | None = Field(None, ge=0.0, le=1.0)
-    key_stability: str | None = None
-    modal_character: str | None = Field(None, max_length=50)
-    modal_confidence: float | None = Field(None, ge=0.0, le=1.0)
-    swing_ratio: float | None = Field(None, ge=0.0)
-    syncopation: float | None = Field(None, ge=0.0, le=1.0)
-    tempo_character: str | None = None
-    brightness: float | None = Field(None, ge=0.0, le=1.0)
-    dynamic_range_db: float | None = Field(None, ge=0.0)
-    energy_shape: str | None = None
-    section_count: int | None = Field(None, ge=0)
-    form_string: str | None = Field(None, max_length=200)
-    avg_section_length: float | None = Field(None, ge=0.0)
-
-    # Phase 1 additional scalars
-    replaygain_track_gain: float | None = None
-    track_peak: float | None = Field(None, ge=0.0)
-
-    # Phase 3 melodic features
-    note_density: float | None = Field(None, ge=0.0)
-    interval_character: str | None = None
-    pitch_range: int | None = Field(None, ge=0)
-
-    @field_validator("key")
-    @classmethod
-    def validate_key(cls, v: str | None) -> str | None:
-        if v is not None and v not in VALID_KEYS:
-            raise ValueError(f"Invalid key: {v}. Must be a valid musical key.")
-        return v
-
-    @field_validator("key_stability")
-    @classmethod
-    def validate_key_stability(cls, v: str | None) -> str | None:
-        if v is not None and v not in VALID_KEY_STABILITIES:
-            raise ValueError(f"Invalid key_stability: {v}")
-        return v
-
-    @field_validator("tempo_character")
-    @classmethod
-    def validate_tempo_character(cls, v: str | None) -> str | None:
-        if v is not None and v not in VALID_TEMPO_CHARACTERS:
-            raise ValueError(f"Invalid tempo_character: {v}")
-        return v
-
-    @field_validator("energy_shape")
-    @classmethod
-    def validate_energy_shape(cls, v: str | None) -> str | None:
-        if v is not None and v not in VALID_ENERGY_SHAPES:
-            raise ValueError(f"Invalid energy_shape: {v}")
-        return v
-
-    @field_validator("interval_character")
-    @classmethod
-    def validate_interval_character(cls, v: str | None) -> str | None:
-        if v is not None and v not in VALID_INTERVAL_CHARACTERS:
-            raise ValueError(f"Invalid interval_character: {v}")
-        return v
-
-
 class FeaturesRequest(BaseModel):
     """Request to contribute features."""
 
     fingerprint_hash: str = Field(..., min_length=64, max_length=64)
     analysis_version: int = Field(..., ge=1)
-    features: FeaturesData
+    features: dict  # Client sends whatever it has
 
 
 class FeaturesResponse(BaseModel):
@@ -146,7 +60,7 @@ class FeaturesResponse(BaseModel):
 
     fingerprint_hash: str
     analysis_version: int
-    features: FeaturesData
+    features: dict
     contributor_count: int
 
 
@@ -264,36 +178,7 @@ async def lookup_features(
     return FeaturesResponse(
         fingerprint_hash=feat.fingerprint_hash,
         analysis_version=feat.analysis_version,
-        features=FeaturesData(
-            bpm=feat.bpm,
-            key=feat.key,
-            energy=feat.energy,
-            danceability=feat.danceability,
-            valence=feat.valence,
-            acousticness=feat.acousticness,
-            instrumentalness=feat.instrumentalness,
-            speechiness=feat.speechiness,
-            liveness=feat.liveness,
-            loudness=feat.loudness,
-            harmonic_complexity=feat.harmonic_complexity,
-            key_stability=feat.key_stability,
-            modal_character=feat.modal_character,
-            modal_confidence=feat.modal_confidence,
-            swing_ratio=feat.swing_ratio,
-            syncopation=feat.syncopation,
-            tempo_character=feat.tempo_character,
-            brightness=feat.brightness,
-            dynamic_range_db=feat.dynamic_range_db,
-            energy_shape=feat.energy_shape,
-            section_count=feat.section_count,
-            form_string=feat.form_string,
-            avg_section_length=feat.avg_section_length,
-            replaygain_track_gain=feat.replaygain_track_gain,
-            track_peak=feat.track_peak,
-            note_density=feat.note_density,
-            interval_character=feat.interval_character,
-            pitch_range=feat.pitch_range,
-        ),
+        features=feat.features,
         contributor_count=feat.contributor_count,
     )
 
@@ -307,8 +192,20 @@ async def contribute_features(
 ) -> ContributeResponse:
     """Contribute audio features to the cache.
 
-    If the features already exist, increments the contributor count.
+    If the features already exist, increments the contributor count
+    and backfills any missing keys from the new contribution.
+    Max payload size: 64KB.
     """
+    if not req.features:
+        raise HTTPException(status_code=422, detail="Features dict must not be empty")
+
+    features_size = len(json.dumps(req.features))
+    if features_size > 64 * 1024:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Features payload too large: {features_size} bytes (max 64KB)",
+        )
+
     # Check if features already exist
     result = await db.execute(
         select(Features).where(
@@ -318,39 +215,26 @@ async def contribute_features(
     )
     existing = result.scalar_one_or_none()
 
-    # All feature column names (must match Features model attributes)
-    _feature_columns = [
-        "bpm", "key", "energy", "danceability", "valence", "acousticness",
-        "instrumentalness", "speechiness", "liveness", "loudness",
-        "harmonic_complexity", "key_stability", "modal_character", "modal_confidence",
-        "swing_ratio", "syncopation", "tempo_character", "brightness",
-        "dynamic_range_db", "energy_shape", "section_count", "form_string",
-        "avg_section_length", "replaygain_track_gain", "track_peak",
-        "note_density", "interval_character", "pitch_range",
-    ]
-
     if existing:
-        # Increment contributor count and backfill any NULL columns
+        # Increment contributor count and backfill missing keys
         existing.contributor_count += 1
-        for col in _feature_columns:
-            new_val = getattr(req.features, col, None)
-            if new_val is not None and getattr(existing, col) is None:
-                setattr(existing, col, new_val)
+        merged = {**existing.features}
+        for k, v in req.features.items():
+            if v is not None and k not in merged:
+                merged[k] = v
+        existing.features = merged
         await db.commit()
         return ContributeResponse(
             status="confirmed",
             contributor_count=existing.contributor_count,
         )
 
-    # Create new features entry with all available fields
+    # Create new features entry
     feat = Features(
         fingerprint_hash=req.fingerprint_hash,
         analysis_version=req.analysis_version,
+        features={k: v for k, v in req.features.items() if v is not None},
     )
-    for col in _feature_columns:
-        val = getattr(req.features, col, None)
-        if val is not None:
-            setattr(feat, col, val)
     db.add(feat)
     await db.commit()
 
@@ -427,7 +311,6 @@ async def contribute_analysis_detail(
     If the detail already exists, increments the contributor count.
     Max payload size: 512KB.
     """
-    import json
     detail_size = len(json.dumps(req.detail))
     if detail_size > 512 * 1024:
         raise HTTPException(

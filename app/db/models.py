@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, DateTime, Float, Index, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, Index, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -46,6 +46,9 @@ class Features(Base):
 
     Keyed by (fingerprint_hash, analysis_version) to ensure we don't
     mix features from incompatible analysis pipelines.
+
+    All feature values are stored as a single JSONB blob — the server
+    is a dumb store and never inspects individual feature keys.
     """
 
     __tablename__ = "features"
@@ -54,41 +57,8 @@ class Features(Base):
     fingerprint_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     analysis_version: Mapped[int] = mapped_column(Integer, primary_key=True)
 
-    # Audio features (all nullable since not all may be computed)
-    bpm: Mapped[float | None] = mapped_column(Float, nullable=True)
-    key: Mapped[str | None] = mapped_column(String(10), nullable=True)
-    energy: Mapped[float | None] = mapped_column(Float, nullable=True)
-    danceability: Mapped[float | None] = mapped_column(Float, nullable=True)
-    valence: Mapped[float | None] = mapped_column(Float, nullable=True)
-    acousticness: Mapped[float | None] = mapped_column(Float, nullable=True)
-    instrumentalness: Mapped[float | None] = mapped_column(Float, nullable=True)
-    speechiness: Mapped[float | None] = mapped_column(Float, nullable=True)
-    liveness: Mapped[float | None] = mapped_column(Float, nullable=True)
-    loudness: Mapped[float | None] = mapped_column(Float, nullable=True)
-
-    # Phase 1 deep analysis scalars
-    harmonic_complexity: Mapped[float | None] = mapped_column(Float, nullable=True)
-    key_stability: Mapped[str | None] = mapped_column(String(30), nullable=True)
-    modal_character: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    modal_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
-    swing_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
-    syncopation: Mapped[float | None] = mapped_column(Float, nullable=True)
-    tempo_character: Mapped[str | None] = mapped_column(String(30), nullable=True)
-    brightness: Mapped[float | None] = mapped_column(Float, nullable=True)
-    dynamic_range_db: Mapped[float | None] = mapped_column(Float, nullable=True)
-    energy_shape: Mapped[str | None] = mapped_column(String(30), nullable=True)
-    section_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    form_string: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    avg_section_length: Mapped[float | None] = mapped_column(Float, nullable=True)
-
-    # Phase 1 additional scalars
-    replaygain_track_gain: Mapped[float | None] = mapped_column(Float, nullable=True)
-    track_peak: Mapped[float | None] = mapped_column(Float, nullable=True)
-
-    # Phase 3 melodic features
-    note_density: Mapped[float | None] = mapped_column(Float, nullable=True)
-    interval_character: Mapped[str | None] = mapped_column(String(30), nullable=True)
-    pitch_range: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # All features as a JSONB blob
+    features: Mapped[dict] = mapped_column(JSONB, nullable=False, default={})
 
     # Metadata
     contributor_count: Mapped[int] = mapped_column(Integer, default=1)
