@@ -79,7 +79,12 @@ h3 { margin: 20px 0 10px; color: #c4b5fd; font-size: 16px; }
     margin-bottom: 20px;
 }
 .card h2 { margin: 0 0 16px; font-size: 16px; color: #c4b5fd; }
-.card canvas { display: block; width: 100% !important; }
+/* Chart sizing: with maintainAspectRatio:false, Chart.js fills the
+   canvas's CSS box. Without a fixed height it grows to fill viewport,
+   so we pin each chart to a sensible height. */
+.card canvas { display: block; width: 100% !important; height: 240px !important; }
+#chart-growth { height: 200px !important; }
+#chart-mood   { height: 320px !important; }
 
 .chart-grid {
     display: grid;
