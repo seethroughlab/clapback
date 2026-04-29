@@ -11,6 +11,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.api.routes import router
 from app.api.admin import admin_router
+from app.api.browse import browse_router
 from app.limiter import limiter
 from app.middleware import IPBanMiddleware
 
@@ -48,6 +49,7 @@ app.add_middleware(
 # Include API routes
 app.include_router(router)
 app.include_router(admin_router)
+app.include_router(browse_router)
 
 
 @app.get("/health")

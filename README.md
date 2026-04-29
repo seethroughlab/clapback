@@ -10,12 +10,15 @@ Stores and retrieves **CLAP embeddings** and **audio features** keyed by AcoustI
 
 - Only SHA256 hashes of audio fingerprints are stored (one-way, anonymous)
 - No filenames, metadata, or personal information is transmitted
+- The public browse pages (`/`, `/browse/{hash}`) only show those hashes and the analysis data keyed off them
 - Contribution is opt-in via Familiar's Admin settings
 
 ## API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
+| `/` | GET | Public browse landing page (stats + paginated table) |
+| `/browse/{hash}` | GET | Public detail view for a fingerprint |
 | `/health` | GET | Basic liveness check |
 | `/health/db` | GET | Database connectivity check |
 | `/v1/embeddings/{hash}` | GET | Lookup CLAP embedding |
