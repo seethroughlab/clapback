@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -45,6 +46,9 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+
+# Static assets (CSS, JS) for HTML pages
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 # Include API routes
 app.include_router(router)

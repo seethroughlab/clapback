@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}Familiar Cache · Admin Login{% endblock %}
+
+{% block head_extra %}
+<style>
+body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+.container { max-width: 400px; }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="login-box">
+    <h1>🔒 Admin Login</h1>
+    <form method="POST" action="/admin/login">
+        <input type="password" name="password" placeholder="Password" required autofocus>
+        <button type="submit">Login</button>
+    </form>
+    {% if error_message %}
+    <p class="error">{{ error_message }}</p>
+    {% endif %}
+</div>
+{% endblock %}

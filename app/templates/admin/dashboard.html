@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% from "_macros.html" import stat_card, ip_table, banned_row %}
+
+{% block title %}Familiar Cache · Admin{% endblock %}
+
+{% block body %}
+<div class="header">
+    <h1>🎵 Familiar Cache Admin</h1>
+    <a href="/admin/logout" class="btn-logout">Logout</a>
+</div>
+
+<div class="stats">
+    {{ stat_card(stats.embeddings, 'Embeddings') }}
+    {{ stat_card(stats.features, 'Features') }}
+    {{ stat_card(stats.analysis_details, 'Analysis Details') }}
+    {{ stat_card(stats.unique_ips, 'Unique IPs') }}
+    {{ stat_card(stats.banned, 'Banned IPs') }}
+</div>
+
+<div class="tabs">
+    <button class="tab active" onclick="showTab(event, 'recent')">Recent Activity</button>
+    <button class="tab" onclick="showTab(event, 'top')">Top Contributors</button>
+    <button class="tab" onclick="showTab(event, 'flagged')">Flagged</button>
+    <button class="tab" onclick="showTab(event, 'banned')">Banned IPs</button>
+</div>
+
+<div id="recent" class="tab-content active">
+    {{ ip_table(recent_ips) }}
+</div>
+
+<div id="top" class="tab-content">
+    {{ ip_table(top_contributors) }}
+</div>
+
+<div id="flagged" class="tab-content">
+    {{ ip_table(flagged_ips, empty_message='No flagged IPs') }}
+</div>
+
+<div id="banned" class="tab-content">
+    <h3>Ban IP Address</h3>
+    <form class="ban-form" method="POST" action="/admin/ban">
+        <input type="text" name="ip_address" placeholder="IP Address" required>
+        <input type="text" name="reason" placeholder="Reason (optional)">
+        <button type="submit">Ban IP</button>
+    </form>
+
+    <table>
+        <thead>
+            <tr>
+                <th>IP Address</th>
+                <th>Reason</th>
+                <th>Banned At</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if banned_ips %}
+                {% for ban in banned_ips %}{{ banned_row(ban) }}{% endfor %}
+            {% else %}
+                <tr><td colspan="4">No banned IPs</td></tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showTab(event, name) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+    document.getElementById(name).classList.add('active');
+    event.target.classList.add('active');
+}
+</script>
+{% endblock %}

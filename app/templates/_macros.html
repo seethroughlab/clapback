@@ -1,0 +1,67 @@
+{% macro stat_card(value, label) %}
+<div class="stat">
+    <div class="stat-value">{{ "{:,}".format(value) }}</div>
+    <div class="stat-label">{{ label }}</div>
+</div>
+{% endmacro %}
+
+
+{% macro ip_row(ip, show_ban=True) %}
+{% set hit_rate = (ip.lookup_hits / ip.total_lookups * 100) if ip.total_lookups else 0 %}
+<tr>
+    <td>
+        <code>{{ ip.ip_address }}</code>
+        {% if ip.flagged %}<span class="badge flagged">⚠ Flagged</span>{% endif %}
+    </td>
+    <td>{{ "{:,}".format(ip.total_lookups) }}</td>
+    <td>{{ "{:,}".format(ip.total_contributions) }}</td>
+    <td>{{ "%.1f"|format(hit_rate) }}%</td>
+    <td>{{ ip.last_seen | fmt_dt }}</td>
+    <td>
+        {% if show_ban %}
+        <form method="POST" action="/admin/ban" style="display:inline">
+            <input type="hidden" name="ip_address" value="{{ ip.ip_address }}">
+            <button type="submit" class="btn-ban" onclick="return confirm('Ban {{ ip.ip_address }}?')">Ban</button>
+        </form>
+        {% endif %}
+    </td>
+</tr>
+{% endmacro %}
+
+
+{% macro banned_row(ban) %}
+<tr>
+    <td><code>{{ ban.ip_address }}</code></td>
+    <td>{{ ban.reason or '-' }}</td>
+    <td>{{ ban.banned_at | fmt_dt }}</td>
+    <td>
+        <form method="POST" action="/admin/unban" style="display:inline">
+            <input type="hidden" name="ip_address" value="{{ ban.ip_address }}">
+            <button type="submit" class="btn-unban">Unban</button>
+        </form>
+    </td>
+</tr>
+{% endmacro %}
+
+
+{% macro ip_table(rows, show_ban=True, empty_message='No entries') %}
+<table>
+    <thead>
+        <tr>
+            <th>IP Address</th>
+            <th>Lookups</th>
+            <th>Contributions</th>
+            <th>Hit Rate</th>
+            <th>Last Seen</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% if rows %}
+            {% for ip in rows %}{{ ip_row(ip, show_ban) }}{% endfor %}
+        {% else %}
+            <tr><td colspan="6">{{ empty_message }}</td></tr>
+        {% endif %}
+    </tbody>
+</table>
+{% endmacro %}

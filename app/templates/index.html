@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% from "_macros.html" import stat_card %}
+
+{% block title %}Familiar Cache{% endblock %}
+
+{% block body %}
+<h1>🎵 Familiar Cache</h1>
+<p class="tagline">
+    Community embedding cache for the
+    <a href="https://github.com/seethroughlab/familiar">Familiar music player</a>.
+    All entries are anonymous SHA256 fingerprint hashes.
+</p>
+<div class="header-links">
+    <a href="/docs">API docs</a>
+    <a href="https://github.com/seethroughlab/familiar-cache">GitHub</a>
+    <a href="/health/db">Health</a>
+</div>
+
+<div class="stats">
+    {{ stat_card(stats.embeddings, 'Embeddings') }}
+    {{ stat_card(stats.tracks, 'Unique tracks') }}
+    {{ stat_card(stats.features, 'Feature sets') }}
+    {{ stat_card(stats.details, 'Analysis details') }}
+</div>
+
+<form class="controls" method="GET" action="/">
+    <input type="text" name="q" placeholder="Search by fingerprint hash prefix (hex)"
+           value="{{ q or '' }}" pattern="[0-9a-fA-F]*" maxlength="64">
+    <select name="sort">
+        <option value="recent"{% if sort == 'recent' %} selected{% endif %}>Recent</option>
+        <option value="popular"{% if sort == 'popular' %} selected{% endif %}>Most contributors</option>
+        <option value="accessed"{% if sort == 'accessed' %} selected{% endif %}>Recently accessed</option>
+    </select>
+    <button type="submit">Apply</button>
+</form>
+
+{% if rows %}
+<table>
+    <thead>
+        <tr>
+            <th>Fingerprint</th>
+            <th>Analysis v.</th>
+            <th>CLAP model</th>
+            <th>Contributors</th>
+            <th title="Has audio features">Feat.</th>
+            <th title="Has analysis detail">Det.</th>
+            <th>Created</th>
+            <th>Last accessed</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in rows %}
+        {% set key = r.fingerprint_hash ~ ':' ~ r.analysis_version %}
+        <tr>
+            <td>
+                <a href="/browse/{{ r.fingerprint_hash }}"><code>{{ r.fingerprint_hash[:12] }}…</code></a>
+            </td>
+            <td>{{ r.analysis_version }}</td>
+            <td>
+                {% if r.clap_model_version|length > 36 %}
+                    <code><span title="{{ r.clap_model_version }}">{{ r.clap_model_version[:33] }}…</span></code>
+                {% else %}
+                    <code>{{ r.clap_model_version }}</code>
+                {% endif %}
+            </td>
+            <td>{{ "{:,}".format(r.contributor_count) }}</td>
+            <td style="text-align:center">
+                {% if key in feat_keys %}<span class="yes">●</span>{% else %}<span class="no">○</span>{% endif %}
+            </td>
+            <td style="text-align:center">
+                {% if key in detail_keys %}<span class="yes">●</span>{% else %}<span class="no">○</span>{% endif %}
+            </td>
+            <td class="muted">{{ r.created_at | fmt_dt }}</td>
+            <td class="muted">{{ r.last_accessed_at | fmt_dt }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="empty">
+    {% if q %}No embeddings match your search.{% else %}Cache is empty — be the first to contribute!{% endif %}
+</div>
+{% endif %}
+
+<div class="pagination">
+    <a class="{% if page <= 1 %}disabled{% endif %}" href="?page={{ page - 1 }}{{ qs_suffix }}">← Prev</a>
+    <span class="current">Page {{ page }}</span>
+    <a class="{% if not has_next or page >= max_page %}disabled{% endif %}" href="?page={{ page + 1 }}{{ qs_suffix }}">Next →</a>
+    <span class="muted" style="margin-left: auto">Page size {{ page_size }} · max page {{ max_page }}</span>
+</div>
+{% endblock %}

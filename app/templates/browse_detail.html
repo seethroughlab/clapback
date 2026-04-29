@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Fingerprint {{ fingerprint_hash[:12] }}… · Familiar Cache{% endblock %}
+
+{% block body %}
+<a class="back-link" href="/">← Back to index</a>
+<h1>Fingerprint detail</h1>
+<p><code style="font-size: 14px">{{ fingerprint_hash }}</code></p>
+<p class="muted">
+    {{ totals.embeddings }} embedding row(s) ·
+    {{ totals.features }} feature set(s) ·
+    {{ totals.details }} analysis detail(s)
+</p>
+
+{% for v in versions %}
+<h2>Analysis version {{ v.av }}</h2>
+
+<h3>Embeddings</h3>
+{% for e in v.embeddings %}
+<div class="vector-row">
+    <div class="vector-meta">
+        <span><strong>CLAP model:</strong> <code>{{ e.clap_model_version }}</code></span>
+        <span><strong>Contributors:</strong> {{ "{:,}".format(e.contributor_count) }}</span>
+        <span><strong>Dims:</strong> {{ e.dims }}</span>
+        <span class="muted">Created {{ e.created_at | fmt_dt }} · Last accessed {{ e.last_accessed_at | fmt_dt }}</span>
+    </div>
+    <div class="muted" style="margin-bottom:8px">Embedding preview (first 8 + last 8):</div>
+    <pre>{{ e.preview }}</pre>
+    <details>
+        <summary>Show full vector ({{ e.dims }} dims)</summary>
+        <pre>{{ e.vec_json }}</pre>
+    </details>
+</div>
+{% endfor %}
+
+{% if v.features %}
+<h3>Features <span class="muted">· {{ "{:,}".format(v.features.contributor_count) }} contributors · created {{ v.features.created_at | fmt_dt }}</span></h3>
+<pre>{{ v.features_json }}</pre>
+{% else %}
+<h3>Features</h3>
+<div class="muted">No features recorded for this version.</div>
+{% endif %}
+
+{% if v.detail %}
+<h3>Analysis detail <span class="muted">· {{ "{:,}".format(v.detail.contributor_count) }} contributors · {{ "%.1f"|format(v.detail_size_kb) }} KB · created {{ v.detail.created_at | fmt_dt }}</span></h3>
+<details>
+    <summary>Show full analysis detail JSON</summary>
+    <pre>{{ v.detail_json }}</pre>
+</details>
+{% else %}
+<h3>Analysis detail</h3>
+<div class="muted">No analysis detail recorded for this version.</div>
+{% endif %}
+{% endfor %}
+{% endblock %}
