@@ -1,109 +1,147 @@
 """Public browse routes for the cache server.
 
-Renders HTML pages so anyone can see what's in the community cache.
-All stored data is already anonymized (SHA256 fingerprint hashes), so
-public browsing is consistent with the project's "community cache" framing.
+`/`        — community dashboard (stats + charts).
+`/browse/<fingerprint_hash>` — direct lookup of a specific fingerprint
+                               (URL is paste-friendly for developers).
 """
 
 import json
 import re
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
-from sqlalchemy import func, select, tuple_
+from sqlalchemy import func, select, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import DbSession
+from app.cache import stats_cache
 from app.config import settings
-from app.db.models import AnalysisDetail, Embedding, Features
+from app.db.models import AnalysisDetail, Embedding, Features, IPStats
 from app.limiter import limiter
 from app.templates import fmt_vec_preview, templates
 
 browse_router = APIRouter(tags=["browse"])
 
-PAGE_SIZE = 50
-MAX_PAGE = 200  # caps drive-by enumeration to ~10K rows
 HEX_RE = re.compile(r"^[0-9a-fA-F]+$")
+SECONDS_PER_ANALYSIS = 15  # rough CLAP analysis time on a typical client
+
+
+# ---------- aggregation helpers (each cached separately under stats_cache) ----------
+
+
+async def _fetch_top_stats(db: AsyncSession) -> dict:
+    """Headline numbers: tracks, analyses, hours saved, hit rate."""
+    tracks = (await db.execute(
+        select(func.count(func.distinct(Embedding.fingerprint_hash)))
+    )).scalar() or 0
+    analyses = (await db.execute(select(func.count()).select_from(Features))).scalar() or 0
+    hits = (await db.execute(
+        select(func.coalesce(func.sum(IPStats.lookup_hits), 0))
+    )).scalar() or 0
+    total = (await db.execute(
+        select(func.coalesce(func.sum(IPStats.total_lookups), 0))
+    )).scalar() or 0
+    hit_rate = (hits / total) if total else 0.0
+    hours_saved = hits * SECONDS_PER_ANALYSIS / 3600
+    return {
+        "tracks": int(tracks),
+        "analyses": int(analyses),
+        "hours_saved": float(hours_saved),
+        "hit_rate": float(hit_rate),
+    }
+
+
+async def _fetch_velocity(db: AsyncSession) -> dict:
+    last_24h = (await db.execute(
+        select(func.count()).select_from(Embedding)
+        .where(Embedding.created_at > func.now() - text("interval '24 hours'"))
+    )).scalar() or 0
+    last_7d = (await db.execute(
+        select(func.count()).select_from(Embedding)
+        .where(Embedding.created_at > func.now() - text("interval '7 days'"))
+    )).scalar() or 0
+    return {"last_24h": int(last_24h), "last_7d": int(last_7d)}
+
+
+async def _fetch_growth(db: AsyncSession) -> list[dict]:
+    """Daily-bucketed cumulative count for the last 90 days."""
+    rows = (await db.execute(text("""
+        SELECT day, sum(daily_count) OVER (ORDER BY day) AS cumulative
+        FROM (
+            SELECT date_trunc('day', created_at) AS day, count(*) AS daily_count
+            FROM embeddings
+            WHERE created_at > now() - interval '90 days'
+            GROUP BY 1
+        ) t
+        ORDER BY day
+    """))).all()
+    return [{"day": r.day.date().isoformat(), "cumulative": int(r.cumulative)} for r in rows]
+
+
+async def _fetch_bpm_histogram(db: AsyncSession) -> list[dict]:
+    """10-bucket histogram from 60..200 BPM. Skips rows without bpm."""
+    rows = (await db.execute(text("""
+        SELECT width_bucket((features->>'bpm')::float, 60, 200, 10) AS bucket,
+               count(*) AS n
+        FROM features
+        WHERE features ? 'bpm' AND (features->>'bpm') ~ '^-?[0-9.]+$'
+        GROUP BY 1
+        ORDER BY 1
+    """))).all()
+    return [{"bucket": int(r.bucket), "n": int(r.n)} for r in rows]
+
+
+async def _fetch_key_distribution(db: AsyncSession) -> list[dict]:
+    rows = (await db.execute(text("""
+        SELECT features->>'key' AS k, count(*) AS n
+        FROM features
+        WHERE features ? 'key' AND (features->>'key') <> ''
+        GROUP BY 1
+        ORDER BY n DESC
+        LIMIT 12
+    """))).all()
+    return [{"key": r.k, "n": int(r.n)} for r in rows]
+
+
+async def _fetch_mood_grid(db: AsyncSession) -> list[dict]:
+    """10×10 valence × energy density grid for a heatmap."""
+    rows = (await db.execute(text("""
+        SELECT width_bucket((features->>'valence')::float, 0, 1, 10) AS vx,
+               width_bucket((features->>'energy')::float,  0, 1, 10) AS ex,
+               count(*) AS n
+        FROM features
+        WHERE features ? 'valence' AND features ? 'energy'
+          AND (features->>'valence') ~ '^-?[0-9.]+$'
+          AND (features->>'energy')  ~ '^-?[0-9.]+$'
+        GROUP BY 1, 2
+    """))).all()
+    return [{"vx": int(r.vx), "ex": int(r.ex), "n": int(r.n)} for r in rows]
+
+
+# ---------- routes ----------
 
 
 @browse_router.get("/", response_class=HTMLResponse)
 @limiter.limit(settings.lookup_rate_limit)
-async def index(
-    request: Request,
-    db: DbSession,
-    page: int = Query(1, ge=1, le=MAX_PAGE),
-    sort: str = Query("recent", pattern="^(recent|popular|accessed)$"),
-    q: str | None = Query(None, max_length=64),
-) -> HTMLResponse:
-    """Public landing page: stats + paginated browsable embeddings table."""
-    embedding_count = (await db.execute(select(func.count()).select_from(Embedding))).scalar() or 0
-    track_count = (await db.execute(select(func.count(func.distinct(Embedding.fingerprint_hash))))).scalar() or 0
-    features_count = (await db.execute(select(func.count()).select_from(Features))).scalar() or 0
-    detail_count = (await db.execute(select(func.count()).select_from(AnalysisDetail))).scalar() or 0
-
-    base = select(Embedding)
-    if q:
-        if not HEX_RE.match(q):
-            raise HTTPException(status_code=422, detail="Search must be hex (0-9, a-f)")
-        base = base.where(Embedding.fingerprint_hash.like(f"{q.lower()}%"))
-
-    if sort == "popular":
-        base = base.order_by(Embedding.contributor_count.desc(), Embedding.created_at.desc())
-    elif sort == "accessed":
-        base = base.order_by(Embedding.last_accessed_at.desc())
-    else:
-        base = base.order_by(Embedding.created_at.desc())
-
-    offset = (page - 1) * PAGE_SIZE
-    rows = (await db.execute(base.offset(offset).limit(PAGE_SIZE + 1))).scalars().all()
-    has_next = len(rows) > PAGE_SIZE
-    rows = rows[:PAGE_SIZE]
-
-    # Batch lookups for has_features / has_detail (avoid N+1)
-    pairs = {(r.fingerprint_hash, r.analysis_version) for r in rows}
-    feat_keys: set[str] = set()
-    detail_keys: set[str] = set()
-    if pairs:
-        pair_list = list(pairs)
-        feat_rows = (await db.execute(
-            select(Features.fingerprint_hash, Features.analysis_version).where(
-                tuple_(Features.fingerprint_hash, Features.analysis_version).in_(pair_list)
-            )
-        )).all()
-        feat_keys = {f"{h}:{v}" for h, v in feat_rows}
-        detail_rows = (await db.execute(
-            select(AnalysisDetail.fingerprint_hash, AnalysisDetail.analysis_version).where(
-                tuple_(AnalysisDetail.fingerprint_hash, AnalysisDetail.analysis_version).in_(pair_list)
-            )
-        )).all()
-        detail_keys = {f"{h}:{v}" for h, v in detail_rows}
-
-    qs_parts = []
-    if q:
-        qs_parts.append(f"q={q}")
-    if sort != "recent":
-        qs_parts.append(f"sort={sort}")
-    qs_suffix = ("&" + "&".join(qs_parts)) if qs_parts else ""
+async def index(request: Request, db: DbSession) -> HTMLResponse:
+    """Public dashboard: cache size, growth, musical landscape."""
+    top = await stats_cache.get_or_compute("top_stats", lambda: _fetch_top_stats(db))
+    velocity = await stats_cache.get_or_compute("velocity", lambda: _fetch_velocity(db))
+    growth = await stats_cache.get_or_compute("growth", lambda: _fetch_growth(db))
+    bpm = await stats_cache.get_or_compute("bpm_hist", lambda: _fetch_bpm_histogram(db))
+    keys = await stats_cache.get_or_compute("key_dist", lambda: _fetch_key_distribution(db))
+    mood = await stats_cache.get_or_compute("mood_grid", lambda: _fetch_mood_grid(db))
 
     return templates.TemplateResponse(
         request,
         "index.html",
         {
-            "stats": {
-                "embeddings": embedding_count,
-                "tracks": track_count,
-                "features": features_count,
-                "details": detail_count,
-            },
-            "rows": rows,
-            "feat_keys": feat_keys,
-            "detail_keys": detail_keys,
-            "page": page,
-            "page_size": PAGE_SIZE,
-            "max_page": MAX_PAGE,
-            "has_next": has_next,
-            "sort": sort,
-            "q": q,
-            "qs_suffix": qs_suffix,
+            "top": top,
+            "velocity": velocity,
+            "growth": growth,
+            "bpm": bpm,
+            "keys": keys,
+            "mood": mood,
         },
     )
 

@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% from "_macros.html" import stat_card %}
 
 {% block title %}Familiar Cache{% endblock %}
 
@@ -8,7 +7,7 @@
 <p class="tagline">
     Community embedding cache for the
     <a href="https://github.com/seethroughlab/familiar">Familiar music player</a>.
-    All entries are anonymous SHA256 fingerprint hashes.
+    Tracks contributed are anonymized SHA256 fingerprint hashes — no titles, artists, or files.
 </p>
 <div class="header-links">
     <a href="/docs">API docs</a>
@@ -16,76 +15,88 @@
     <a href="/health/db">Health</a>
 </div>
 
-<div class="stats">
-    {{ stat_card(stats.embeddings, 'Embeddings') }}
-    {{ stat_card(stats.tracks, 'Unique tracks') }}
-    {{ stat_card(stats.features, 'Feature sets') }}
-    {{ stat_card(stats.details, 'Analysis details') }}
+<div class="hero-stats">
+    <div class="stat hero">
+        <div class="stat-value">{{ "{:,}".format(top.tracks) }}</div>
+        <div class="stat-label">Unique tracks</div>
+    </div>
+    <div class="stat hero">
+        <div class="stat-value">{{ "{:,}".format(top.analyses) }}</div>
+        <div class="stat-label">Cached analyses</div>
+    </div>
+    <div class="stat hero">
+        <div class="stat-value">~{{ "{:,.0f}".format(top.hours_saved) }}<span class="stat-unit"> hr</span></div>
+        <div class="stat-label">Compute saved</div>
+    </div>
+    <div class="stat hero">
+        <div class="stat-value">{{ "%.0f"|format(top.hit_rate * 100) }}<span class="stat-unit">%</span></div>
+        <div class="stat-label">Lookup hit rate</div>
+    </div>
 </div>
 
-<form class="controls" method="GET" action="/">
-    <input type="text" name="q" placeholder="Search by fingerprint hash prefix (hex)"
-           value="{{ q or '' }}" pattern="[0-9a-fA-F]*" maxlength="64">
-    <select name="sort">
-        <option value="recent"{% if sort == 'recent' %} selected{% endif %}>Recent</option>
-        <option value="popular"{% if sort == 'popular' %} selected{% endif %}>Most contributors</option>
-        <option value="accessed"{% if sort == 'accessed' %} selected{% endif %}>Recently accessed</option>
-    </select>
-    <button type="submit">Apply</button>
-</form>
-
-{% if rows %}
-<table>
-    <thead>
-        <tr>
-            <th>Fingerprint</th>
-            <th>Analysis v.</th>
-            <th>CLAP model</th>
-            <th>Contributors</th>
-            <th title="Has audio features">Feat.</th>
-            <th title="Has analysis detail">Det.</th>
-            <th>Created</th>
-            <th>Last accessed</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for r in rows %}
-        {% set key = r.fingerprint_hash ~ ':' ~ r.analysis_version %}
-        <tr>
-            <td>
-                <a href="/browse/{{ r.fingerprint_hash }}"><code>{{ r.fingerprint_hash[:12] }}…</code></a>
-            </td>
-            <td>{{ r.analysis_version }}</td>
-            <td>
-                {% if r.clap_model_version|length > 36 %}
-                    <code><span title="{{ r.clap_model_version }}">{{ r.clap_model_version[:33] }}…</span></code>
-                {% else %}
-                    <code>{{ r.clap_model_version }}</code>
-                {% endif %}
-            </td>
-            <td>{{ "{:,}".format(r.contributor_count) }}</td>
-            <td style="text-align:center">
-                {% if key in feat_keys %}<span class="yes">●</span>{% else %}<span class="no">○</span>{% endif %}
-            </td>
-            <td style="text-align:center">
-                {% if key in detail_keys %}<span class="yes">●</span>{% else %}<span class="no">○</span>{% endif %}
-            </td>
-            <td class="muted">{{ r.created_at | fmt_dt }}</td>
-            <td class="muted">{{ r.last_accessed_at | fmt_dt }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-{% else %}
-<div class="empty">
-    {% if q %}No embeddings match your search.{% else %}Cache is empty — be the first to contribute!{% endif %}
+<div class="velocity">
+    <span class="velocity-arrow">▲</span>
+    <strong>+{{ "{:,}".format(velocity.last_7d) }}</strong> tracks contributed in the past 7 days
+    <span class="muted">· {{ "{:,}".format(velocity.last_24h) }} in the past 24 hours</span>
 </div>
-{% endif %}
 
-<div class="pagination">
-    <a class="{% if page <= 1 %}disabled{% endif %}" href="?page={{ page - 1 }}{{ qs_suffix }}">← Prev</a>
-    <span class="current">Page {{ page }}</span>
-    <a class="{% if not has_next or page >= max_page %}disabled{% endif %}" href="?page={{ page + 1 }}{{ qs_suffix }}">Next →</a>
-    <span class="muted" style="margin-left: auto">Page size {{ page_size }} · max page {{ max_page }}</span>
+<div class="card">
+    <h2>Cache growth (last 90 days)</h2>
+    {% if growth %}
+    <canvas id="chart-growth" height="120"></canvas>
+    {% else %}
+    <div class="muted">Not enough data yet — check back after a few contributions.</div>
+    {% endif %}
 </div>
+
+<div class="chart-grid">
+    <div class="card">
+        <h2>BPM distribution</h2>
+        {% if bpm %}
+        <canvas id="chart-bpm" height="180"></canvas>
+        {% else %}
+        <div class="muted">No BPM data yet.</div>
+        {% endif %}
+    </div>
+    <div class="card">
+        <h2>Top musical keys</h2>
+        {% if keys %}
+        <canvas id="chart-keys" height="180"></canvas>
+        {% else %}
+        <div class="muted">No key data yet.</div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <h2>Mood landscape <span class="muted">· valence × energy</span></h2>
+    {% if mood %}
+    <canvas id="chart-mood" height="220"></canvas>
+    <div class="mood-axes">
+        <span class="muted">← sad</span>
+        <span class="muted">happy →</span>
+    </div>
+    {% else %}
+    <div class="muted">No valence/energy data yet.</div>
+    {% endif %}
+</div>
+
+<p class="muted footnote">
+    Looking up a specific fingerprint? Paste it as
+    <code>/browse/{your-hash}</code> in the URL bar. Want to contribute? Enable the
+    cache toggle in Familiar's Admin settings — it's opt-in.
+</p>
+{% endblock %}
+
+{% block scripts %}
+<script type="application/json" id="chart-data">{{ {
+    "growth": growth,
+    "bpm": bpm,
+    "keys": keys,
+    "mood": mood
+} | tojson }}</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
+        integrity="sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g"
+        crossorigin="anonymous"></script>
+<script src="{{ url_for('static', path='js/dashboard.js') }}"></script>
 {% endblock %}

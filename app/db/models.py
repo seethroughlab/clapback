@@ -22,6 +22,9 @@ class Embedding(Base):
     """
 
     __tablename__ = "embeddings"
+    __table_args__ = (
+        Index("ix_embeddings_created_at", "created_at"),
+    )
 
     # Composite primary key
     fingerprint_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
