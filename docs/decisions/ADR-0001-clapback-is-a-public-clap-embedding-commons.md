@@ -1,11 +1,20 @@
 # ADR-0001: Clapback Is a Public CLAP Embedding Commons
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-01
 
 The first architectural decision record in this repository. It is framing: it says what this project
 is, what it is not, and which decisions must follow it. It decides no schema and no endpoint.
+
+Implementation:
+- Accepted 2026-09-01. Familiar depends on this project rather than the reverse, per
+  [`ADR-0105`][adr105] in that repository.
+- `clapback-embed`, the reference implementation point 3 requires, is built and merged
+  (`packages/embed/`). It carries the repository's first CI: `fly-deploy.yml` had been pushing to
+  production on every commit to `main` with no gate at all.
+- **Deferred item 2 is largely answered already**, and by the route the table anticipated. See the
+  cross-machine measurement in the Context below.
 
 ## Context
 
@@ -125,6 +134,41 @@ Two keys, already shipped, already known to be wrong, indistinguishable from the
 reading the source. That is exactly what MetaBrainz described, and it is in the data this project
 would inherit.
 
+### What two machines settle that waiting could not
+
+Point 6 of the deferred table assumed this needed contributors. It did not — it needed two machines.
+Measured 2026-09-01 with the **same artifact bytes** and the **same audio bytes** on each:
+
+| | | |
+|---|---|---|
+| | Apple M4 Max | Intel i7-6700K |
+| architecture | arm64 / NEON | x86_64 / AVX2 |
+| OS | macOS 26.5 | Linux 6.12, glibc 2 |
+| Python | 3.12.11 | 3.11.16 |
+| numpy | 2.5.2 | 2.4.6 |
+| librosa | **1.0.0** | **0.11.0** |
+
+    worst cosine        0.999999999934   (6.6e-11 from unity)
+    worst element delta 1.5e-06
+    bit-identical       0 of 5
+
+The librosa **major-version** gap is the part that was not expected to survive; the front-end agrees
+across it, which is a stronger result than the architecture difference alone.
+
+Two consequences, pointing in opposite directions:
+
+- **Vectors are not bit-identical across architectures.** No check may require byte equality between
+  contributors, and any design that assumed it would have rejected every honest submission from a
+  machine unlike ours.
+- **Computation is roughly a thousand times tighter than storage.** `pgvector`'s `float4` column
+  costs 6.0e-08 on a round-trip against computation's 6.6e-11, so **the noise floor of this corpus is
+  set by how vectors are stored, not by whose CPU produced them.** A threshold should be derived from
+  storage precision. The existing `identical` band at 0.999999 is four orders of magnitude more
+  conservative than it needs to be.
+
+This is what makes point 6's claim — that consensus here is well-formed — a measured statement rather
+than an argument from first principles.
+
 ### Why the reference implementation belongs in this repository
 
 [`ADR-0105`][adr105] in the Familiar repository removes `torch` and `transformers` from Familiar in
@@ -202,7 +246,7 @@ Each needs its own ADR, and the execution order differs from the numbering:
 | order | decision | why here |
 |---|---|---|
 | 1 | The embedder package and its pinned front-end | Everything else depends on one implementation existing. `ADR-0105` already specifies the contract. |
-| 2 | How agreement is measured, given one contributor | PR `#1`'s premise is contradicted above; the measurement needs contributors or a deliberate multi-machine run. |
+| 2 | How agreement is measured, given one contributor | **Largely answered** by the cross-machine run below: honest computation agrees ~1000x tighter than storage. What remains is choosing the threshold and where it is enforced. |
 | 3 | Identity, revocation and deletion | IP-only identity, no delete path anywhere, and flagging that is enforced nowhere. A public corpus cannot ship without these. |
 | 4 | The recording-id key | `ADR-0102`'s substance, and the reason other applications would query this at all. |
 | 5 | The tool's local features | Point 5's draw, and the only thing that produces a second contributor. |
