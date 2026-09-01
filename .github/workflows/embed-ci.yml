@@ -24,9 +24,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No `enable-cache`: it keys on `**/uv.lock`, which this repository
+      # gitignores (.gitignore:15), and the action hard-errors when the glob
+      # matches nothing. A library should not carry a lock file anyway.
       - uses: astral-sh/setup-uv@v3
-        with:
-          enable-cache: true
 
       - name: Install
         run: uv pip install --system -e ".[dev]"
@@ -50,9 +51,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No `enable-cache`: it keys on `**/uv.lock`, which this repository
+      # gitignores (.gitignore:15), and the action hard-errors when the glob
+      # matches nothing. A library should not carry a lock file anyway.
       - uses: astral-sh/setup-uv@v3
-        with:
-          enable-cache: true
 
       # The whole reason this package exists is that its output matches the
       # reference implementation. Without this job the suite would prove only that
