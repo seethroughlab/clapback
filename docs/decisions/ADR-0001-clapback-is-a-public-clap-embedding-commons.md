@@ -84,6 +84,47 @@ benchmarks, identical for every row, and not something contributions can invalid
 needed per-item correctness *and* model quality; this needs per-item **integrity** plus one model
 decision.
 
+### What "features" actually means here, and why the category is not one thing
+
+The 77,770 feature rows hold 25 distinct keys, and treating them as a single category is the mistake
+that made an earlier draft of this ADR reject all of them for the wrong reason. Enumerated from the
+deployed corpus on 2026-09-01:
+
+| kind | keys | rows |
+|---|---|---|
+| Standardised measurement | `loudness_lufs`, `replaygain_track_gain`, `track_peak` | 46,133 – 46,171 |
+| Physical, unstandardised | `brightness`, `dynamic_range_db` | 48,037 |
+| Musical ground-truth estimates | `bpm`, `key`, `key_stability`, `modal_character`, `modal_confidence`, `tempo_character`, `tempo_cv`, `swing_ratio`, `syncopation`, `section_count`, `avg_section_length`, `form_string`, `energy_shape` | 976 – 77,770 |
+| Perceptual scores | `valence`, `energy`, `danceability`, `acousticness`, `instrumentalness`, `speechiness`, `harmonic_complexity` | 48,034 – 77,770 |
+
+**Verifiability is not what separates these from an embedding.** Consensus establishes *integrity* —
+whether two machines computed the same thing — just as well for a BPM as for a vector, and it
+establishes *truth* for neither. Nobody can prove the embedding is right either. An earlier draft
+claimed features were unverifiable in a way embeddings are not; that was wrong, and the real
+distinctions are narrower.
+
+`loudness_lufs` is the clearest case that the blanket rejection was too broad. `pyloudnorm`
+implements ITU-R BS.1770, a published specification with a defined answer that independent
+implementations agree on by construction. That is a stronger footing than the embedding has, which
+rests on a pinned checkpoint rather than a standard.
+
+What genuinely separates the last two rows of that table is that they **assert something a listener
+can contradict**. A wrong vector degrades similarity slightly and uniformly, and nobody forms an
+opinion about float 237. A wrong key is individually visible and reads as a broken database — which
+is the reputational damage MetaBrainz actually took.
+
+### The failure mode is already in this corpus
+
+This is not a hypothetical inherited from another project. Familiar computes `instrumentalness` and
+`speechiness` from silero-VAD (`app/services/analysis.py:571–586`), and **silero detects speech, not
+singing** — so across sung music both keys measure the wrong phenomenon, for all 77,770 rows. The
+code's own comment at line 576 records the other half: when VAD fails, a spectral fallback "wrote a
+saturated value that looked like a measurement".
+
+Two keys, already shipped, already known to be wrong, indistinguishable from the correct ones without
+reading the source. That is exactly what MetaBrainz described, and it is in the data this project
+would inherit.
+
 ### Why the reference implementation belongs in this repository
 
 [`ADR-0105`][adr105] in the Familiar repository removes `torch` and `transformers` from Familiar in
@@ -111,28 +152,46 @@ the server serves — a test that only exists if both are present.
    the reference implementation and is published for others to depend on. The server keeps its own
    dependencies; adding audio libraries to the repository must not add them to the deployed image.
 
-4. **The corpus stores embeddings. It does not store features.** This repository holds 77,770 feature
-   rows — bpm, key, valence, energy — against 21,890 embeddings. Those are precisely the claims that
-   killed AcousticBrainz: they can be wrong, consensus cannot establish that they are wrong, and no
-   confidence can be attached to them. Familiar keeps its own private feature cache; the commons does
-   not carry them. **This deliberately discards the larger of the two datasets** and is the sharpest
-   way the design encodes the lesson.
+4. **The CLAP embedding is the purpose of the corpus, and is held to the full standard.** Pinned
+   pipeline, pinned precision, reference-clip attestation, quorum, and a confidence served alongside
+   the data. Every verification mechanism this project builds exists for the embedding. Nothing else
+   is allowed to dilute it, delay it, or share its guarantees.
 
-5. **The tool must be worth running with the corpus empty.** A donation client with no local value
+5. **A second quantity may be admitted, at a lower tier and under a stated bar.** It must be
+   **reproducible** — the output of a pinned function or a published standard, so consensus can
+   establish integrity — and it must be **a measurement of the signal rather than an estimate of a
+   musical property a listener can contradict**. Both conditions, not either.
+
+   Of the 25 keys held today, `loudness_lufs`, `replaygain_track_gain` and `track_peak` clear the
+   bar; `brightness` and `dynamic_range_db` clear it if a specific implementation is pinned. The 13
+   ground-truth estimates and 7 perceptual scores do not, and `instrumentalness` and `speechiness`
+   fail on the first condition as well as the second.
+
+6. **A tier-two quantity receives less scrutiny, and is correspondingly less load-bearing.** It needs
+   no reference-clip attestation and no quorum before it is served; it is labelled as tier two so a
+   client knows what it is holding; it never gates or delays an embedding submission; and **it can be
+   dropped without a corpus migration.** That revocability is what makes the lower scrutiny safe, and
+   it is the condition on which the tier exists at all.
+
+7. **Nothing currently in the `features` table is migrated.** Familiar keeps its own private feature
+   cache and loses nothing. The tier-two path is a door with a bar on it, not a backlog to work
+   through, and the 77,770 existing rows do not enter merely because they are already here.
+
+8. **The tool must be worth running with the corpus empty.** A donation client with no local value
    has no first contributor, and this project has measured proof that passive accumulation does not
    happen. What the tool does locally — search your own library by description, find duplicates
    across formats and masters — is the draw; contribution is a byproduct of it.
 
-6. **Verification is a property of the design, not a moderation queue.** Because a vector is the
+9. **Verification is a property of the design, not a moderation queue.** Because a vector is the
    output of a pinned function rather than a claim, the corpus can record *how many independent
    parties computed the same thing* and serve that alongside the data. **That is the confidence level
    AcousticBrainz said it lacked**, and it falls out of storing submissions rather than answers.
 
-7. **The existing 21,890 embeddings are kept and marked unconfirmed.** They were accepted under no
+10. **The existing 21,890 embeddings are kept and marked unconfirmed.** They were accepted under no
    validation, so nothing is grandfathered as trustworthy. The rate at which independent clients later
    confirm them is itself a measurement of whether the pre-validation data was sound.
 
-8. **Familiar's contribution stays opt-in and off by default.** `community_cache_contribute` is
+11. **Familiar's contribution stays opt-in and off by default.** `community_cache_contribute` is
    `False` today and this ADR is not a reason to change it. A commons that acquires contributors by
    default acquires them without consent.
 
@@ -167,10 +226,25 @@ Each needs its own ADR, and the execution order differs from the numbering:
   player's repository, and it puts the reference implementation outside the repository whose CI must
   prove client and server agree.
 
-- **Keep storing features alongside embeddings.** They are already there, they cost nothing extra to
-  serve, and some client might want them. Rejected as the single most important thing to get right:
-  it is the exact failure mode of the project this one is trying not to repeat, and "some client
-  might want them" is how a commons acquires data nobody can vouch for.
+- **Carry all 77,770 feature rows across, since they already exist.** They cost nothing extra to
+  serve and some client might want them. Rejected because two of the keys are known to be measuring
+  the wrong phenomenon and are indistinguishable from the rest without reading Familiar's source.
+  "They are already here" is how a commons acquires data nobody can vouch for, and points 5 and 7
+  make admission a bar to clear rather than an inheritance.
+
+- **Reject every non-embedding quantity outright.** This was an earlier draft of this ADR, carrying
+  the slogan "the corpus stores embeddings, it does not store features". Rejected because its stated
+  reason did not survive scrutiny: it claimed
+  features are unverifiable in a way embeddings are not, when consensus establishes integrity equally
+  for both and truth for neither. `loudness_lufs` is defined by ITU-R BS.1770 and rests on firmer
+  ground than a pinned checkpoint does. A blanket exclusion would have been right by accident, with a
+  reason a future contributor could correctly dismantle.
+
+- **Admit a second quantity on reproducibility alone.** Simpler bar, and it is the property consensus
+  can actually check. Rejected because `bpm` and `key` pass it: two machines running the same pinned
+  library agree, and the value is still something a listener can contradict. Reproducibility
+  establishes that the corpus is intact, not that its contents are defensible, which is precisely the
+  gap MetaBrainz fell into.
 
 - **Gate the corpus behind accounts from day one.** Solves identity, revocation and abuse at once.
   Rejected as premature and as a contributor barrier at the moment the project has effectively one.
@@ -193,8 +267,16 @@ Each needs its own ADR, and the execution order differs from the numbering:
   feature to be added later.
 - **Positive** — Familiar gets smaller by adopting the package: `ADR-0105` removes 593 MB of
   packages and a 1.1 GB checkpoint download.
-- **Tradeoff** — **77,770 feature rows are deliberately excluded** from the commons. That is the
-  larger dataset and it has real utility. The alternative is carrying claims nobody can verify.
+- **Positive** — the embedding keeps every verification mechanism to itself, so a second quantity
+  arriving later cannot weaken the guarantee that is the project's reason to exist.
+- **Tradeoff** — **none of the 77,770 existing feature rows migrate**, including the three that would
+  clear point 5's bar. `loudness_lufs`, `replaygain_track_gain` and `track_peak` are defensible and
+  are still left out, because point 7 declines to inherit data merely for being present. A client
+  that wants them has to ask, and that is deliberate friction.
+- **Tradeoff** — a two-tier corpus is more to explain and more to get wrong than a single-purpose
+  one. The bar in point 5 is a judgement each time it is applied, and "measurement of the signal
+  rather than an estimate of a musical property" will have arguable cases. Point 6's revocability is
+  the safety net, and it only works if tier two genuinely never becomes load-bearing.
 - **Tradeoff** — a public corpus becomes legible in a way an opaque-hash corpus is not, as
   `ADR-0102` recorded. No person is identified, but "these recordings are in somebody's library"
   becomes readable. That tradeoff is inherited here and is not softened by scale.
