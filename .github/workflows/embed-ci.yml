@@ -1,0 +1,69 @@
+name: clapback-embed
+
+# The first CI gate in this repository. `fly-deploy.yml` pushes to production on
+# every commit to `main` with nothing checking it first, which was tolerable for a
+# server nobody else depended on and is not once a package is published from here.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/embed/**"
+      - ".github/workflows/embed-ci.yml"
+  pull_request:
+    paths:
+      - "packages/embed/**"
+      - ".github/workflows/embed-ci.yml"
+
+jobs:
+  test:
+    name: Lint and test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/embed
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Install
+        run: uv pip install --system -e ".[dev]"
+
+      - name: Lint
+        run: uvx ruff check .
+
+      # Runs the windowing rule, the front-end arithmetic and the pooling. The
+      # ONNX artifacts are 614 MB and are not fetched here, so the tests marked
+      # `artifacts` skip — see the conformance job below for why that is not the
+      # whole story.
+      - name: Test
+        run: python -m pytest -q
+
+  conformance:
+    name: Conformance against transformers
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/embed
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      # The whole reason this package exists is that its output matches the
+      # reference implementation. Without this job the suite would prove only that
+      # the code runs, which is the failure mode the corpus cannot afford: two
+      # implementations disagreeing looks exactly like two contributors
+      # disagreeing, and nothing distinguishes them after the fact.
+      - name: Install with the reference implementation
+        run: |
+          uv pip install --system -e ".[dev]"
+          uv pip install --system torch --index-url https://download.pytorch.org/whl/cpu
+          uv pip install --system transformers
+
+      - name: Front-end must match ClapFeatureExtractor
+        run: python -m pytest tests/test_mel.py -q
