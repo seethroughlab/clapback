@@ -35,3 +35,8 @@ data/
 # OS
 .DS_Store
 Thumbs.db
+
+# Package venvs and exported model artifacts (614 MB, produced by scripts/export_models.py)
+packages/*/.venv/
+*.onnx
+*.onnx.data
