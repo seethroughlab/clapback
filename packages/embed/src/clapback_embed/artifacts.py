@@ -18,6 +18,20 @@ assumed — hence `Precision` appearing in the pipeline identity.
 Artifacts are not vendored: the audio encoder is 112 MB and the text encoder
 502 MB, which do not belong in a git repository. They are produced by
 `scripts/export_models.py` from the pinned checkpoint, and located here.
+
+**Execution providers are configurable, and default to CPU for a reason.** ONNX
+Runtime can run this graph on CUDA, DirectML or ROCm, and doing so is a genuine
+option — `onnxruntime-gpu` is roughly 200 MB against the ~5 GB of a CUDA-enabled
+torch build, so acceleration is *cheaper* to adopt here than it was before. But
+an accelerated provider is not known to produce vectors comparable with the CPU
+ones, and that has to be measured per provider before anything is contributed:
+`scripts/compare_vectors.py` is the tool for exactly this.
+
+CoreML is measured **non-functional** for this graph, not merely divergent. It
+supports 735 of 3086 nodes, warns that it "does not support shapes with dimension
+values of 0" across HTSAT's Swin attention slices, and the partition it does take
+fails at runtime with "Unable to compute the prediction using a neural network
+model". Do not spend an afternoon rediscovering this.
 """
 
 from __future__ import annotations
@@ -52,6 +66,26 @@ class ArtifactsMissing(RuntimeError):
     """The ONNX encoders are not where we looked."""
 
 
+DEFAULT_PROVIDERS = ("CPUExecutionProvider",)
+
+
+def providers() -> list[str]:
+    """Execution providers, CPU unless `CLAPBACK_PROVIDERS` says otherwise.
+
+    Comma-separated and ordered by preference, e.g.
+    `CLAPBACK_PROVIDERS=CUDAExecutionProvider,CPUExecutionProvider`.
+
+    Overriding this is supported and unvalidated: a vector produced on a
+    non-CPU provider has not been shown to match one produced on CPU, and until
+    it has been, treat it the way `Precision.FP16` is treated — useful locally,
+    not safe to contribute.
+    """
+    raw = os.environ.get("CLAPBACK_PROVIDERS", "").strip()
+    if not raw:
+        return list(DEFAULT_PROVIDERS)
+    return [p.strip() for p in raw.split(",") if p.strip()]
+
+
 def model_dir() -> Path:
     """Where artifacts live. `CLAPBACK_MODEL_DIR` overrides the default."""
     override = os.environ.get("CLAPBACK_MODEL_DIR")
@@ -77,9 +111,7 @@ def _resolve(filename: str) -> Path:
 def audio_session(precision: Precision = Precision.FP32) -> ort.InferenceSession:
     """The audio encoder. Cached — loading costs about 1.6s."""
     name = AUDIO_FP32 if precision is Precision.FP32 else AUDIO_FP16
-    return ort.InferenceSession(
-        str(_resolve(name)), providers=["CPUExecutionProvider"]
-    )
+    return ort.InferenceSession(str(_resolve(name)), providers=providers())
 
 
 @lru_cache(maxsize=1)
@@ -90,9 +122,7 @@ def text_session() -> ort.InferenceSession:
     graph file. `onnxruntime` picks it up by relative path; moving one without the
     other fails at load rather than silently.
     """
-    return ort.InferenceSession(
-        str(_resolve(TEXT_FP32)), providers=["CPUExecutionProvider"]
-    )
+    return ort.InferenceSession(str(_resolve(TEXT_FP32)), providers=providers())
 
 
 @lru_cache(maxsize=1)
