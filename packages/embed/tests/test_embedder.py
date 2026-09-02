@@ -8,6 +8,7 @@ quietly absent.
 
 from __future__ import annotations
 
+import os
 from unittest.mock import patch
 
 import numpy as np
@@ -176,3 +177,41 @@ def test_fp16_diverges_enough_to_matter(_artifacts):
     audio = _audio(40.0)
     similarity = float(np.dot(embed_audio(audio), embed_audio(audio, precision=Precision.FP16)))
     assert 0.99 < similarity < 0.9999999
+
+
+# ---------------------------------------------------------------------------
+# Execution providers
+# ---------------------------------------------------------------------------
+
+
+def test_providers_default_to_cpu():
+    """CPU is the only provider whose vectors have been shown to agree."""
+    from clapback_embed.artifacts import providers
+
+    with patch.dict("os.environ", {}, clear=False):
+        os.environ.pop("CLAPBACK_PROVIDERS", None)
+        assert providers() == ["CPUExecutionProvider"]
+
+
+def test_providers_can_be_overridden_for_acceleration():
+    """Acceleration is available, not foreclosed.
+
+    `onnxruntime-gpu` is ~200 MB against the ~5 GB of a CUDA torch build, so this
+    is a cheaper route to GPU inference than the one it replaced — but the
+    resulting vectors are unvalidated, so it is opt-in rather than automatic.
+    """
+    from clapback_embed.artifacts import providers
+
+    with patch.dict(
+        "os.environ",
+        {"CLAPBACK_PROVIDERS": "CUDAExecutionProvider, CPUExecutionProvider"},
+    ):
+        assert providers() == ["CUDAExecutionProvider", "CPUExecutionProvider"]
+
+
+def test_an_empty_provider_override_falls_back_to_cpu():
+    """An unset-but-present variable must not produce an empty provider list."""
+    from clapback_embed.artifacts import providers
+
+    with patch.dict("os.environ", {"CLAPBACK_PROVIDERS": "   "}):
+        assert providers() == ["CPUExecutionProvider"]
