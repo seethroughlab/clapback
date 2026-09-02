@@ -41,7 +41,8 @@ def export_audio(out: Path, model, processor) -> None:
 
     rng = np.random.default_rng(1)
     audio = rng.normal(size=480_000).astype(np.float32)
-    enc = processor(audios=audio, sampling_rate=48_000, return_tensors="pt")
+    # `audio=`, not `audios=`: the plural spelling was deprecated and now raises.
+    enc = processor(audio=audio, sampling_rate=48_000, return_tensors="pt")
     feats, is_longer = enc["input_features"], enc["is_longer"]
 
     class AudioOnly(torch.nn.Module):
