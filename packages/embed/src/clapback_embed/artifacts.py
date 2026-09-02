@@ -83,7 +83,35 @@ def providers() -> list[str]:
     raw = os.environ.get("CLAPBACK_PROVIDERS", "").strip()
     if not raw:
         return list(DEFAULT_PROVIDERS)
-    return [p.strip() for p in raw.split(",") if p.strip()]
+    requested = [p.strip() for p in raw.split(",") if p.strip()]
+    return [p for p in requested if p != "CUDAExecutionProvider" or _cuda_driver_present()]
+
+
+def _cuda_driver_present() -> bool:
+    """Can `libcuda.so.1` be loaded at all?
+
+    **Requesting CUDA without a driver segfaults**, it does not fall back. An
+    image built with `onnxruntime-gpu` and the CUDA pip packages carries
+    everything except `libcuda.so.1`, which comes from the host driver — so on a
+    machine with no GPU the libraries are all present, initialisation gets far
+    enough to dereference nothing, and the process dies with SIGSEGV. Observed on
+    a GPU-less x86_64 CI runner as exit code 139, after ONNX Runtime had already
+    printed its provider list.
+
+    A Python-level try/except cannot help: a segfault is not an exception. The
+    only safe move is to not ask. This check is a cheap `dlopen` and is the
+    difference between one image running everywhere and one image crashing on
+    every host without an NVIDIA card.
+    """
+    import ctypes
+
+    for name in ("libcuda.so.1", "libcuda.so", "nvcuda.dll"):
+        try:
+            ctypes.CDLL(name)
+            return True
+        except OSError:
+            continue
+    return False
 
 
 def model_dir() -> Path:

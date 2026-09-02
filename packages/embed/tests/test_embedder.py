@@ -197,15 +197,19 @@ def test_providers_can_be_overridden_for_acceleration():
     """Acceleration is available, not foreclosed.
 
     `onnxruntime-gpu` is ~200 MB against the ~5 GB of a CUDA torch build, so this
-    is a cheaper route to GPU inference than the one it replaced — but the
+    is a cheaper route to GPU inference than the one it replaces — but the
     resulting vectors are unvalidated, so it is opt-in rather than automatic.
+
+    The driver probe is patched rather than left to the host: on a machine
+    without `libcuda.so.1` the request is filtered out, which is the subject of
+    `test_cuda_is_dropped_when_the_driver_is_absent` below.
     """
     from clapback_embed.artifacts import providers
 
     with patch.dict(
         "os.environ",
         {"CLAPBACK_PROVIDERS": "CUDAExecutionProvider, CPUExecutionProvider"},
-    ):
+    ), patch("clapback_embed.artifacts._cuda_driver_present", return_value=True):
         assert providers() == ["CUDAExecutionProvider", "CPUExecutionProvider"]
 
 
@@ -215,3 +219,40 @@ def test_an_empty_provider_override_falls_back_to_cpu():
 
     with patch.dict("os.environ", {"CLAPBACK_PROVIDERS": "   "}):
         assert providers() == ["CPUExecutionProvider"]
+
+
+def test_cuda_is_dropped_when_the_driver_is_absent():
+    """Requesting CUDA without `libcuda.so.1` **segfaults**; it does not fall back.
+
+    An image carrying onnxruntime-gpu and the CUDA pip packages has everything
+    except the driver library, which comes from the host. On a machine with no
+    GPU, initialisation gets far enough to die with SIGSEGV — observed as exit
+    code 139 on a CI runner, after ONNX Runtime had printed its provider list.
+
+    A try/except cannot catch that, so the provider is filtered out before it is
+    ever requested.
+    """
+    from clapback_embed.artifacts import providers
+
+    with patch.dict(
+        "os.environ",
+        {"CLAPBACK_PROVIDERS": "CUDAExecutionProvider,CPUExecutionProvider"},
+    ), patch("clapback_embed.artifacts._cuda_driver_present", return_value=False):
+        assert providers() == ["CPUExecutionProvider"]
+
+
+def test_cuda_is_kept_when_the_driver_is_present():
+    from clapback_embed.artifacts import providers
+
+    with patch.dict(
+        "os.environ",
+        {"CLAPBACK_PROVIDERS": "CUDAExecutionProvider,CPUExecutionProvider"},
+    ), patch("clapback_embed.artifacts._cuda_driver_present", return_value=True):
+        assert providers() == ["CUDAExecutionProvider", "CPUExecutionProvider"]
+
+
+def test_the_driver_probe_never_raises():
+    """It runs on every provider resolution, including hosts with no NVIDIA stack."""
+    from clapback_embed.artifacts import _cuda_driver_present
+
+    assert isinstance(_cuda_driver_present(), bool)
