@@ -39,6 +39,17 @@ def export_audio(out: Path, model, processor) -> None:
     import onnxruntime as ort
     import torch
 
+    # `torch.onnx.export` leaves the module in **training mode**. The exported graph
+    # is fine — the exporter runs the model in eval internally — but the *reference*
+    # computed afterwards would run with dropout active, and the comparison would
+    # then reject a perfectly good artifact.
+    #
+    # This cost a red build and a long diagnosis: the audio encoder passed at
+    # 1.000000000 because its reference is taken before any export has run, while
+    # the text encoder came out at 0.895 purely because it runs second. Re-assert
+    # eval before every reference rather than relying on export order.
+    model.eval()
+
     rng = np.random.default_rng(1)
     audio = rng.normal(size=480_000).astype(np.float32)
     # `audio=`, not `audios=`: the plural spelling was deprecated and now raises.
@@ -111,6 +122,17 @@ def export_audio(out: Path, model, processor) -> None:
 def export_text(out: Path, model, processor) -> None:
     import onnxruntime as ort
     import torch
+
+    # `torch.onnx.export` leaves the module in **training mode**. The exported graph
+    # is fine — the exporter runs the model in eval internally — but the *reference*
+    # computed afterwards would run with dropout active, and the comparison would
+    # then reject a perfectly good artifact.
+    #
+    # This cost a red build and a long diagnosis: the audio encoder passed at
+    # 1.000000000 because its reference is taken before any export has run, while
+    # the text encoder came out at 0.895 purely because it runs second. Re-assert
+    # eval before every reference rather than relying on export order.
+    model.eval()
 
     queries = [
         "dreamy ambient with piano",
