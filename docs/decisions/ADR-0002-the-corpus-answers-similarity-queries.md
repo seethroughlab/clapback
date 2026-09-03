@@ -1,11 +1,24 @@
 # ADR-0002: The Corpus Answers Similarity Queries
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-03
 
 Extends [ADR-0001](ADR-0001-clapback-is-a-public-clap-embedding-commons.md), which decided what this
 project is and deferred where it runs.
+
+Implementation:
+- Accepted 2026-09-03. Nothing in the Decision is built yet.
+- **No similarity endpoint and no vector index exist.** The corpus still has zero distance
+  operators; the three indexes on `embeddings` are the primary key and two timestamps, and the only
+  queries against the table are the exact-key lookups the Context describes. Point 1 is the
+  capability this project exists to provide and remains entirely owed.
+- Point 4's dependency is unchanged. The recording-id key is `ADR-0001`'s deferred item 4 and has
+  not been taken, so the endpoint can still be built but not usefully consumed.
+- Point 7 is half done, and in the wrong direction. `docker-compose.omv.yml` was merged to `main`,
+  so the running configuration is no longer on an unmerged branch — but it is the NAS deployment
+  that point 5 rules out and [`ADR-0003`](ADR-0003-the-commons-runs-on-one-small-server.md) then
+  replaced.
 
 ## Context
 

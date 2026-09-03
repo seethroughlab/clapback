@@ -15,6 +15,17 @@ Implementation:
   production on every commit to `main` with no gate at all.
 - **Deferred item 2 is largely answered already**, and by the route the table anticipated. See the
   cross-machine measurement in the Context below.
+- **Point 9's confidence measurement is built.** An independent submission of a vector already held
+  is no longer discarded: it is scored against the stored one and recorded in
+  `submission_agreements` (migration `007`), with first-write-wins unchanged. That is the mechanism
+  the point describes. What it feeds — a confidence served alongside the data — is not exposed to
+  any client yet.
+- **Point 3's third member does not exist.** The embedder and the server are both here; the tool is
+  not. There is no CLI in `packages/embed`, no `[project.scripts]`, and nothing published, so point
+  8's "worth running with the corpus empty" has nothing yet to be true of. This is deferred item 5,
+  and it is the next decision to take.
+- Deferred item 3 is answered by
+  [`ADR-0004`](ADR-0004-contributors-are-identified-but-not-accounts.md); items 4, 5 and 6 are open.
 
 ## Context
 
