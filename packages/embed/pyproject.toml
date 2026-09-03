@@ -13,7 +13,8 @@ license = { text = "MIT" }
 dependencies = [
     "numpy>=1.24.0",
     "librosa>=0.10.0",      # decode + STFT + the slaney mel filter bank
-    "soundfile>=0.12.0",    # librosa's decoder for most formats
+    "soundfile>=0.12.0",    # librosa's decoder for most formats, and block reads
+    "soxr>=0.3.2",          # stateful streaming resampler — see chunking.stream_windows
     "onnxruntime>=1.17.0",  # the encoders
     "tokenizers>=0.15.0",   # RoBERTa tokenizer for text queries, without transformers
     "huggingface-hub>=0.20.0",  # fetches tokenizer.json only
