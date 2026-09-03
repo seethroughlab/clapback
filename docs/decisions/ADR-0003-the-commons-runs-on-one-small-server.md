@@ -118,6 +118,36 @@ deletion as item 3; a public endpoint is what makes that item due rather than pe
    running today starts from a compose file on an unmerged branch, which is how the repository came
    to describe a Fly deployment that had been destroyed.
 
+9. **Hetzner is the recommended vendor, and the choice is reversible.** Compared on RAM per unit
+   cost, because point 3 makes RAM the binding constraint. Figures are approximate and were not
+   re-verified against current pricing pages; **check before buying**, since the ordering matters
+   more than the numbers.
+
+   | vendor | ~$/month | vCPU | RAM | note |
+   |---|---|---|---|---|
+   | **Hetzner CX22** | ~4.50 | 2 | **4 GB** | 40 GB SSD, 20 TB traffic, EU and US regions |
+   | Netcup | ~5 | 4 | **8 GB** | best ratio found; EU only |
+   | AWS Lightsail | 10 | 2 | 2 GB | 60 GB, 3 TB transfer |
+   | DigitalOcean / Vultr / Linode | 12 | 1 | 2 GB | better documentation, worse ratio |
+   | AWS EC2 `t4g.small` | ~12 + EBS + egress | 2 | 2 GB | before storage and transfer |
+   | AWS RDS | 15+ | — | — | outside the budget entirely |
+
+   Hetzner offers roughly four times the RAM per unit cost of the nearest AWS option, which under
+   point 5 is directly the difference between the first box lasting to a few hundred thousand
+   vectors or half that.
+
+10. **AWS was considered seriously and rejected on ratio, not reflex.** There is an existing
+    footprint — Familiar already backs up to an S3 bucket in `us-east-1` — so consolidating billing
+    and credentials would have real value. Three things outweighed it. Lightsail gives half the RAM
+    for twice the price. Egress is metered above a free allowance where Hetzner includes 20 TB,
+    which introduces a variable bill exactly when a public commons becomes popular — the failure
+    `ADR-0001` records MetaBrainz naming first. And the thing AWS is genuinely good at here, RDS, is
+    priced out of the budget; what remains is running Postgres on a VM oneself, which is the same
+    work at several times the cost.
+
+    If the budget ever reaches roughly thirty dollars, managed Postgres becomes a real argument and
+    this point should be reopened rather than inherited.
+
 ## Alternatives Considered
 
 - **Managed Postgres (Neon, Supabase, Railway).** Backups, upgrades and availability handled;
@@ -162,8 +192,9 @@ deletion as item 3; a public endpoint is what makes that item due rather than pe
   private.
 - **Follow-up** — measure a real HNSW index on the current corpus. Every sizing number above rests on
   an estimate, and the measurement is cheap.
-- **Follow-up** — the vendor and region. Point 1 decides the shape; which provider is a reversible
-  choice that should not hold up the shape.
+- **Follow-up** — the region, and account setup. Point 9 names a vendor; Hetzner asks some new
+  accounts for identity verification, which has taken a day in the past, so it is worth starting
+  before it is needed. US regions exist, so this is not an argument for EU latency.
 - **Follow-up** — `ADR-0001`'s deferred item 3, identity and revocation, becomes due when the
   endpoint goes public rather than when the corpus grows.
 - **Follow-up** — whether the 77,770 legacy feature rows travel to the new host at all. A migration
