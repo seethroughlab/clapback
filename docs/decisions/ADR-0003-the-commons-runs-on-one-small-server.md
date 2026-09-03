@@ -118,39 +118,64 @@ deletion as item 3; a public endpoint is what makes that item due rather than pe
    running today starts from a compose file on an unmerged branch, which is how the repository came
    to describe a Fly deployment that had been destroyed.
 
-9. **Hetzner is the recommended vendor, and the choice is reversible.** Compared on RAM per unit
-   cost, because point 3 makes RAM the binding constraint. Figures are approximate and were not
-   re-verified against current pricing pages; **check before buying**, since the ordering matters
-   more than the numbers.
+9. **The host is AWS.** Compared on RAM per unit cost — because point 3 makes RAM the binding
+   constraint — AWS is not the best ratio available. It is chosen anyway, for reasons that are not
+   about the ratio:
+
+   - **Operational familiarity.** The people running this already know AWS. A cheaper host nobody
+     has used is a worse host at 2am, and `ADR-0001` names resources — including attention — as
+     MetaBrainz's first cause of failure.
+   - **The scaling path is well-trodden.** Instance types change with a stop and start; EBS volumes
+     grow online. Point 5's upgrade steps are ordinary operations rather than research.
+   - **It is fully driveable from the CLI**, which keeps the deployment reproducible and scriptable
+     rather than a sequence of console clicks nobody can repeat.
+   - There is already a footprint: Familiar backs up to an S3 bucket in `us-east-1`, so the backup
+     destination in point 6 exists and is paid for.
+
+   Figures below are approximate and were not verified against current pricing pages. **Check before
+   buying** — the ordering is the durable part.
 
    | vendor | ~$/month | vCPU | RAM | note |
    |---|---|---|---|---|
-   | **Hetzner CX22** | ~4.50 | 2 | **4 GB** | 40 GB SSD, 20 TB traffic, EU and US regions |
-   | Netcup | ~5 | 4 | **8 GB** | best ratio found; EU only |
-   | AWS Lightsail | 10 | 2 | 2 GB | 60 GB, 3 TB transfer |
-   | DigitalOcean / Vultr / Linode | 12 | 1 | 2 GB | better documentation, worse ratio |
-   | AWS EC2 `t4g.small` | ~12 + EBS + egress | 2 | 2 GB | before storage and transfer |
-   | AWS RDS | 15+ | — | — | outside the budget entirely |
+   | Hetzner CX22 | ~4.50 | 2 | 4 GB | best ratio found; unfamiliar |
+   | Netcup | ~5 | 4 | 8 GB | best ratio anywhere; EU only |
+   | **AWS Lightsail** | **10** | 2 | **2 GB** | 60 GB SSD, 3 TB transfer, all-in |
+   | AWS EC2 `t4g.small` | ~12–15 | 2 | 2 GB | plus EBS and egress; cheaper with a savings plan |
+   | DigitalOcean / Vultr / Linode | 12 | 1 | 2 GB | |
+   | AWS RDS | 15+ | — | — | outside the budget |
 
-   Hetzner offers roughly four times the RAM per unit cost of the nearest AWS option, which under
-   point 5 is directly the difference between the first box lasting to a few hundred thousand
-   vectors or half that.
+10. **Within AWS, start on Lightsail rather than EC2.** At this budget Lightsail's fixed price
+    includes the instance, 60 GB of storage and 3 TB of transfer, where the equivalent EC2 instance
+    bills storage and egress separately and lands above ten dollars before a savings plan. EC2
+    becomes the better choice at the first upgrade step, when growing storage online and changing
+    instance types matters more than the bundled price — and moving between them is the same
+    `pg_dump` and restore as any other step in point 5.
 
-10. **AWS was considered seriously and rejected on ratio, not reflex.** There is an existing
-    footprint — Familiar already backs up to an S3 bucket in `us-east-1` — so consolidating billing
-    and credentials would have real value. Three things outweighed it. Lightsail gives half the RAM
-    for twice the price. Egress is metered above a free allowance where Hetzner includes 20 TB,
-    which introduces a variable bill exactly when a public commons becomes popular — the failure
-    `ADR-0001` records MetaBrainz naming first. And the thing AWS is genuinely good at here, RDS, is
-    priced out of the budget; what remains is running Postgres on a VM oneself, which is the same
-    work at several times the cost.
+11. **This decision costs headroom, and the cost is recorded rather than discovered.** Two gigabytes
+    against the four the cheapest option offered means **the first upgrade step in point 5 arrives at
+    roughly half the corpus size** — in the region of 150,000 vectors rather than 300,000. That is a
+    resize, not a migration, and it is a fair price for operating something familiar. It is written
+    down so that hitting it reads as expected rather than as a surprise.
 
-    If the budget ever reaches roughly thirty dollars, managed Postgres becomes a real argument and
-    this point should be reopened rather than inherited.
+    **Egress is metered on AWS and was not on the alternatives.** Lightsail's 3 TB allowance is far
+    beyond anything this corpus will serve — a 512-float vector is about two kilobytes — but it is a
+    variable that did not previously exist, and a public commons becoming popular is exactly when a
+    metered bill surprises someone. Worth an alarm, not worth worrying about.
 
 ## Alternatives Considered
 
-- **Managed Postgres (Neon, Supabase, Railway).** Backups, upgrades and availability handled;
+- **A cheaper VPS with a better RAM ratio (Hetzner, Netcup).** Roughly four times the RAM per unit
+  cost, which under point 5 is directly twice the runway before the first upgrade. Rejected on point
+  9's reasoning rather than on the numbers: the numbers favour it and the operational familiarity
+  does not. Recorded because the tradeoff is real and someone should be able to see what was given
+  up, not because the decision is soft.
+
+- **AWS RDS, rather than Postgres on an instance.** The thing AWS is genuinely best at here —
+  managed backups, upgrades and failover, which point 6 otherwise makes this project's job. Rejected
+  purely on price: the smallest instance is above the whole budget before storage. This is the
+  alternative most worth reopening if the budget ever reaches roughly thirty dollars a month.
+
+- **Managed Postgres elsewhere (Neon, Supabase, Railway).** Backups, upgrades and availability handled;
   `ADR-0001` even cites Neon as part of why cost was near zero. Rejected on arithmetic rather than
   preference: free tiers cap around 0.5 GB, which is roughly 200,000 vectors, and the paid tiers
   start above the whole budget. Choosing one now means a migration precisely when the corpus starts
@@ -192,9 +217,9 @@ deletion as item 3; a public endpoint is what makes that item due rather than pe
   private.
 - **Follow-up** — measure a real HNSW index on the current corpus. Every sizing number above rests on
   an estimate, and the measurement is cheap.
-- **Follow-up** — the region, and account setup. Point 9 names a vendor; Hetzner asks some new
-  accounts for identity verification, which has taken a day in the past, so it is worth starting
-  before it is needed. US regions exist, so this is not an argument for EU latency.
+- **Follow-up** — the region. `us-east-1` is where the existing backup bucket lives, which argues
+  for putting the instance there and keeping backup traffic in-region and free.
+- **Follow-up** — a billing alarm before the endpoint is public, given point 11's metered egress.
 - **Follow-up** — `ADR-0001`'s deferred item 3, identity and revocation, becomes due when the
   endpoint goes public rather than when the corpus grows.
 - **Follow-up** — whether the 77,770 legacy feature rows travel to the new host at all. A migration
