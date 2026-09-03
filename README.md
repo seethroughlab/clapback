@@ -1,10 +1,66 @@
-# Familiar Cache
+# clapback
 
-Community cache server for the [Familiar](https://github.com/seethroughlab/familiar) music player.
+A public commons of **CLAP audio embeddings**, and the reference implementation that
+produces them.
 
-Stores and retrieves **CLAP embeddings** and **audio features** keyed by AcoustID fingerprint hashes. Allows users to share pre-computed analysis data, reducing analysis time from 10-30s to ~100ms per track.
+An embedding is a 512-dimensional vector describing what a recording *sounds like*.
+Computing one costs seconds of CPU and a 600 MB model; comparing two is a dot product.
+So it is worth computing once and sharing — provided everybody computes the same thing.
 
-**Live:** https://familiar-cache.fly.dev
+That proviso is the whole design. `clapback-embed` exists so there is exactly one
+implementation: if two contributors disagree about a recording, the disagreement is
+about the audio, not about whose code ran.
+
+**Deployment:** self-hosted. The instance backing Familiar runs on the same machine
+as it, reached over a shared Docker network. There is no public endpoint at present —
+`familiar-cache.fly.dev` was retired when the service moved off Fly, and the DNS name
+no longer resolves.
+
+## The package
+
+```python
+from clapback_embed import embed_file, embed_text
+
+vector = embed_file("track.flac")                  # 512 floats, unit length
+query  = embed_text("dreamy ambient with piano")   # same space
+```
+
+No `torch`, no `transformers` — it runs on ONNX Runtime, and optionally on a GPU.
+Everything that could vary is pinned and versioned: the mel front-end, the windowing
+rule, the pooling, the checkpoint and the precision.
+
+Measured, not asserted:
+
+| | |
+|---|---|
+| Same audio, two architectures (arm64 vs x86_64) | agree to **6.6e-11** |
+| CPU vs CUDA | **6.6e-14** |
+| What `pgvector`'s float4 storage costs | 6.0e-08 |
+| Two different rips of one recording | 3e-04 – 3e-03 |
+
+So the noise floor of the corpus is set by how vectors are *stored*, not by whose
+machine computed them. See [`packages/embed/`](packages/embed/) for the details and
+[`packages/embed/scripts/compare_vectors.py`](packages/embed/scripts/compare_vectors.py)
+for the cross-machine check.
+
+## Where this actually stands
+
+Early, and worth being plain about:
+
+- **21,890 embeddings**, contributed by **9 addresses**, of which one accounts for
+  **99.85%**. It is not yet a commons; it is one library and a handful of visitors.
+- The corpus is keyed on the SHA256 of an AcoustID fingerprint, so it can answer
+  "here is the embedding for a track you have" and *not* "what does this record I do
+  not own sound like". Fixing that needs a recording id as a second key — decided
+  in Familiar's `ADR-0102`, not yet built here.
+- The `features` endpoints below still work and still hold 77,770 rows.
+  [`ADR-0001`](docs/decisions/ADR-0001-clapback-is-a-public-clap-embedding-commons.md)
+  decided the commons carries **embeddings**, not the bpm/key/valence estimates that
+  killed AcousticBrainz — so those endpoints are legacy, not direction.
+
+[Familiar](https://github.com/seethroughlab/familiar) is the first client and largest
+contributor. It is not the owner: the point of the package is that anything can
+contribute.
 
 ## Privacy
 
@@ -57,7 +113,13 @@ Request body:
 }
 ```
 
-### Features
+### Features (legacy)
+
+`ADR-0001` point 4 decided the commons stores embeddings and not features. These
+endpoints still work and the existing 77,770 rows are still served, but they are not
+where this is going: bpm, key and valence are *claims about the world* that consensus
+cannot verify, which is precisely what MetaBrainz identified when AcousticBrainz
+stopped taking submissions. Familiar keeps its own private feature cache instead.
 
 #### GET `/v1/features/{fingerprint_hash}`
 
@@ -118,20 +180,10 @@ docker compose up
 
 ## Deployment
 
-### Fly.io (Production)
-
-The cache is deployed on Fly.io with a Neon PostgreSQL database.
-
-```bash
-# Deploy (auto-deploys on push to main via GitHub Actions)
-fly deploy
-
-# Run migrations
-fly ssh console -C "bash -c 'cd /app && uv run alembic upgrade head'"
-
-# Check status
-curl https://familiar-cache.fly.dev/health/db
-```
+Self-hosted. It previously ran on Fly.io with a Neon database; that app was destroyed
+when the service moved onto the same host as its main client, and
+`familiar-cache.fly.dev` no longer resolves. `fly.toml` is kept for reference rather
+than as a live target.
 
 ### Self-hosted
 
