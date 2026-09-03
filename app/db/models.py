@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, DateTime, Index, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, Float, Index, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -41,6 +41,62 @@ class Embedding(Base):
     )
     last_accessed_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class SubmissionAgreement(Base):
+    """How closely an independent submission matched what was already stored.
+
+    **This exists because the answer was being thrown away.** `contribute_embedding`
+    used to increment `contributor_count` and discard the submitted vector, so the
+    only question that matters for a verified commons — *do two machines computing
+    the same audio produce the same vector?* — had no data behind it despite 44
+    contributing installations.
+
+    It records, it does not gate. First-write-wins still decides what is served, and
+    no client can observe any difference. The point is to measure the noise floor
+    before designing a verification scheme on top of it: if honest contributors agree
+    to 1e-6, consensus is trivially strong; if they diverge at 0.05 because of BLAS
+    versions or CPU-vs-GPU, a naive threshold would reject honest data and the design
+    needs a different shape.
+
+    AcousticBrainz is the cautionary case. They gathered duplicate submissions to
+    mitigate quality problems and it did not work, because their data was a *claim*
+    about the world and their algorithm was reproducibly wrong — duplicates agreed
+    and were wrong together. A CLAP embedding is not a claim, so agreement means
+    something different here. This table is how we find out what.
+    """
+
+    __tablename__ = "submission_agreement"
+    __table_args__ = (
+        Index("ix_submission_agreement_recorded_at", "recorded_at"),
+        Index(
+            "ix_submission_agreement_key",
+            "fingerprint_hash",
+            "analysis_version",
+            "clap_model_version",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # Which stored embedding this submission was compared against.
+    fingerprint_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    analysis_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    clap_model_version: Mapped[str] = mapped_column(String(100), nullable=False)
+
+    #: Cosine similarity between the submitted vector and the stored one. 1.0 is
+    #: identical. This is the measurement; everything else here is context for it.
+    similarity: Mapped[float] = mapped_column(Float, nullable=False)
+
+    #: Opaque per-install identifier, when the client sends one. **Without it a
+    #: "second submission" may just be one client retrying**, which is precisely the
+    #: mistake `contributor_count` already makes — it counts POSTs, not contributors.
+    #: Nullable because existing clients do not send it and must keep working.
+    client_id: Mapped[str | None] = mapped_column(String(64))
+
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
     )
 
 

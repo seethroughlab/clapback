@@ -17,6 +17,31 @@
     {{ stat_card(stats.banned, 'Banned IPs') }}
 </div>
 
+{# The Phase 0 measurement: do independent machines agree on the same audio?
+   Buckets rather than a mean, because the question is whether honest agreement is
+   separable from everything else, and an average over a bimodal distribution hides
+   precisely that. #}
+<h2 style="margin-top:2rem">Submission agreement</h2>
+<p style="opacity:.75;margin-top:-.5rem">
+    How closely a second submission matched the stored vector. Recording only — the
+    first contribution is still what gets served.
+</p>
+{% if agreement and agreement.total %}
+<div class="stats">
+    {{ stat_card(agreement.identical, 'Identical (≥0.999999)') }}
+    {{ stat_card(agreement.near, 'Near (≥0.9999)') }}
+    {{ stat_card(agreement.close, 'Close (≥0.99)') }}
+    {{ stat_card(agreement.loose, 'Loose (≥0.9)') }}
+    {{ stat_card(agreement.divergent, 'Divergent (<0.9)') }}
+    {{ stat_card(agreement.distinct_clients, 'Distinct clients') }}
+</div>
+{% else %}
+<p style="opacity:.6">
+    No repeat submissions recorded yet. This fills only when a second contributor
+    submits an embedding that is already stored.
+</p>
+{% endif %}
+
 <div class="tabs">
     <button class="tab active" onclick="showTab(event, 'recent')">Recent Activity</button>
     <button class="tab" onclick="showTab(event, 'top')">Top Contributors</button>
