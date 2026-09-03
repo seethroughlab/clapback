@@ -28,21 +28,25 @@ Measured on the live corpus 2026-09-03: **3,196 bytes per row**, across 21,924 r
 TOAST — the table itself is 3.8 MB and its btree indexes 5.3 MB, against 67 MB total, because a
 512-dimensional `vector` does not sit inline.
 
-| corpus | table (measured rate) | HNSW index (**estimated**) | total |
+| corpus | table + TOAST | HNSW index | total |
 |---|---|---|---|
-| 21,924 — today | 67 MB | — | 67 MB |
-| 1,000,000 | ~3.2 GB | ~2.2 GB | **~5.4 GB** |
-| 10,000,000 | ~32 GB | ~22 GB | **~54 GB** |
+| 21,924 — today | 62 MB | **57 MB** | 124 MB |
+| 150,000 | ~415 MB | ~390 MB | **~830 MB** |
+| 300,000 | ~830 MB | ~780 MB | **~1.7 GB** |
+| 1,000,000 | ~2.8 GB | ~2.6 GB | **~5.6 GB** |
+| 10,000,000 | ~28 GB | ~26 GB | **~56 GB** |
 
-The row nearest the decision is the one not in this table: **a few hundred thousand vectors is
-roughly 1 GB of rows and perhaps 700 MB of index** — comfortably inside the smallest VPS worth
-renting, which is the point.
+**These are measured, not estimated.** An HNSW index (`m=16, ef_construction=64`) was built on the
+live corpus on 2026-09-03: **57 MB across 21,924 rows — 2,724 bytes per row**, in 19 seconds. Table
+and TOAST measure 2,830 bytes per row, so the corpus costs about **5.5 KB per vector all-in**.
 
-**The index column is an estimate and should be measured before anything is sized on it.** No vector
-index exists yet — `ADR-0002` established that pgvector is currently only a column type — so the
-figure comes from pgvector storing the full vector plus its neighbour links per element, not from
-observation. Building an HNSW index on the current 21,924 rows and multiplying is an afternoon's
-work and would replace a guess with a number.
+An earlier draft of this ADR estimated the index at ~2.2 KB per row from how pgvector stores
+elements. The real figure is 24% higher, which is the sort of gap that decides an instance size —
+hence the insistence on measuring rather than extrapolating from the shape of the data structure.
+
+Two things follow for sizing. **The index is roughly the same size as the data**, so budget double
+the obvious number. And **RAM, not disk, is what runs out**: at 300,000 vectors the index alone is
+around 780 MB, which wants to sit in page cache alongside Postgres itself.
 
 ### What the budget rules out
 
@@ -60,16 +64,26 @@ project starts working. That is a
 conclusion, not a preference, and it is worth stating plainly because "just use managed Postgres" is
 otherwise the obvious answer.
 
-### What the current server is not ready for
+### What the current server is and is not ready for
 
-It has never been publicly reachable. Two things in it were fine on a private network and are not on
-a public one:
+It has never been publicly reachable, so this was audited rather than assumed — and an earlier draft
+of this ADR was wrong about it in both directions.
 
-- `allow_origins=["*"]` in `app/main.py`
-- `admin_password` defaults to an empty string, set from `CACHE_ADMIN_PASSWORD`
+**Already sound.** The admin surface **fails closed**: an unset `CACHE_ADMIN_PASSWORD` returns 503
+rather than granting access. The password comparison is timing-safe (`secrets.compare_digest`), and
+the session cookie is `httponly`, `secure` and `samesite=lax`. `allow_origins=["*"]` looks alarming
+and is not: `allow_credentials` is unset and therefore false, so no cross-origin page can ride the
+admin cookie, and the data behind it is opaque hashes and vectors. Rate limiting (`slowapi`) is
+applied per-route on both lookups and contributions, and an `IPBanMiddleware` tracks and blocks.
 
-Rate limiting exists (`slowapi`), which is a start. `ADR-0001` deferred identity, revocation and
-deletion as item 3; a public endpoint is what makes that item due rather than pending.
+**Actually outstanding.** Two things, and neither is a configuration flag:
+
+- **Contribution is unauthenticated.** Anyone who can reach the endpoint can POST an embedding.
+  Behind a private network that is a non-issue; on a public one it is the whole of `ADR-0001`'s
+  deferred item 3 — identity, revocation and deletion — arriving at once. Rate limits bound the
+  volume, not the intent.
+- **There is no TLS.** A bare instance serves plain HTTP; a public endpoint needs a certificate and
+  a terminator in front of the application.
 
 ## Decision
 
@@ -109,10 +123,12 @@ deletion as item 3; a public endpoint is what makes that item due rather than pe
    follow-up. The corpus is contributed data that cannot be regenerated without the contributors'
    audio — nobody here can rebuild it. A few gigabytes compressed costs cents to store.
 
-7. **The public surface is hardened before it is public.** `allow_origins=["*"]` and an
-   empty-by-default admin password are private-network settings. This does not decide the identity
-   and moderation design — that is `ADR-0001`'s deferred item 3 — but the endpoint does not go up
-   with an unauthenticated admin surface on it.
+7. **TLS terminates in front of the application, and unauthenticated writes are a launch blocker.**
+   The audit above found the admin surface and CORS already sound, so neither holds this up. What
+   does: a bare instance has no certificate, and a public endpoint that accepts anonymous
+   contributions is `ADR-0001`'s deferred item 3 becoming due. Serving reads publicly while writes
+   stay restricted is an acceptable first step; serving anonymous writes publicly is not, and
+   deciding how identity works is a prerequisite rather than a follow-up.
 
 8. **The deployment configuration is merged to `main`**, per `ADR-0002` point 7. The instance
    running today starts from a compose file on an unmerged branch, which is how the repository came
@@ -152,10 +168,11 @@ deletion as item 3; a public endpoint is what makes that item due rather than pe
     `pg_dump` and restore as any other step in point 5.
 
 11. **This decision costs headroom, and the cost is recorded rather than discovered.** Two gigabytes
-    against the four the cheapest option offered means **the first upgrade step in point 5 arrives at
-    roughly half the corpus size** — in the region of 150,000 vectors rather than 300,000. That is a
-    resize, not a migration, and it is a fair price for operating something familiar. It is written
-    down so that hitting it reads as expected rather than as a surprise.
+    against the four the cheapest option offered halves the runway before point 5's first upgrade.
+    On the measured figures that is comfortable to roughly **300,000 vectors** — where the index is
+    around 780 MB and still fits in page cache beside Postgres — and tight beyond 500,000. That is a
+    resize, not a migration, and a fair price for operating something familiar. It is written down so
+    that hitting it reads as expected rather than as a surprise.
 
     **Egress is metered on AWS and was not on the alternatives.** Lightsail's 3 TB allowance is far
     beyond anything this corpus will serve — a 512-float vector is about two kilobytes — but it is a
@@ -215,8 +232,6 @@ deletion as item 3; a public endpoint is what makes that item due rather than pe
 - **Tradeoff** — **one maintainer now operates a public service.** `ADR-0001` recorded MetaBrainz
   citing resources first, and this adds an ongoing obligation that did not exist when the thing was
   private.
-- **Follow-up** — measure a real HNSW index on the current corpus. Every sizing number above rests on
-  an estimate, and the measurement is cheap.
 - **Follow-up** — the region. `us-east-1` is where the existing backup bucket lives, which argues
   for putting the instance there and keeping backup traffic in-region and free.
 - **Follow-up** — a billing alarm before the endpoint is public, given point 11's metered egress.
