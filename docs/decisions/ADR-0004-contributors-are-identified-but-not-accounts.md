@@ -32,8 +32,8 @@ produce a signup wall that solves nothing.
 `ADR-0001` point 6 already decided where the corpus's protection lives: **a vector is confirmed by
 independent parties computing the same thing**, and a lone contributor's submissions never reach
 that bar however many they send. Reference-clip attestation catches a wrong checkpoint or a broken
-install. Rate limits bound volume. Between them, the failure modes identity is usually reached for
-are already addressed.
+install. Rate limits bound how fast anyone can write — though not, as the next section shows, how
+much. Between them, the failure modes identity is usually reached for are already addressed.
 
 What is *not* addressed without it:
 
@@ -47,6 +47,25 @@ What is *not* addressed without it:
 
 That is a narrower job than "authentication", and it is worth naming precisely, because the narrow
 version can be free and frictionless while the broad version cannot.
+
+### Rate limits bound the rate, not the total
+
+The reasoning above leans on rate limiting to handle volume. It does not, and the gap only became
+visible once the per-row cost was measured for `ADR-0003`.
+
+Contribution is limited to 30 per minute **per address**, with no cap on corpus size and no
+per-contributor quota. At the measured 5.4 KB per vector — 2,830 bytes of table and TOAST plus
+2,724 of HNSW index:
+
+    30/min x 60 x 24  =  43,200 rows/day, per address
+                      =  233 MB/day, per address
+
+Against the 60 GB of the instance `ADR-0003` point 10 selects, one address fills the disk in about
+seven months, ten in about three weeks, and a hundred in two days. **A full disk stops Postgres**,
+which takes the service down rather than degrading it.
+
+This is not data poisoning — consensus already denies an attacker anything durable — and it is not
+solved by identity, since identifiers rotate. It is a resource limit, and it has to exist separately.
 
 ### The thing self-issued identity cannot do
 
@@ -98,9 +117,24 @@ then relied upon.
 8. **Reads stay unauthenticated.** The corpus is public. Requiring identity to *query* would make it
    a members' club, and nothing about a lookup needs attribution.
 
-9. **Identity is not described as abuse prevention, in code or documentation.** Self-issued
-   identifiers rotate. The protection is consensus, attestation and rate limiting; this is
-   bookkeeping that makes consensus countable. Anywhere the distinction blurs, it will eventually be
+9. **Writes are bounded by total, not only by rate.** Three limits, in increasing order of what
+   they require:
+
+   - **A ceiling on corpus rows**, checked on write and rejecting past it with a clear error. Raised
+     deliberately as the corpus grows, so growth is a decision rather than a surprise. This works
+     today and needs nothing from identity.
+   - **Disk alerting before Postgres dies**, not after. A full disk is an outage; 80% of one is a
+     Tuesday afternoon.
+   - **Per-client-identifier quotas** once point 1 is in place. This is the second reason to send an
+     identifier — the first being confirmability under point 3 — and it turns identity into
+     something with a benefit attached rather than an altruistic act.
+
+   None of these stop a determined attacker rotating addresses and identifiers. They stop the
+   service falling over while somebody notices.
+
+10. **Identity is not described as abuse prevention, in code or documentation.** Self-issued
+   identifiers rotate. The protection is consensus, attestation, rate limiting and
+   point 9's total bounds; this is bookkeeping that makes consensus countable. Anywhere the distinction blurs, it will eventually be
    relied on.
 
 ## Alternatives Considered
@@ -145,8 +179,12 @@ then relied upon.
   contents unconfirmable until independent clients resubmit the same recordings.
 - **Tradeoff** — `contributor_count` changes meaning under point 4. Any figure quoted from it
   before this — including in `ADR-0001` and this repository's README — counts resubmissions.
-- **Tradeoff** — a determined bad actor rotates identifiers freely. Point 9 makes that explicit
+- **Tradeoff** — a determined bad actor rotates identifiers freely. Point 10 makes that explicit
   rather than hoping nobody notices, and accepts it because consensus is the actual defence.
+- **Tradeoff** — point 9's row ceiling means the corpus can refuse an honest contribution because it
+  is full. That is the correct failure — a rejected write is a message and a full disk is an outage —
+  but the ceiling has to be raised deliberately, and forgetting to raise it looks exactly like an
+  attack from the contributor's side.
 - **Follow-up** — what confirmation requires. This makes independence countable and does not decide
   *how many* independent clients confirm a vector, or what threshold of agreement counts. That needs
   the Phase 0 measurement, which `ADR-0001` records cannot accumulate passively with one real
