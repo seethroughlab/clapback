@@ -17,6 +17,7 @@ Familiar moved from middle-ten-seconds to a whole-track mean.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
 
 import numpy as np
@@ -30,7 +31,7 @@ from .artifacts import (
     text_session,
     tokenizer,
 )
-from .chunking import DecodeError, decode, windows
+from .chunking import DecodeError, decode, stream_windows, windows
 from .mel import FRONTEND_VERSION, N_FRAMES, SAMPLE_RATE, WINDOW_SAMPLES, log_mel
 
 __all__ = [
@@ -40,6 +41,7 @@ __all__ = [
     "ArtifactsMissing",
     "DecodeError",
     "Precision",
+    "decode",
     "embed_audio",
     "embed_file",
     "embed_text",
@@ -85,10 +87,17 @@ def embed_audio(
         precision: fp32 unless the vector will never leave this machine — see
             `artifacts` for why fp16 is not corpus-safe.
     """
+    return _embed_windows(
+        windows(np.ascontiguousarray(audio, dtype=np.float32)), precision
+    )
+
+
+def _embed_windows(source: Iterable[np.ndarray], precision: Precision) -> list[float]:
+    """Run the encoder over windows from any source, streamed or materialised."""
     session = audio_session(precision)
     name = session.get_inputs()[0].name
     vectors = []
-    for window in windows(np.ascontiguousarray(audio, dtype=np.float32)):
+    for window in source:
         mel = log_mel(window)
         if mel.shape != (N_FRAMES, 64):
             raise AssertionError(
@@ -103,8 +112,13 @@ def embed_audio(
 def embed_file(
     path: str | Path, *, precision: Precision = Precision.FP32
 ) -> list[float]:
-    """Embed an audio file end to end. The function almost every caller wants."""
-    return embed_audio(decode(path), precision=precision)
+    """Embed an audio file end to end. The function almost every caller wants.
+
+    Decodes a window at a time, so peak memory is a few megabytes whatever the
+    track length rather than scaling with it. `stream_windows` records why the
+    vector is identical to decoding the whole file first.
+    """
+    return _embed_windows(stream_windows(path), precision)
 
 
 def embed_text(text: str) -> list[float]:

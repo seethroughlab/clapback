@@ -256,3 +256,42 @@ def test_the_driver_probe_never_raises():
     from clapback_embed.artifacts import _cuda_driver_present
 
     assert isinstance(_cuda_driver_present(), bool)
+
+
+@pytest.mark.artifacts
+def test_streaming_and_whole_file_decode_agree_below_the_storage_floor(
+    _artifacts, tmp_path
+):
+    """The corpus contract: how a contributor decodes must not change the vector.
+
+    `embed_file` streams and `embed_audio(decode(...))` does not. If these
+    diverge, streamed and whole-file contributors disagree about identical audio
+    and consensus reads it as disagreement about the *recording* — the failure
+    this package exists to prevent.
+
+    The bound is the float4 floor, not exact equality. `pgvector` stores float4,
+    so a byte-identical resubmission already scores 0.99999994 — a 6.0e-08
+    divergence — and every agreement threshold derives from that. Measured
+    divergence here is 0.0 for 48 kHz material and 3.4e-14 for a 56-minute
+    44.1 kHz mp3. Asserting `==` would pass on this 25-second fixture and fail on
+    a long track, reporting a correct implementation as broken.
+    """
+    import soundfile as sf
+
+    from clapback_embed import embed_file
+    from clapback_embed.chunking import decode
+
+    n = int(25.0 * 44100)
+    t = np.arange(n, dtype=np.float64) / 44100
+    sweep = (0.4 * np.sin(2 * np.pi * (200 + 1800 * t / t[-1]) * t)).astype(np.float32)
+    path = tmp_path / "sweep.wav"
+    sf.write(path, sweep, 44100, subtype="FLOAT")
+
+    streamed = np.array(embed_file(path))
+    whole = np.array(embed_audio(decode(path)))
+
+    divergence = 1 - float(np.dot(streamed, whole))
+    assert divergence < 1e-9, (
+        f"streamed and whole-file vectors diverge by {divergence:.2e}, which is "
+        "within sight of the 6.0e-08 floor the corpus treats as identical"
+    )

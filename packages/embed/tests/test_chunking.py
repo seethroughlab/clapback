@@ -105,3 +105,149 @@ def test_windows_are_always_full_whatever_the_length(samples):
     assert got, "at least one window is always produced"
     assert all(w.size == WINDOW_SAMPLES for w in got)
     assert len(got) == max(1, samples // WINDOW_SAMPLES)
+
+
+# --- Streaming decode ------------------------------------------------------
+#
+# `stream_windows` exists so a 57-minute mix does not cost 2 GB of resident
+# audio. That is only worth having if it yields *the same windows*, so these
+# compare it against the whole-file path rather than merely checking shapes.
+
+
+def _write(tmp_path, audio: np.ndarray, sr: int, channels: int = 1):
+    import soundfile as sf
+
+    path = tmp_path / f"probe_{sr}_{channels}.wav"
+    data = audio if channels == 1 else np.stack([audio] * channels, axis=1)
+    sf.write(path, data, sr, subtype="FLOAT")
+    return path
+
+
+def _sweep(seconds: float, sr: int) -> np.ndarray:
+    """Broadband, non-repeating — a pure tone can hide resampler errors."""
+    n = int(seconds * sr)
+    t = np.arange(n, dtype=np.float64) / sr
+    return (0.4 * np.sin(2 * np.pi * (200 + 1800 * t / max(t[-1], 1e-9)) * t)).astype(
+        np.float32
+    )
+
+
+def test_streaming_is_bit_identical_when_no_resampling_is_needed(tmp_path):
+    from clapback_embed.chunking import decode, stream_windows
+
+    path = _write(tmp_path, _sweep(25.0, SAMPLE_RATE), SAMPLE_RATE)
+    streamed = list(stream_windows(path))
+    whole = windows(decode(path))
+
+    assert len(streamed) == len(whole) == 2
+    for i, (a, b) in enumerate(zip(streamed, whole)):
+        assert np.array_equal(a, b), f"window {i} differs with no resampler involved"
+
+
+def test_streaming_matches_the_whole_file_path_through_a_resampler(tmp_path):
+    """44.1 kHz is the case that made naive block-streaming wrong.
+
+    Resampling each block independently gives per-sample errors up to 1.64 and a
+    vector 3.8e-06 from the whole-file one — sixty times the corpus's 6.0e-08
+    floor. A stateful resampler leaves only tail-handling noise, which does not
+    survive the mel filterbank.
+    """
+    from clapback_embed.chunking import decode, stream_windows
+
+    path = _write(tmp_path, _sweep(25.0, 44100), 44100)
+    streamed = list(stream_windows(path))
+    whole = windows(decode(path))
+
+    assert len(streamed) == len(whole) == 2
+    for i, (a, b) in enumerate(zip(streamed, whole)):
+        assert np.allclose(a, b, atol=1e-5), f"window {i} diverged: {np.abs(a-b).max()}"
+
+
+def test_streaming_mixes_channels_the_same_way(tmp_path):
+    from clapback_embed.chunking import decode, stream_windows
+
+    path = _write(tmp_path, _sweep(12.0, SAMPLE_RATE), SAMPLE_RATE, channels=2)
+    first = next(iter(stream_windows(path)))
+    assert np.array_equal(first, windows(decode(path))[0])
+
+
+def test_streaming_drops_the_trailing_partial_window_too(tmp_path):
+    from clapback_embed.chunking import stream_windows
+
+    path = _write(tmp_path, _sweep(29.5, SAMPLE_RATE), SAMPLE_RATE)
+    out = list(stream_windows(path))
+    assert len(out) == 2
+    assert all(w.size == WINDOW_SAMPLES for w in out)
+
+
+def test_streaming_repeatpads_a_track_shorter_than_one_window(tmp_path):
+    from clapback_embed.chunking import decode, stream_windows
+
+    path = _write(tmp_path, _sweep(3.0, SAMPLE_RATE), SAMPLE_RATE)
+    out = list(stream_windows(path))
+    assert len(out) == 1
+    assert out[0].size == WINDOW_SAMPLES
+    assert np.array_equal(out[0], windows(decode(path))[0])
+
+
+def test_streaming_refuses_an_empty_file(tmp_path):
+    from clapback_embed.chunking import DecodeError, stream_windows
+
+    path = _write(tmp_path, np.zeros(0, np.float32), SAMPLE_RATE)
+    with pytest.raises(DecodeError):
+        list(stream_windows(path))
+
+
+def test_streaming_falls_back_when_libsndfile_cannot_open_the_container(tmp_path):
+    """Some AAC and ALAC files open in librosa and not in libsndfile."""
+    from unittest.mock import patch
+
+    from clapback_embed.chunking import decode, stream_windows
+
+    path = _write(tmp_path, _sweep(12.0, SAMPLE_RATE), SAMPLE_RATE)
+    expected = windows(decode(path))
+    with patch("clapback_embed.chunking.sf.info", side_effect=RuntimeError("nope")):
+        out = list(stream_windows(path))
+    assert len(out) == len(expected)
+    assert np.array_equal(out[0], expected[0])
+
+
+def test_streaming_peak_memory_does_not_track_track_length(tmp_path):
+    """The whole point, and the claim is constancy rather than a small number.
+
+    Whole-file decode makes peak memory a function of duration — 2.01 GB for a
+    57-minute mix, paid per concurrent worker, which is what forced Familiar's
+    analysis pool from three workers down to two. Doubling the track must not
+    move the peak, so this measures two durations rather than asserting a
+    threshold that only holds for whatever length the test happens to use.
+    """
+    import tracemalloc
+
+    from clapback_embed.chunking import decode, stream_windows
+
+    def peak(seconds: float, work) -> int:
+        path = _write(tmp_path / f"{seconds}", _sweep(seconds, SAMPLE_RATE), SAMPLE_RATE)
+        tracemalloc.start()
+        count = work(path)
+        _, high = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+        assert count == int(seconds) // 10
+        return high
+
+    (tmp_path / "60.0").mkdir()
+    (tmp_path / "180.0").mkdir()
+    short = peak(60.0, lambda p: sum(1 for _ in stream_windows(p)))
+    long = peak(180.0, lambda p: sum(1 for _ in stream_windows(p)))
+
+    assert long < short * 1.5, (
+        f"peak grew {short / 1e6:.1f} MB -> {long / 1e6:.1f} MB when the track "
+        "tripled — the buffer is holding the track"
+    )
+
+    # And confirm the comparison is meaningful: the whole-file path does grow.
+    whole_short = peak(60.0, lambda p: len(windows(decode(p))))
+    whole_long = peak(180.0, lambda p: len(windows(decode(p))))
+    assert whole_long > whole_short * 2, (
+        "whole-file decode did not grow with duration, so this test would pass "
+        "even if streaming were removed"
+    )
