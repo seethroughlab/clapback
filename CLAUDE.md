@@ -122,6 +122,13 @@ POST on each — plus `/health`. **The features and analysis-detail endpoints ar
 corpus but live for the client.** `ADR-0001` point 7 decided no existing feature rows migrate; that
 is a statement about what the corpus carries, and it does not license removing the endpoints.
 
+**The API is the only way in.** Clients and tools — Familiar, the CLI of `ADR-0001` point 3,
+anything else — reach the corpus over HTTP and never over a database connection. Every guarantee the
+corpus makes (confirmability, revocation, quotas, the row ceiling, agreement recording) is code on
+the write path, so a direct `psql` connection is a second write path with none of them. `ADR-0005`
+point 12 has the reasoning. The development compose file publishes 5432 for local work; the deployed
+one exposes no port.
+
 **The version that lives in two places.** `PIPELINE_VERSION` here and `EMBEDDING_VERSION` in
 Familiar's `backend/app/config.py` are the same fact — the identity of the embedding pipeline —
 maintained separately by hand. Moving one without the other contributes incomparable vectors under a

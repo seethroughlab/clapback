@@ -119,6 +119,18 @@ that this repository's own documents get wrong:
 `app_settings.py:81` both default to `https://familiar-cache.fly.dev`, which `ADR-0002` established
 is NXDOMAIN. The running instance works only because it is overridden in app settings.
 
+### The access path nobody has written down
+
+Familiar reaches the corpus over HTTP and always has, so the question has never come up. It is not
+recorded as a rule anywhere — not in an ADR, not in the README, not in a comment on the schema.
+
+What exists instead is a habit that happens to be right. `docker-compose.omv.yml:4` gives Postgres
+no host port, noted in passing as a property of that deployment rather than as a constraint;
+`docker-compose.yml:9` publishes 5432 with nothing saying it is for development only. A rule that
+holds because no one has tried the alternative is not a rule, and `ADR-0003` is about to put this
+database on a public host, next to `ADR-0001` point 3's tool — a client that will run on
+contributors' machines and will want, at some point, to go faster.
+
 ### The version that has to be bumped in two repositories at once
 
 `PIPELINE_VERSION` composes checkpoint, front-end, artifact, pooling and precision into a string.
@@ -201,6 +213,25 @@ the same hazard as the `@main` reference above, arriving through the corpus inst
     author. This is the honest direction: Familiar's use of them is reasonable, so the package
     should say so rather than leave them accidentally load-bearing.
 
+12. **The database belongs to the server, and nothing else touches it.** Every other member of this
+    workspace, the tool of point 8 included, and every external client reach the corpus **only
+    through the HTTP API**. No tool ships a connection string, and no client is given one.
+
+    This is a boundary, not a preference, because every guarantee the corpus makes lives in the
+    application rather than in the schema. `ADR-0004` point 3's confirmability, point 6's
+    revocation, point 9's per-client quotas and row ceiling, `ADR-0001` point 9's agreement
+    recording, and whatever `ADR-0002` point 1's similarity endpoint eventually enforces are all
+    code on the write path. A `psql` connection is a second write path with none of them, producing
+    rows indistinguishable from contributed ones and carrying no evidence of who computed them. The
+    corpus's integrity is a property of the path, so there is one path.
+
+    It is also what keeps `ADR-0003` point 5's upgrade steps cheap: resizing, reindexing or moving
+    Postgres is invisible to every client precisely because no client holds a connection to it.
+
+    The development compose file publishes 5432 for local work and says so; that is a convenience
+    on a throwaway database, not an access path, and the deployed configuration exposes no port at
+    all.
+
 ## Alternatives Considered
 
 - **Split the embedder into its own repository.** The strongest alternative, and the one worth
@@ -248,11 +279,18 @@ the same hazard as the `@main` reference above, arriving through the corpus inst
   the identity is a tagged release with notes rather than a rebuild.
 - **Positive** — the server acquires a CI gate before it acquires a public write endpoint, rather
   than after.
+- **Positive** — the API becomes the stated boundary rather than an accident of how the one
+  existing client happens to work, before `ADR-0003` puts the database on a public host and
+  `ADR-0001` point 3's tool starts running on machines this project does not control.
 - **Positive** — the layout stops contradicting `ADR-0001` point 3. Three members, three
   directories, and the tool's absence becomes visible rather than implicit.
 - **Tradeoff** — a large, mechanical, conflict-prone diff that touches nearly every path in the
   repository and rewrites every import path, Docker context and compose volume that names `app/`.
   It is worth doing in one commit and worth doing before there is more to move.
+- **Tradeoff** — point 12 costs the tool the fastest bulk path it could have had. A client
+  backfilling a large library over HTTP is slower than one issuing a `COPY`, and if that ever
+  genuinely bites, the answer is a batch endpoint that keeps the guarantees rather than an
+  exception that drops them.
 - **Tradeoff** — publishing is a public commitment. A name on PyPI, a version history that cannot be
   rewritten, and the implicit promise that a package on an index is maintained. `ADR-0001` names
   attention as the scarce resource, and this spends some.
