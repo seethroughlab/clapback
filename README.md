@@ -11,7 +11,10 @@ That proviso is the whole design. `clapback-embed` exists so there is exactly on
 implementation: if two contributors disagree about a recording, the disagreement is
 about the audio, not about whose code ran.
 
-**Live:** https://familiar-cache.fly.dev *(the service predates the rename)*
+**Deployment:** self-hosted. The instance backing Familiar runs on the same machine
+as it, reached over a shared Docker network. There is no public endpoint at present —
+`familiar-cache.fly.dev` was retired when the service moved off Fly, and the DNS name
+no longer resolves.
 
 ## The package
 
@@ -177,20 +180,10 @@ docker compose up
 
 ## Deployment
 
-### Fly.io (Production)
-
-The cache is deployed on Fly.io with a Neon PostgreSQL database.
-
-```bash
-# Deploy (auto-deploys on push to main via GitHub Actions)
-fly deploy
-
-# Run migrations
-fly ssh console -C "bash -c 'cd /app && uv run alembic upgrade head'"
-
-# Check status
-curl https://familiar-cache.fly.dev/health/db
-```
+Self-hosted. It previously ran on Fly.io with a Neon database; that app was destroyed
+when the service moved onto the same host as its main client, and
+`familiar-cache.fly.dev` no longer resolves. `fly.toml` is kept for reference rather
+than as a live target.
 
 ### Self-hosted
 
