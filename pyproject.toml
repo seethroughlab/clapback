@@ -23,3 +23,12 @@ dev-dependencies = [
     "pytest-asyncio>=0.21.0",
     "httpx>=0.25.0",
 ]
+
+[tool.pytest.ini_options]
+# The first test configuration this project has had. `pythonpath` so `app` imports
+# without an editable install; `asyncio_mode` because pytest-asyncio has been a
+# declared dev dependency since the start and any async test would otherwise be
+# silently skipped rather than run.
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"

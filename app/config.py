@@ -10,6 +10,10 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://cache:cache@localhost:5432/cache"
 
+    # Disable SSL for the DB connection (self-hosted Postgres with no TLS,
+    # e.g. the local pgvector container on OMV). Set CACHE_DB_DISABLE_SSL=true.
+    db_disable_ssl: bool = False
+
     # Rate limiting
     lookup_rate_limit: str = "300/minute"
     contribute_rate_limit: str = "30/minute"

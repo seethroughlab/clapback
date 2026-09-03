@@ -9,10 +9,41 @@ from sqlalchemy import select
 
 from app.api.deps import DbSession
 from app.config import settings
-from app.db.models import AnalysisDetail, Embedding, Features
+from app.db.models import AnalysisDetail, Embedding, Features, SubmissionAgreement
 from app.limiter import limiter
 
 router = APIRouter(prefix="/v1")
+
+
+def _cosine_similarity(a: list[float], b: list[float]) -> float | None:
+    """Cosine similarity, or `None` when the comparison is meaningless.
+
+    Written out rather than pulled from numpy because this runs inline on a request
+    path over 512 floats, and the server has no numpy dependency today — adding one
+    for six lines of arithmetic would be the wrong trade.
+
+    Returns `None` for mismatched lengths or a zero-magnitude vector. Those are not
+    disagreements, they are broken input, and recording them as similarity 0.0 would
+    poison the very distribution this exists to measure.
+
+    **A byte-identical resubmission does not score 1.0, and that is not a bug.**
+    `pgvector`'s `Vector` column stores float4, so the vector read back has been
+    truncated to single precision while the submitted one is float64. Measured: a
+    resubmission of the exact same list scores **0.99999994**. The floor on
+    measurable agreement is therefore set by the storage, not by the contributors —
+    worth knowing before anyone reads 0.9999999 as evidence of a discrepancy.
+    """
+    if len(a) != len(b):
+        return None
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_a = sum(x * x for x in a) ** 0.5
+    norm_b = sum(y * y for y in b) ** 0.5
+    if norm_a == 0.0 or norm_b == 0.0:
+        return None
+    value = dot / (norm_a * norm_b)
+    # Float error can push an identical pair a hair past 1.0, which would look like
+    # an impossible similarity in the distribution.
+    return max(-1.0, min(1.0, value))
 
 
 # --- Embedding models ---
@@ -25,6 +56,14 @@ class EmbeddingRequest(BaseModel):
     embedding: list[float] = Field(..., min_length=512, max_length=512)
     analysis_version: int = Field(..., ge=1)
     clap_model_version: str = Field(..., min_length=1, max_length=100)
+    #: Opaque per-install identifier, if the client has one. Optional, because every
+    #: existing client predates it and must keep working unchanged.
+    #:
+    #: It exists so that "two submissions" can be distinguished from "one client
+    #: retrying" — the distinction `contributor_count` fails to make, since it counts
+    #: POSTs rather than contributors. Not an identity: a random UUID generated once
+    #: per install is exactly enough, and the server never needs to know more.
+    client_id: str | None = Field(default=None, max_length=64)
 
 
 class EmbeddingResponse(BaseModel):
@@ -124,7 +163,26 @@ async def contribute_embedding(
     existing = result.scalar_one_or_none()
 
     if existing:
-        # Increment contributor count
+        # **Record how far apart the two vectors are, rather than discarding the
+        # submission.** This is the only measurement that can tell us whether a
+        # consensus scheme is even viable: if independent machines agree to within
+        # a rounding error, agreement is strong evidence of a correct computation;
+        # if they routinely diverge, no threshold separates honest data from bad.
+        #
+        # Recording only. First-write-wins is unchanged, the stored vector is
+        # untouched, and no client can observe any difference.
+        similarity = _cosine_similarity(req.embedding, list(existing.embedding))
+        if similarity is not None:
+            db.add(
+                SubmissionAgreement(
+                    fingerprint_hash=req.fingerprint_hash,
+                    analysis_version=req.analysis_version,
+                    clap_model_version=req.clap_model_version,
+                    similarity=similarity,
+                    client_id=req.client_id,
+                )
+            )
+
         existing.contributor_count += 1
         await db.commit()
         return ContributeResponse(

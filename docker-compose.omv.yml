@@ -1,0 +1,74 @@
+# Self-hosted deployment for OpenMediaVault (NAS), fronted by Tailscale Funnel.
+#
+# Two services on a private bridge network:
+#   - postgres : pgvector/pgvector:pg17, data on the NAS array (no host port)
+#   - api      : the FastAPI app, published only on the host loopback (127.0.0.1:8000)
+#                so the host's tailscaled can proxy to it via Tailscale Funnel/Serve.
+#
+# Ingress: Tailscale Funnel terminates TLS and gives a public HTTPS URL on the
+# machine's MagicDNS name, e.g. https://<machine>.<tailnet>.ts.net . Enable with:
+#     tailscale funnel --bg --https=443 http://127.0.0.1:8000
+# (Funnel ports are limited to 443/8443/10000.) No router ports are opened.
+#
+# Secrets come from a sibling .env file (git-ignored). See .env.example.
+# Before first run:
+#   1. Set POSTGRES_VOLUME to an absolute path on your NAS array.
+#   2. Create .env with CACHE_ADMIN_PASSWORD.
+#   3. Run migrations after first `up`:
+#        docker compose -f docker-compose.omv.yml exec api uv run alembic upgrade head
+#   4. Enable Tailscale Funnel (see command above).
+services:
+  postgres:
+    image: pgvector/pgvector:pg17  # match Neon's server major version (PG17) for pg_dump/restore
+    environment:
+      POSTGRES_USER: cache
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cache}
+      POSTGRES_DB: cache
+    volumes:
+      # Absolute path on the NAS array — discover via OMV > Storage > File Systems.
+      - ${POSTGRES_VOLUME:?set POSTGRES_VOLUME to an absolute path on the NAS array}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cache"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      # Unique alias so the api's DB hostname never collides with a `postgres`
+      # on the shared Familiar network (see api's `familiar` network below).
+      internal:
+        aliases:
+          - cache-db
+
+  api:
+    build: .
+    environment:
+      CACHE_DATABASE_URL: postgresql+asyncpg://cache:${POSTGRES_PASSWORD:-cache}@cache-db:5432/cache
+      CACHE_DB_DISABLE_SSL: "true"
+      CACHE_ADMIN_PASSWORD: ${CACHE_ADMIN_PASSWORD:?set CACHE_ADMIN_PASSWORD in .env}
+    # Bound to the host loopback only — not the LAN. Tailscale Funnel/Serve on the
+    # host proxies https://<machine>.<tailnet>.ts.net to 127.0.0.1:8000.
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      internal: {}
+      # Also join the Familiar app's docker network so a co-located Familiar
+      # instance can reach the cache directly at http://familiar-cache:8000
+      # (avoids hairpinning through the public Tailscale Funnel from on-box).
+      familiar:
+        aliases:
+          - familiar-cache
+
+networks:
+  internal:
+    driver: bridge
+  # External network created by the Familiar app's compose project. Optional:
+  # only needed when Familiar runs on the same host. Remove this block (and the
+  # `familiar` entry above) if deploying the cache standalone.
+  familiar:
+    external: true
+    name: docker_familiar-network

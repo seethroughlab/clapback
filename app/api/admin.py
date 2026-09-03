@@ -7,7 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, update, text
 
 from app.api.deps import DbSession
 from app.config import settings
@@ -139,6 +139,25 @@ async def dashboard(request: Request, db: DbSession) -> HTMLResponse:
         .limit(20)
     )).scalars().all()
 
+    # **The Phase 0 measurement.** Buckets rather than an average: the question is
+    # whether honest agreement is *separable* from everything else, and a mean over a
+    # bimodal distribution hides exactly that. If the top bucket holds nearly all of
+    # them, a consensus threshold is viable; if they are spread, it is not, and the
+    # verification design needs a different shape.
+    agreement = (await db.execute(
+        text("""
+            SELECT
+              count(*) FILTER (WHERE similarity >= 0.999999) AS identical,
+              count(*) FILTER (WHERE similarity >= 0.9999 AND similarity < 0.999999) AS near,
+              count(*) FILTER (WHERE similarity >= 0.99 AND similarity < 0.9999) AS close,
+              count(*) FILTER (WHERE similarity >= 0.9 AND similarity < 0.99) AS loose,
+              count(*) FILTER (WHERE similarity < 0.9) AS divergent,
+              count(*) AS total,
+              count(DISTINCT client_id) AS distinct_clients
+            FROM submission_agreement
+        """)
+    )).mappings().first()
+
     flagged_ips = (await db.execute(
         select(IPStats)
         .where(IPStats.flagged == True)  # noqa: E712
@@ -172,6 +191,7 @@ async def dashboard(request: Request, db: DbSession) -> HTMLResponse:
             },
             "recent_ips": recent_ips,
             "top_contributors": top_contributors,
+            "agreement": agreement,
             "flagged_ips": flagged_ips,
             "banned_ips": banned_ips,
         },
