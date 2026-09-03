@@ -82,6 +82,15 @@ decisions in an order that differs from their numbering.
 | 0003 | The commons runs on one small server | One AWS Lightsail box for app and Postgres, sized by index RAM, with the upgrade path written down |
 | 0004 | Contributors are identified, but not accounts | `ADR-0001`'s deferred item 3: self-issued client identifiers, revocation, deletion, and write bounds |
 
+`ADR-0005` (`proposed`) answers no deferred item but blocks the one that matters most: it makes the
+embedder a published peer of the server rather than a subdirectory of it, which is what `ADR-0001`
+point 3's "published for others to depend on" requires and what deferred item 5's tool will need a
+home beside.
+
+| # | ADR | Answers |
+|---|---|---|
+| 0005 | The repository is a workspace of peers | The restructure, publishing `clapback-embed` to PyPI, and the rule separating package version from pipeline identity |
+
 **What is still owed, in execution order:**
 
 | ADR-0001 item | Decision | Why here |
@@ -93,6 +102,32 @@ decisions in an order that differs from their numbering.
 **Two launch blockers are decided but unbuilt**, both from `ADR-0003` point 7: a public endpoint
 needs TLS in front of it, and it must not accept anonymous writes. `ADR-0004` decides how the second
 is answered; none of it is implemented beyond `client_id` being accepted and stored.
+
+## Compatibility with Familiar
+
+[Familiar](https://github.com/seethroughlab/familiar) is the only client. `ADR-0001` point 1 says it
+does not own this project; it does constrain it. **Check both surfaces before changing either, and
+verify against the sibling checkout rather than from memory** — the audit in `ADR-0005` is dated and
+will go stale.
+
+**The package.** Familiar imports `embed_file`, `embed_text`, `embed_audio` and `PIPELINE_VERSION`
+from the top level, and reaches into two submodules by path: `clapback_embed.artifacts`
+(`audio_session`, `providers`, `model_dir`) and `clapback_embed.mel` (`SAMPLE_RATE`). Its
+`backend/tests/test_embedder_delegation.py` stubs those module paths by name, so **the module layout
+is part of the contract**, not an implementation detail. `ADR-0005` point 11 widens `__all__` to
+match.
+
+**The server.** Familiar calls `/v1/embeddings`, `/v1/features` and `/v1/analysis-detail` — GET and
+POST on each — plus `/health`. **The features and analysis-detail endpoints are legacy for the
+corpus but live for the client.** `ADR-0001` point 7 decided no existing feature rows migrate; that
+is a statement about what the corpus carries, and it does not license removing the endpoints.
+
+**The version that lives in two places.** `PIPELINE_VERSION` here and `EMBEDDING_VERSION` in
+Familiar's `backend/app/config.py` are the same fact — the identity of the embedding pipeline —
+maintained separately by hand. Moving one without the other contributes incomparable vectors under a
+key asserting they are comparable, and nothing detects it. Until `ADR-0005`'s follow-up gives this a
+mechanism, **any change that moves `PIPELINE_VERSION` requires a matching bump in Familiar in the
+same breath.**
 
 ## Development
 
