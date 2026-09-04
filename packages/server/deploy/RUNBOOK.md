@@ -62,15 +62,30 @@ aws lightsail download-default-key-pair --profile admin --region us-east-1 \
 chmod 600 ~/.ssh/clapback-lightsail.pem
 ```
 
-**Force `apt` onto IPv4 first, or the first `apt-get update` takes forever.** A
-Lightsail dual-stack instance comes up with a public IPv6 address and a default
-IPv6 route from router advertisement — and, measured on this one, no working IPv6
-egress at all. `curl -4` to the Ubuntu mirror returned 200 in 1.2 s while `curl -6`
-timed out. `apt` tries IPv6 first for every mirror connection, so an update that
-should take seconds crawls for ten minutes and looks like a hung machine.
+**Point `apt` away from the regional mirror before anything else.** Ubuntu 24.04 on
+Lightsail ships with `us-east-1.ec2.archive.ubuntu.com`, which on 2026-09-04
+returned **HTTP 503** for every package file while the general mirrors were
+healthy — measured side by side from the instance:
+
+| mirror | result |
+|---|---|
+| `us-east-1.ec2.archive.ubuntu.com` | 503, 107 bytes, 20 s |
+| `archive.ubuntu.com` | **200, 1.8 MB at 28 MB/s, 0.06 s** |
+| `security.ubuntu.com` | 200, 1.8 MB at 16 MB/s |
+
+The failure does not look like a broken mirror. `apt` retries, prints `Ign:` lines
+and keeps going, so it presents as a machine that is merely slow — it burned
+fifteen minutes here before anyone measured a mirror directly.
+
+The instance also advertises a public IPv6 address it cannot use for egress
+(`curl -6` times out), so forcing IPv4 saves a per-connection timeout on top.
+Neither is the instance being broken: after both, `apt-get update` takes **10 s**
+and Docker installs in **15 s**.
 
 ```bash
 ssh -i ~/.ssh/clapback-lightsail.pem ubuntu@clapback.seethroughlab.com
+sudo sed -i 's|us-east-1.ec2.archive.ubuntu.com|archive.ubuntu.com|g' \
+	/etc/apt/sources.list.d/ubuntu.sources
 printf 'Acquire::ForceIPv4 "true";\n' | sudo tee /etc/apt/apt.conf.d/99force-ipv4
 sudo apt-get update && sudo apt-get install -y docker.io docker-compose-v2 awscli git
 sudo usermod -aG docker ubuntu && exec su -l ubuntu
@@ -213,15 +228,25 @@ to build a `DELETE` route, and then grows from anyone.
 
 ## If something hangs
 
-**Anything slow and network-shaped is IPv6 until proven otherwise.** The instance
-advertises IPv6 it cannot actually use. `apt` is handled above; if Caddy is slow
-to obtain a certificate or a `docker pull` stalls, test the same way before
-assuming anything else is wrong:
+**Measure the remote end before diagnosing the local one.** Everything slow here
+turned out to be a mirror returning 503, and two wrong theories were chased first
+— an IPv6 egress failure (real, but only worth a timeout per connection) and an
+MTU blackhole (not real: a 9001-byte jumbo ping failing against a 1500-byte
+internet path is normal, not a fault).
+
+The test that settles it in one command is comparing hosts, not tuning the
+instance:
 
 ```bash
-curl -4 -s -o /dev/null -w '%{http_code} %{time_total}s\n' http://archive.ubuntu.com/
-curl -6 -s -o /dev/null -w '%{http_code} %{time_total}s\n' http://archive.ubuntu.com/
+for h in us-east-1.ec2.archive.ubuntu.com archive.ubuntu.com security.ubuntu.com; do
+  printf '%-38s ' "$h"
+  curl -4 -sL -o /dev/null -w '%{http_code} %{size_download}B %{speed_download}B/s\n' \
+    "http://$h/ubuntu/dists/noble/main/binary-amd64/Packages.gz"
+done
 ```
+
+A healthy instance pulls 1.8 MB at tens of MB/s. If one host is slow and another
+is fast, the instance is fine.
 
 Public clients are unaffected — DNS has an `A` record and no `AAAA`, so nothing
 reaching this host is asked to use IPv6.
