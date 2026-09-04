@@ -33,6 +33,18 @@ class Embedding(Base):
     # The embedding vector (512 dimensions for CLAP)
     embedding = mapped_column(Vector(512), nullable=False)
 
+    #: The installation that first contributed this vector (`ADR-0004` point 1).
+    #:
+    #: **This is what makes revocation possible at all.** Point 6 says revoking a
+    #: client cascades over its submissions; without recording who sent an
+    #: embedding there is nothing to cascade over, and point 7's "deletion by
+    #: client identifier" has no rows to select.
+    #:
+    #: Nullable, and every row from before 2026-09-04 is null. Nobody recorded who
+    #: contributed those, and `ADR-0004` point 3 already decided what that means:
+    #: accepted, stored, never confirmable. It is not a gap to backfill.
+    client_id: Mapped[str | None] = mapped_column(String(64))
+
     # Metadata
     contributor_count: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(

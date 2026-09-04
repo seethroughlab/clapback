@@ -1,1 +1,1 @@
-# Familiar Cache - Community embedding cache server
+# clapback — a public commons of CLAP audio embeddings.

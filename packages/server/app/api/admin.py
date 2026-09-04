@@ -1,5 +1,6 @@
 """Admin dashboard routes for the cache server."""
 
+import logging
 import secrets
 from datetime import datetime, timedelta
 from typing import Annotated
@@ -7,12 +8,21 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
-from sqlalchemy import func, select, text, update
+from sqlalchemy import delete, func, select, text, update
 
 from app.api.deps import DbSession
 from app.config import settings
-from app.db.models import AnalysisDetail, BannedIP, Embedding, Features, IPStats
+from app.db.models import (
+    AnalysisDetail,
+    BannedIP,
+    Embedding,
+    Features,
+    IPStats,
+    SubmissionAgreement,
+)
 from app.templates import templates
+
+logger = logging.getLogger(__name__)
 
 admin_router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -196,6 +206,114 @@ async def dashboard(request: Request, db: DbSession) -> HTMLResponse:
             "banned_ips": banned_ips,
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Deletion — `ADR-0004` point 7
+#
+# "A delete path exists before the endpoint is public. Non-optional. A public
+# corpus needs takedown for legal requests and retraction for poisoned
+# recordings." It is the last thing standing between this and accepting writes
+# from strangers, and it is deliberately unglamorous.
+#
+# Admin-only, and Caddy 404s /admin on the public host, so reaching these needs
+# an SSH tunnel. That is the right shape for now: takedown is rare, and a
+# publicly reachable delete endpoint is a liability long before it is a
+# convenience.
+# ---------------------------------------------------------------------------
+
+
+class DeletionResult(BaseModel):
+    """What a deletion actually removed, per table."""
+
+    embeddings: int
+    features: int
+    analysis_details: int
+    submission_agreements: int
+
+
+@admin_router.delete("/corpus/recordings/{fingerprint_hash}", response_model=DeletionResult)
+async def delete_recording(
+    request: Request,
+    fingerprint_hash: str,
+    db: DbSession,
+) -> DeletionResult:
+    """Remove a recording from the corpus entirely — the takedown path.
+
+    Everything keyed on the hash goes: the embedding, the legacy feature and
+    analysis-detail rows, and any recorded agreements. A takedown that left the
+    features behind would be a takedown in name only, since they are keyed on the
+    same fingerprint and describe the same recording.
+
+    Deliberately not soft deletion. A legal request to remove a recording is not
+    answered by a flag the server keeps honouring internally, and `ADR-0001`'s
+    privacy position is that the corpus holds no personal data worth an audit
+    trail of what it used to hold.
+    """
+    _require_auth(request)
+
+    counts = {}
+    for table, model in (
+        ("embeddings", Embedding),
+        ("features", Features),
+        ("analysis_details", AnalysisDetail),
+        ("submission_agreements", SubmissionAgreement),
+    ):
+        result = await db.execute(
+            delete(model).where(model.fingerprint_hash == fingerprint_hash)
+        )
+        counts[table] = result.rowcount or 0
+
+    await db.commit()
+    logger.warning(
+        "takedown: removed %s for fingerprint %s",
+        counts,
+        fingerprint_hash[:12],
+    )
+    return DeletionResult(**counts)
+
+
+@admin_router.delete("/corpus/clients/{client_id}", response_model=DeletionResult)
+async def delete_client_submissions(
+    request: Request,
+    client_id: str,
+    db: DbSession,
+) -> DeletionResult:
+    """Remove everything one installation contributed — the retraction path.
+
+    `ADR-0004` point 6: revocation operates on client identifiers and cascades.
+    This is the destructive end of that; marking submissions unconfirmed rather
+    than deleting them is the softer form and needs the confirmation machinery
+    `ADR-0008` describes, which does not exist yet.
+
+    **It reaches only what the corpus can attribute.** Embeddings created before
+    2026-09-04 carry no `client_id` and cannot be selected by one — not a bug to
+    fix but the honest consequence of `ADR-0004` point 3, which accepts
+    unattributed submissions and says plainly they can never be confirmed. The
+    same property that makes them unconfirmable makes them unrevokable.
+
+    Features and analysis details are untouched: they never carried a client id,
+    so there is nothing to select. `ADR-0001` point 6 gives tier two less
+    scrutiny, and this is one of the places that costs something.
+    """
+    _require_auth(request)
+
+    embeddings = await db.execute(
+        delete(Embedding).where(Embedding.client_id == client_id)
+    )
+    agreements = await db.execute(
+        delete(SubmissionAgreement).where(SubmissionAgreement.client_id == client_id)
+    )
+    await db.commit()
+
+    counts = DeletionResult(
+        embeddings=embeddings.rowcount or 0,
+        features=0,
+        analysis_details=0,
+        submission_agreements=agreements.rowcount or 0,
+    )
+    logger.warning("retraction: removed %s for client %s", counts, client_id)
+    return counts
 
 
 @admin_router.post("/ban")

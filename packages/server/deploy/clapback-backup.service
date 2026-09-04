@@ -9,3 +9,7 @@ Type=oneshot
 WorkingDirectory=/home/ubuntu/clapback/packages/server
 ExecStart=/home/ubuntu/clapback/packages/server/deploy/backup.sh
 User=ubuntu
+# snap installs aws outside systemd's default PATH, and Ubuntu 24.04 has no
+# awscli package to install instead — without this the timer fails nightly with
+# "aws: command not found" while a hand-run backup works.
+Environment=PATH=/snap/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin

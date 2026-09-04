@@ -216,6 +216,10 @@ async def contribute_embedding(
         embedding=req.embedding,
         analysis_version=req.analysis_version,
         clap_model_version=req.clap_model_version,
+        # Who sent it, so `ADR-0004` point 6's revocation has something to
+        # cascade over. Absent for a client that sends none, which is every
+        # client that predates the field.
+        client_id=req.client_id,
     )
     db.add(emb)
     await db.commit()

@@ -62,9 +62,33 @@ aws lightsail download-default-key-pair --profile admin --region us-east-1 \
 chmod 600 ~/.ssh/clapback-lightsail.pem
 ```
 
+**Point `apt` away from the regional mirror before anything else.** Ubuntu 24.04 on
+Lightsail ships with `us-east-1.ec2.archive.ubuntu.com`, which on 2026-09-04
+returned **HTTP 503** for every package file while the general mirrors were
+healthy — measured side by side from the instance:
+
+| mirror | result |
+|---|---|
+| `us-east-1.ec2.archive.ubuntu.com` | 503, 107 bytes, 20 s |
+| `archive.ubuntu.com` | **200, 1.8 MB at 28 MB/s, 0.06 s** |
+| `security.ubuntu.com` | 200, 1.8 MB at 16 MB/s |
+
+The failure does not look like a broken mirror. `apt` retries, prints `Ign:` lines
+and keeps going, so it presents as a machine that is merely slow — it burned
+fifteen minutes here before anyone measured a mirror directly.
+
+The instance also advertises a public IPv6 address it cannot use for egress
+(`curl -6` times out), so forcing IPv4 saves a per-connection timeout on top.
+Neither is the instance being broken: after both, `apt-get update` takes **10 s**
+and Docker installs in **15 s**.
+
 ```bash
 ssh -i ~/.ssh/clapback-lightsail.pem ubuntu@clapback.seethroughlab.com
-sudo apt-get update && sudo apt-get install -y docker.io docker-compose-v2 awscli git
+sudo sed -i 's|us-east-1.ec2.archive.ubuntu.com|archive.ubuntu.com|g' \
+	/etc/apt/sources.list.d/ubuntu.sources
+printf 'Acquire::ForceIPv4 "true";\n' | sudo tee /etc/apt/apt.conf.d/99force-ipv4
+sudo apt-get update && sudo apt-get install -y docker.io docker-compose-v2 git
+sudo snap install aws-cli --classic   # `awscli` was dropped from 24.04's repos
 sudo usermod -aG docker ubuntu && exec su -l ubuntu
 git clone https://github.com/seethroughlab/clapback.git && cd clapback/packages/server
 cp deploy/env.example .env && ${EDITOR:-nano} .env
@@ -153,6 +177,11 @@ host cannot erase or overwrite what it has already written: it can add objects,
 and every previous version survives. Expiry belongs to the lifecycle rule, which
 runs on S3's side where the instance cannot reach it.
 
+The backup script needs `aws` on `PATH`. Ubuntu 24.04 has **no `awscli`
+package** — `apt-cache policy awscli` reports no candidate even with universe
+enabled — so it comes from snap, which is what `deploy/clapback-backup.service`
+assumes.
+
 ```bash
 sudo cp deploy/clapback-backup.service deploy/clapback-backup.timer /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now clapback-backup.timer
@@ -202,6 +231,35 @@ mirror — and a permanent one, because `ADR-0007`'s attestation and `ADR-0008`'
 confirmations both need a second party that the architecture would now forbid.
 The pause is the honest state: the corpus stops growing for as long as it takes
 to build a `DELETE` route, and then grows from anyone.
+
+## If something hangs
+
+**Measure the remote end before diagnosing the local one.** Everything slow here
+turned out to be a mirror returning 503, and two wrong theories were chased first
+— an IPv6 egress failure (real, but only worth a timeout per connection) and an
+MTU blackhole (not real: a 9001-byte jumbo ping failing against a 1500-byte
+internet path is normal, not a fault).
+
+The test that settles it in one command is comparing hosts, not tuning the
+instance:
+
+```bash
+for h in us-east-1.ec2.archive.ubuntu.com archive.ubuntu.com security.ubuntu.com; do
+  printf '%-38s ' "$h"
+  curl -4 -sL -o /dev/null -w '%{http_code} %{size_download}B %{speed_download}B/s\n' \
+    "http://$h/ubuntu/dists/noble/main/binary-amd64/Packages.gz"
+done
+```
+
+A healthy instance pulls 1.8 MB at tens of MB/s. If one host is slow and another
+is fast, the instance is fine.
+
+Public clients are unaffected — DNS has an `A` record and no `AAAA`, so nothing
+reaching this host is asked to use IPv6.
+
+**Do not `pkill -f apt-get` over SSH.** The pattern matches the remote command
+string carrying it, so the shell kills itself and everything after it silently
+does not run.
 
 ## What is still not done after all of this
 

@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}API · clapback{% endblock %}
+
+{% block body %}
+<a class="back-link" href="/">← clapback</a>
+
+<h1>🎵 API</h1>
+<p class="tagline">
+    A public commons of CLAP audio embeddings. <strong>Reads need no key, no account and no
+    registration.</strong> Everything below works from a terminal right now.
+</p>
+<div class="header-links">
+    <a href="/docs">OpenAPI / Swagger</a>
+    <a href="https://pypi.org/project/clapback-embed/">clapback-embed on PyPI</a>
+    <a href="https://github.com/seethroughlab/clapback">GitHub</a>
+    <a href="https://github.com/seethroughlab/clapback/tree/main/docs/decisions">Decisions</a>
+</div>
+
+<div class="card">
+    <h2>What is in here</h2>
+    <p class="muted">
+        {{ "{:,}".format(counts.embeddings) }} CLAP embeddings — 512-dimensional unit vectors
+        describing what a recording <em>sounds like</em>. Computing one costs seconds of CPU and a
+        600&nbsp;MB model. Comparing two is a dot product. That asymmetry is the whole reason this
+        exists.
+    </p>
+    <p class="muted">
+        Recordings are keyed by the <strong>SHA256 of an AcoustID fingerprint</strong>, so the
+        corpus never learns a title, an artist or a filename. It follows that you can ask for the
+        embedding of a track <em>you already have</em>, and cannot yet ask "what does this record I
+        do not own sound like" — that needs a recording id as a second key, which is
+        <a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0001-clapback-is-a-public-clap-embedding-commons.md">decided and not built</a>.
+    </p>
+</div>
+
+<div class="card">
+    <h2>Get an embedding</h2>
+    <pre><code>curl "https://{{ host }}/v1/embeddings/{fingerprint_hash}?analysis_version=5&clap_model_version=laion/clap-htsat-unfused:v1"</code></pre>
+    <p class="muted">
+        Returns the vector, the pipeline versions it was computed under, and how many submissions
+        it has had. <code>404</code> if the corpus has not seen that recording.
+    </p>
+</div>
+
+<div class="card">
+    <h2>Compute one yourself</h2>
+    <p class="muted">
+        The reference implementation is published, so a miss costs you a dependency rather than a
+        research project. No <code>torch</code>, no <code>transformers</code> — it runs on ONNX
+        Runtime.
+    </p>
+    <pre><code>pip install clapback-embed</code></pre>
+    <pre><code>from clapback_embed import embed_file, embed_text
+
+vector = embed_file("track.flac")                  # 512 floats, unit length
+query  = embed_text("dreamy ambient with piano")   # the same space</code></pre>
+    <p class="muted">
+        <strong>Two machines running it produce the same vector.</strong> That is the point: a
+        corpus built from many contributors can only tell disagreement about <em>audio</em> from
+        disagreement about <em>implementations</em> if there is one implementation. Everything that
+        could vary is pinned and versioned, and <code>PIPELINE_VERSION</code> is the identity of all
+        of it together.
+    </p>
+</div>
+
+<div class="card">
+    <h2>How close is close</h2>
+    <p class="muted">Measured, not asserted — cosine distance from 1.0:</p>
+    <table>
+        <tr><td>Same audio, two architectures (arm64 vs x86_64)</td><td><code>6.6e-11</code></td></tr>
+        <tr><td>CPU vs CUDA</td><td><code>6.6e-14</code></td></tr>
+        <tr><td>Two different rips of one recording</td><td><code>3e-04 – 3e-03</code></td></tr>
+        <tr><td>Genuinely different music</td><td>far below either</td></tr>
+    </table>
+    <p class="muted">
+        Honest computation agrees about a thousand times more tightly than two rips of the same CD
+        differ. That gap is what makes near-duplicate detection across formats and masters work, and
+        what a consensus scheme can eventually stand on.
+    </p>
+</div>
+
+<div class="card">
+    <h2>Endpoints</h2>
+    <table>
+        <tr><th>Method</th><th>Path</th><th>Status</th></tr>
+        <tr><td><code>GET</code></td><td><code>/v1/embeddings/{hash}</code></td><td>open</td></tr>
+        <tr><td><code>GET</code></td><td><code>/v1/features/{hash}</code></td><td>open · legacy</td></tr>
+        <tr><td><code>GET</code></td><td><code>/v1/analysis-detail/{hash}</code></td><td>open · legacy</td></tr>
+        <tr><td><code>GET</code></td><td><code>/health</code>, <code>/health/db</code></td><td>open</td></tr>
+        <tr><td><code>POST</code></td><td><em>any write</em></td><td><strong>403 — not yet open</strong></td></tr>
+    </table>
+    <p class="muted">
+        Writes are refused at the edge, deliberately. A public corpus needs a way to retract a
+        recording before it accepts one from a stranger, and there is no delete path yet —
+        <a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0004-contributors-are-identified-but-not-accounts.md">ADR-0004</a>
+        makes that a precondition rather than a follow-up. The <code>features</code> endpoints are
+        legacy: they still serve {{ "{:,}".format(counts.features) }} rows and are not where this is
+        going, because bpm and key are claims about the world that consensus cannot verify — which
+        is what stopped AcousticBrainz.
+    </p>
+</div>
+
+<div class="card">
+    <h2>Rate limits</h2>
+    <p class="muted">
+        {{ lookup_limit }} for lookups, per address. There is no key to obtain and no plan to buy.
+        If you need more, the corpus is a few hundred megabytes and open source — run your own.
+    </p>
+</div>
+{% endblock %}
