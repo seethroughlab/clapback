@@ -1,6 +1,6 @@
 # ADR-0006: The Pipeline Identity Is the Corpus Key
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-03
 
@@ -9,6 +9,14 @@ enforces [ADR-0001](ADR-0001-clapback-is-a-public-clap-embedding-commons.md) poi
 pipeline" at the only place it can be enforced: the key. **On acceptance this supersedes `ADR-0001`
 point 10**, which kept the existing embeddings and marked them unconfirmed; point 5 below recomputes
 them instead.
+
+Implementation:
+- Accepted 2026-09-04. Nothing is built; every phase in point 6 is outstanding.
+- Phase 1 is the smallest useful step and needs nothing from Familiar: the server accepting and
+  storing `pipeline_version` while the key is unchanged rejects nothing and breaks no client.
+- Point 6 phase 4 is blocked on `ADR-0004` point 7's delete path, which does not exist. That
+  dependency is a prerequisite rather than a parallel track.
+- Point 5 supersedes `ADR-0001` point 10, whose `Status:` line now records it.
 
 ## Context
 

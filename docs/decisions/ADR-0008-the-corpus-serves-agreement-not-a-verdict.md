@@ -1,6 +1,6 @@
 # ADR-0008: The Corpus Serves Agreement, Not a Verdict
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-03
 
@@ -14,6 +14,13 @@ distinction is worth stating because the two are easy to merge. `ADR-0007` asks 
 running the pipeline it claims* — a fact about an install. This asks *have independent parties
 computed the same vector for this recording* — a fact about a row. They share the word "confirmed"
 and nothing else.
+
+Implementation:
+- Accepted 2026-09-04. Nothing is built.
+- Unlike `ADR-0007` this functions immediately: with one contributor it reports zero independent
+  confirmations, which is true and is the most useful thing the corpus can tell a stranger.
+- It reports nothing but zero until Familiar sends a `client_id`. That one line is now named by
+  `ADR-0004`, `ADR-0006` and this record, which makes it the cheapest unblocking change on the board.
 
 ## Context
 

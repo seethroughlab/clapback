@@ -1,6 +1,6 @@
 # ADR-0005: The Repository Is a Workspace of Peers
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-03
 

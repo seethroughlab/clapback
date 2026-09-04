@@ -1,6 +1,6 @@
 # ADR-0007: A Pipeline Proves Itself on a Reference Signal
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-03
 
@@ -13,6 +13,17 @@ claims, instead of being believed.
 **It is deliberately not built yet.** Point 11 states the precondition — enough independent clients
 for a quorum to mean anything — and point 10 splits the mechanism so the half that is useful with one
 contributor can land first.
+
+Implementation:
+- Accepted 2026-09-04, and **deliberately not built** — see points 10 and 11. Acceptance settles the
+  design, not the schedule.
+- The precondition is unchanged and unmet: with one contributor at 99.85% of the corpus, K=2 can
+  confirm nothing. `ADR-0004` point 1 is a prerequisite of even the trigger, since
+  `contributor_count` counts POSTs and Familiar sends no `client_id`.
+- Point 10's recording half is the part worth building first, and it is useful before a second
+  contributor exists.
+- The tradeoff below counts this as the third accepted-but-unshipped record. With `ADR-0006` and
+  `ADR-0008` accepted the same day it is the fifth, which sharpens the point rather than changing it.
 
 ## Context
 

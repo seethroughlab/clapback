@@ -1,6 +1,7 @@
 # ADR-0001: Clapback Is a Public CLAP Embedding Commons
 
-Status: accepted
+Status: accepted — point 10 superseded by
+[ADR-0006](ADR-0006-the-pipeline-identity-is-the-corpus-key.md)
 
 Date: 2026-09-01
 
@@ -24,6 +25,10 @@ Implementation:
   not. There is no CLI in `packages/embed`, no `[project.scripts]`, and nothing published, so point
   8's "worth running with the corpus empty" has nothing yet to be true of. This is deferred item 5,
   and it is the next decision to take.
+- **Point 10 is superseded.** It kept the existing 21,890 embeddings and marked them unconfirmed,
+  which was the honest position while relabelling was the only alternative. `ADR-0006` point 5
+  recomputes them instead, so the corpus ends with no unconfirmed tier rather than a permanent
+  one. Accepted 2026-09-04.
 - Deferred item 3 is answered by
   [`ADR-0004`](ADR-0004-contributors-are-identified-but-not-accounts.md); items 4, 5 and 6 are open.
 

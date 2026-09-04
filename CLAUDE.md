@@ -82,10 +82,11 @@ decisions in an order that differs from their numbering.
 | 0003 | The commons runs on one small server | One AWS Lightsail box for app and Postgres, sized by index RAM, with the upgrade path written down |
 | 0004 | Contributors are identified, but not accounts | `ADR-0001`'s deferred item 3: self-issued client identifiers, revocation, deletion, and write bounds |
 
-`ADR-0005` (`proposed`) answers no deferred item but blocks the one that matters most: it makes the
-embedder a published peer of the server rather than a subdirectory of it, which is what `ADR-0001`
-point 3's "published for others to depend on" requires and what deferred item 5's tool will need a
-home beside.
+`ADR-0005`–`ADR-0008` were accepted 2026-09-04. `ADR-0005` answers no deferred item but blocks the
+one that matters most: it makes the embedder a published peer of the server rather than a
+subdirectory of it, which is what `ADR-0001` point 3's "published for others to depend on" requires
+and what deferred item 5's tool will need a home beside. **Only `ADR-0005` is built** — the other
+three are decided and outstanding, and each says so in its `Implementation:` block.
 
 | # | ADR | Answers |
 |---|---|---|
@@ -108,6 +109,12 @@ being where the agreement threshold sits and what the corpus does with it.
 **Two launch blockers are decided but unbuilt**, both from `ADR-0003` point 7: a public endpoint
 needs TLS in front of it, and it must not accept anonymous writes. `ADR-0004` decides how the second
 is answered; none of it is implemented beyond `client_id` being accepted and stored.
+
+**Most of what is accepted is not built.** Of eight records only `ADR-0001`'s measurement work and
+`ADR-0005`'s restructure have shipped. That is a real liability rather than a tidy backlog, and the
+`Implementation:` block is the only thing keeping it legible — so write one the day work starts, and
+keep it current. The cheapest unblocking change is not in this repository at all: Familiar sending a
+`client_id`, which `ADR-0004`, `ADR-0006` and `ADR-0008` all wait on.
 
 ## Compatibility with Familiar
 
