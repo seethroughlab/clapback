@@ -96,7 +96,7 @@ three are decided and outstanding, and each says so in its `Implementation:` blo
 | 0008 | The corpus serves agreement, not a verdict | `ADR-0001` point 9's confidence and deferred item 2's remainder: independent confirmations, contradictions and the worst similarity are reported; no threshold declares a vector trustworthy |
 | 0009 | The tool is useful before the corpus is | `ADR-0001` deferred item 5: a local library index that searches by description and finds near-duplicates, with contribution as a byproduct — the only queued work whose output is a contributor who was not already here |
 
-`ADR-0009` (`proposed`) answers deferred item 5, which nothing else can: four accepted records —
+`ADR-0009` answers deferred item 5, which nothing else can: four accepted records —
 `ADR-0004` point 4, `ADR-0007`, `ADR-0008` and `ADR-0002` — are each waiting on a second contributor,
 and the tool is the only queued work that produces one.
 
