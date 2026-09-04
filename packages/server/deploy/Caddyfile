@@ -1,0 +1,37 @@
+# `ADR-0003` point 7, both halves: TLS in front of the application, and no
+# anonymous writes on the public endpoint.
+#
+# Reads are public. Writes are refused here rather than in the application,
+# because the point of this first step is that no new authentication code stands
+# between a contributor and the corpus — the restriction is topological. Familiar
+# keeps contributing over the private network, reaching the app directly.
+#
+# When `ADR-0004`'s identity work lands, the `respond` below is what gets
+# deleted, and nothing else about this file changes.
+
+{
+	email {$TLS_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Anything that writes is refused, with a body that says why rather than a
+	# bare 405. A contributor who reads this should know the corpus is not
+	# closed, only not open yet.
+	@writes method POST PUT PATCH DELETE
+	handle @writes {
+		header Content-Type application/json
+		respond `{"detail":"This endpoint serves reads publicly. Contribution is not yet open to anonymous clients — see ADR-0003 point 7 and ADR-0004 in https://github.com/seethroughlab/clapback."}` 403
+	}
+
+	# The admin surface is not a public thing. It is password-protected in the
+	# application, but a login form on a public host is a login form to guess at.
+	handle /admin* {
+		respond 404
+	}
+
+	handle {
+		reverse_proxy api:8000
+	}
+}

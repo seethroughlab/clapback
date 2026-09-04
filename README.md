@@ -192,16 +192,38 @@ pytest                     # add -m artifacts once the encoders are exported
 
 ## Deployment
 
-Self-hosted. It previously ran on Fly.io with a Neon database; that app was destroyed
-when the service moved onto the same host as its main client, and
-`familiar-cache.fly.dev` no longer resolves. `fly.toml` is kept for reference rather
-than as a live target.
+[`ADR-0003`](docs/decisions/ADR-0003-the-commons-runs-on-one-small-server.md) chose one
+small AWS instance running both Postgres and the application, sized by index RAM rather
+than corpus size, with the upgrade path written down. `docker-compose.aws.yml` is that
+configuration; nothing is deployed to it yet.
 
-### Self-hosted
+The first public step is deliberately partial.
+[`ADR-0003`](docs/decisions/ADR-0003-the-commons-runs-on-one-small-server.md) point 7
+allows **reads served publicly while writes stay restricted**, and forbids the reverse —
+so Caddy refuses writes at the edge and Familiar keeps contributing over the private
+network. That restriction is topological rather than a new authentication scheme, and it
+is one `respond` line to delete once
+[`ADR-0004`](docs/decisions/ADR-0004-contributors-are-identified-but-not-accounts.md)
+is built.
 
 ```bash
 cd packages/server
-docker compose up -d
+cp deploy/env.example .env      # DOMAIN is required — Caddy needs it for a certificate
+docker compose -f docker-compose.aws.yml up -d
+docker compose -f docker-compose.aws.yml exec api uv run alembic upgrade head
+sudo cp deploy/clapback-backup.{service,timer} /etc/systemd/system/
+sudo systemctl enable --now clapback-backup.timer
+```
+
+Backups are part of shipping rather than a follow-up, per `ADR-0003` point 6: the corpus
+is contributed data nobody here can rebuild.
+
+### Locally, or on a NAS
+
+```bash
+cd packages/server
+docker compose up -d                              # development, publishes Postgres on 5433
+docker compose -f docker-compose.omv.yml up -d    # the NAS deployment this ran on
 docker compose exec api uv run alembic upgrade head
 curl http://localhost:8000/health
 ```

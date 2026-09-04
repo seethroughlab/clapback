@@ -1,0 +1,11 @@
+[Unit]
+Description=clapback nightly Postgres dump to object storage (ADR-0003 point 6)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# Adjust if the checkout lives elsewhere.
+WorkingDirectory=/home/ubuntu/clapback/packages/server
+ExecStart=/home/ubuntu/clapback/packages/server/deploy/backup.sh
+User=ubuntu
