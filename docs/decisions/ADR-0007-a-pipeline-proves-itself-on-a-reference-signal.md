@@ -10,6 +10,10 @@ Answers [ADR-0001](ADR-0001-clapback-is-a-public-clap-embedding-commons.md) poin
 pipeline identity the corpus key; this makes a client demonstrate it is running the pipeline it
 claims, instead of being believed.
 
+**It is deliberately not built yet.** Point 11 states the precondition — enough independent clients
+for a quorum to mean anything — and point 10 splits the mechanism so the half that is useful with one
+contributor can land first.
+
 ## Context
 
 `ADR-0006` point 8 states its own limit plainly: a client sends a string and the server believes it.
@@ -144,6 +148,35 @@ already identified what changes that, and it is not a verification scheme.
    `ADR-0006` point 8 made this distinction a rule; it applies here unchanged, and the protection
    remains consensus.
 
+10. **Attestation records before it refuses, and the two are separate steps.** The first build stores
+    attestations and reports on them; it rejects nothing. Refusal — point 4's rejection of a
+    contradicting attestation, and the confirmed/provisional state it depends on — is a later step
+    taken on evidence.
+
+    This is not caution for its own sake, it is the pattern this project already used and was right
+    about. `SubmissionAgreement` exists because the answer to "do two machines agree?" was being
+    thrown away, and its docstring is explicit that it "records, it does not gate... to measure the
+    noise floor **before** designing a verification scheme on top of it". Attestation is that
+    verification scheme. Building its refusal before its measurement would repeat exactly the mistake
+    that table was written to correct.
+
+    Recording is also useful with one contributor, which refusal is not: one client on two machines,
+    two architectures or two artifact exports produces comparable attestations, and that is the
+    measurement the README's cross-machine table already came from.
+
+11. **This is decided and deliberately not built yet.** Nothing here ships until there are enough
+    independent clients for K to mean something, and the corpus cannot even count them today —
+    `ADR-0004` point 4 established that `contributor_count` counts POSTs rather than clients, and
+    Familiar sends no `client_id` at all. `ADR-0004` point 1 is therefore a prerequisite of the
+    trigger, not only of the mechanism.
+
+    **The count is a signal to revisit, never an automatic switch.** `ADR-0004` point 9 already
+    settled this shape for the row ceiling — raised "deliberately as the corpus grows, so growth is a
+    decision rather than a surprise" — and a threshold that changes what the corpus refuses without
+    anyone deciding is that surprise pointed the other way: a contributor fine yesterday is refused
+    today because a stranger appeared. What the threshold earns is an alert and a reread of this
+    record.
+
 ## Alternatives Considered
 
 - **Ship a short audio file as the reference.** The obvious implementation, and it tests more: the
@@ -177,6 +210,17 @@ already identified what changes that, and it is not a verification scheme.
   explicitly not an abuse control, and a signature over a wrong vector is a wrong vector with a
   signature. It addresses tampering, which is not the failure mode in the Context.
 
+- **Enable enforcement automatically once the corpus passes X contributors.** Appealing: it needs no
+  one to remember, and it matches the fact that the mechanism is inert below two clients anyway.
+  Rejected on three grounds. It saves no work — attestation is a package function, an endpoint, a
+  table and a state machine, none of which appears at a threshold, so the "automatic" version is
+  everything built now plus a flag. The count it would trigger on does not exist: `contributor_count`
+  counts POSTs (`ADR-0004` point 4) and the one client sends no identifier, so the condition is
+  unevaluable until identity lands. And `ADR-0004` point 9 already decided this class of question in
+  the other direction, making the row ceiling something raised deliberately "so growth is a decision
+  rather than a surprise" — a switch that changes what the corpus refuses because a stranger arrived
+  is the same surprise. Point 11 keeps the threshold as an alert instead.
+
 - **Do nothing beyond `ADR-0006`'s declaration.** Defensible: the declaration catches the drift that
   motivated it, and every failure listed in the Context is hypothetical today. Rejected because they
   are hypothetical only in the sense that nobody has looked — there is no mechanism by which any of
@@ -195,10 +239,17 @@ already identified what changes that, and it is not a verification scheme.
   argument intact instead of quietly reintroducing what it rejected.
 - **Positive** — the tolerance is a measured number that already exists, so this record adds no new
   threshold anyone has to defend.
+- **Positive** — points 10 and 11 mean the expensive half is not built until it can work, and the
+  cheap half produces data as soon as it exists. The corpus learns what its own pipeline's
+  reproducibility looks like before anything depends on the answer.
 - **Tradeoff** — **with one contributor, nothing can ever be confirmed.** K=2 means every pipeline
-  stays provisional until a second independent client exists, so the machinery is built before it can
-  bite. That is the honest state of the corpus, not a flaw in the design, and it is the same
-  dependency `ADR-0001` point 8 already identified: the tool is what produces a second attester.
+  stays provisional until a second independent client exists. That is the honest state of the corpus
+  rather than a flaw in the design, and it is the same dependency `ADR-0001` point 8 already
+  identified: the tool is what produces a second attester. Point 11 makes it a stated precondition
+  instead of a surprise found during implementation.
+- **Tradeoff** — a decided-but-unbuilt record is a liability of its own. `ADR-0002` and `ADR-0003`
+  are both accepted with nothing shipped, and this adds a third. The `Implementation:` block is the
+  only thing keeping that legible, which is an argument for writing one here the day work starts.
 - **Tradeoff** — the bootstrap window in point 7 is real. Contributions accepted under a provisional
   pipeline may turn out to have come from a broken one, and what happens to them then is
   `ADR-0004` point 6's revocation cascade doing work it was written for.
