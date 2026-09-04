@@ -13,16 +13,16 @@ Revises: 006_index_embeddings_created_at
 Create Date: 2026-08-31
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "007_submission_agreement"
-down_revision: Union[str, None] = "006_index_embeddings_created_at"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "006_index_embeddings_created_at"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

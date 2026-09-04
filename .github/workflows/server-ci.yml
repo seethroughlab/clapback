@@ -1,0 +1,46 @@
+name: clapback-server
+
+# `ADR-0005` point 6. The embedder has had a CI gate since it was merged; the
+# server has had none, and `ADR-0003` point 7 is about to make it a public
+# endpoint that accepts writes. Shipping that with nothing checking it is not
+# defensible now that the mechanism for having some exists.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/server/**"
+      - ".github/workflows/server-ci.yml"
+  pull_request:
+    paths:
+      - "packages/server/**"
+      - ".github/workflows/server-ci.yml"
+
+jobs:
+  test:
+    name: Lint and test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/server
+    steps:
+      - uses: actions/checkout@v4
+
+      # The lock is at the workspace root, not here — `ADR-0005` point 7, as
+      # amended: a uv workspace has exactly one, covering every member.
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install
+        run: uv sync
+
+      - name: Lint
+        run: uv run ruff check .
+
+      # No database. The suite covers the submission-agreement arithmetic, which
+      # is pure; anything needing Postgres would need a service container, and
+      # there is nothing yet that does.
+      - name: Test
+        run: uv run pytest -q

@@ -11,8 +11,11 @@ ENV/
 *.egg-info/
 *.egg
 
-# uv
-uv.lock
+# uv — `ADR-0005` point 7. The workspace has exactly one lock, at the root, and it
+# is committed. A lock never ships in a wheel: what `clapback-embed`'s dependents
+# resolve comes from its `dependencies` ranges, so committing this cannot pin them.
+# What it does pin is development, CI and the deployed image, which previously
+# resolved fresh on every Docker build.
 
 # IDE
 .idea/

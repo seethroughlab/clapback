@@ -23,6 +23,7 @@ target_metadata = Base.metadata
 
 # Get database URL from environment (handle Fly.io's DATABASE_URL)
 import re
+
 database_url = os.environ.get("CACHE_DATABASE_URL") or os.environ.get("DATABASE_URL")
 if not database_url:
     database_url = "postgresql+asyncpg://cache:cache@localhost:5432/cache"

@@ -1,0 +1,56 @@
+[project]
+name = "clapback-server"
+version = "0.1.0"
+description = "The clapback commons: a public corpus of CLAP audio embeddings"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "sqlalchemy[asyncio]>=2.0.0",
+    "asyncpg>=0.29.0",
+    "pgvector>=0.2.0",
+    "pydantic-settings>=2.0.0",
+    "slowapi>=0.1.9",
+    "alembic>=1.13.0",
+    "python-multipart>=0.0.6",  # For form handling in admin
+    "jinja2>=3.1.0",  # HTML template rendering
+]
+
+[tool.uv]
+dev-dependencies = [
+    "ruff>=0.1.0",
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "httpx>=0.25.0",
+]
+
+# Matching `packages/embed`, and explicit rather than inherited. The server had no
+# ruff configuration at all until `ADR-0005` point 6 gave it a CI gate, so it was
+# linted against whatever the installed ruff defaulted to that month — which is how
+# 49 findings accumulated without anyone seeing one.
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# Three findings need a judgement this restructuring commit is not the place for,
+# so they are named rather than silently absent:
+#
+#   DTZ003  `datetime.utcnow()`, six calls. Deprecated in 3.12, and the mechanical
+#           fix is not safe: `utcnow()` returns a naive datetime and the columns it
+#           feeds are naive `DateTime`. Moving to `now(UTC)` makes them aware and
+#           changes what is stored, which is a migration, not a lint fix.
+#   BLE001  one blind `except Exception` on the stats middleware path, where
+#           swallowing is arguably correct — request accounting must not be able to
+#           fail a request.
+#   PIE810  one `startswith` pair, cosmetic.
+ignore = ["DTZ003", "BLE001", "PIE810"]
+
+[tool.pytest.ini_options]
+# The first test configuration this project has had. `pythonpath` so `app` imports
+# without an editable install; `asyncio_mode` because pytest-asyncio has been a
+# declared dev dependency since the start and any async test would otherwise be
+# silently skipped rather than run.
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"

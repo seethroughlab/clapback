@@ -1,8 +1,10 @@
 name: clapback-embed
 
-# The first CI gate in this repository. `fly-deploy.yml` pushes to production on
-# every commit to `main` with nothing checking it first, which was tolerable for a
-# server nobody else depended on and is not once a package is published from here.
+# The first CI gate this repository had. It was written when `fly-deploy.yml` pushed
+# to production on every commit to `main` with nothing checking it first — tolerable
+# for a server nobody else depended on, and not once a package is published from
+# here. That workflow was removed under `ADR-0002`; the server's own gate is
+# `server-ci.yml`, added under `ADR-0005` point 6.
 on:
   push:
     branches: [main]
@@ -24,27 +26,39 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # No `enable-cache`: it keys on `**/uv.lock`, which this repository
-      # gitignores (.gitignore:15), and setup-uv hard-errors rather than warning
-      # when the glob matches nothing. A library should not carry a lock file.
+      # The workspace lock is committed as of `ADR-0005` point 7, so the cache
+      # this action wants has a key to hang on. It previously could not be
+      # enabled at all: it keys on `**/uv.lock`, nothing was tracked, and
+      # setup-uv hard-errors rather than warning when the glob matches nothing.
       - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
 
       # A venv rather than `--system`: the runner's interpreter is externally
       # managed (PEP 668) and uv refuses to install into it.
+      #
+      # The steps below call `.venv/bin/...` directly rather than `uv run`.
+      # Since `ADR-0005` made this repository a uv workspace, `uv run` inside a
+      # member resolves the *workspace root* environment, which is not the venv
+      # these two lines just populated — it fails with "Failed to spawn: ruff".
+      # `uv sync` would be the workspace-native fix and is the wrong one here:
+      # the point of installing this way is that a library resolves its own
+      # dependencies from ranges rather than from the workspace lock.
       - name: Install
         run: |
           uv venv --python 3.11
           uv pip install -e ".[dev]"
 
       - name: Lint
-        run: uv run ruff check .
+        run: .venv/bin/ruff check .
 
       # Runs the windowing rule, the front-end arithmetic and the pooling. The
       # ONNX artifacts are 614 MB and are not fetched here, so the tests marked
       # `artifacts` skip — see the conformance job below for why that is not the
       # whole story.
       - name: Test
-        run: uv run pytest -q
+        run: .venv/bin/pytest -q
 
   conformance:
     name: Conformance against transformers
@@ -70,4 +84,4 @@ jobs:
           uv pip install transformers
 
       - name: Front-end must match ClapFeatureExtractor
-        run: uv run pytest tests/test_mel.py -q
+        run: .venv/bin/pytest tests/test_mel.py -q

@@ -7,7 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
-from sqlalchemy import func, select, update, text
+from sqlalchemy import func, select, text, update
 
 from app.api.deps import DbSession
 from app.config import settings
@@ -129,7 +129,7 @@ async def dashboard(request: Request, db: DbSession) -> HTMLResponse:
     features_count = (await db.execute(select(func.count()).select_from(Features))).scalar() or 0
     analysis_detail_count = (await db.execute(select(func.count()).select_from(AnalysisDetail))).scalar() or 0
     banned_count = (await db.execute(
-        select(func.count()).select_from(BannedIP).where(BannedIP.is_active == True)  # noqa: E712
+        select(func.count()).select_from(BannedIP).where(BannedIP.is_active == True)
     )).scalar() or 0
     unique_ips = (await db.execute(select(func.count()).select_from(IPStats))).scalar() or 0
 
@@ -160,14 +160,14 @@ async def dashboard(request: Request, db: DbSession) -> HTMLResponse:
 
     flagged_ips = (await db.execute(
         select(IPStats)
-        .where(IPStats.flagged == True)  # noqa: E712
+        .where(IPStats.flagged == True)
         .order_by(IPStats.last_seen.desc())
         .limit(20)
     )).scalars().all()
 
     banned_ips = (await db.execute(
         select(BannedIP)
-        .where(BannedIP.is_active == True)  # noqa: E712
+        .where(BannedIP.is_active == True)
         .order_by(BannedIP.banned_at.desc())
         .limit(50)
     )).scalars().all()

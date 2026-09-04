@@ -1,0 +1,70 @@
+name: clapback-embed release
+
+# `ADR-0005` point 5: a release is a tag, and the tag is what publishes.
+#
+# Publishing on every push to `main` was the obvious alternative and point 4
+# rules it out. A release that moves `PIPELINE_VERSION` has to carry notes naming
+# the old and new identity strings, because that string is what tells a client
+# whether two vectors are comparable. That is a deliberate act, not a side effect
+# of merging.
+
+on:
+  push:
+    tags: ["embed-v*"]
+
+jobs:
+  verify:
+    name: Verify tag and test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/embed
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+
+      # A tag that disagrees with the version it claims to release produces a
+      # PyPI record nobody can trace back to a commit. Cheap to check, and the
+      # kind of mistake that is only ever noticed afterwards.
+      - name: Tag must match the declared version
+        run: |
+          declared=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
+          tagged="${GITHUB_REF_NAME#embed-v}"
+          if [ "$declared" != "$tagged" ]; then
+            echo "tag ${GITHUB_REF_NAME} claims ${tagged}; pyproject declares ${declared}" >&2
+            exit 1
+          fi
+          echo "releasing ${declared}"
+
+      # `.venv/bin/...` below rather than `uv run`, for the reason `embed-ci.yml`
+      # records: in a uv workspace, `uv run` inside a member resolves the
+      # workspace root environment rather than this venv.
+      - name: Install
+        run: |
+          uv venv --python 3.11
+          uv pip install -e ".[dev]"
+
+      - name: Lint
+        run: .venv/bin/ruff check .
+
+      - name: Test
+        run: .venv/bin/pytest -q
+
+  publish:
+    name: Publish to PyPI
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      # Trusted publishing, so there is no long-lived PyPI token in this
+      # repository to leak or rotate.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+
+      - name: Build
+        run: uv build --out-dir ../../dist
+        working-directory: packages/embed
+
+      - uses: pypa/gh-action-pypi-publish@release/v1

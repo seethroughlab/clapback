@@ -28,12 +28,20 @@ from .artifacts import (
     ArtifactsMissing,
     Precision,
     audio_session,
+    model_dir,
+    providers,
     text_session,
     tokenizer,
 )
 from .chunking import DecodeError, decode, stream_windows, windows
 from .mel import FRONTEND_VERSION, N_FRAMES, SAMPLE_RATE, WINDOW_SAMPLES, log_mel
 
+#: The public API. `audio_session`, `model_dir` and `providers` are here because
+#: they were already depended on from outside — Familiar imports all three out of
+#: `clapback_embed.artifacts` (`ADR-0005` point 11). Three names that worked but
+#: were not declared is a contract nobody can safely refactor against, including
+#: whoever wrote them, so the declaration widens to the truth rather than the use
+#: narrowing to the declaration.
 __all__ = [
     "PIPELINE_VERSION",
     "SAMPLE_RATE",
@@ -41,10 +49,13 @@ __all__ = [
     "ArtifactsMissing",
     "DecodeError",
     "Precision",
+    "audio_session",
     "decode",
     "embed_audio",
     "embed_file",
     "embed_text",
+    "model_dir",
+    "providers",
 ]
 
 #: Bumped when windowing, pooling, the front-end, the checkpoint or the precision

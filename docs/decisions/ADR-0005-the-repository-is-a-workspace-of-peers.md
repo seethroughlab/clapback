@@ -9,6 +9,30 @@ repository holds three members — the embedder, the tool and the server — and
 published for others to depend on". It says how, and it says where the members live, because today
 one of them is the repository and the other is a subdirectory of it.
 
+Implementation:
+- Landed 2026-09-03, in one commit. `app/`, `tests/`, `migrations/`, `alembic.ini`, the
+  `Dockerfile`, the compose files, `fly.toml`, `.env.example` and `CHANGELOG.md` moved to
+  `packages/server/`; the root became a virtual `uv` workspace that builds nothing; the distribution
+  is `clapback-server`. `server-ci.yml` and `embed-release.yml` are added, `__all__` widened per
+  point 11, and the compose files needed no edits because `build: .` and `.:/app` are relative to the
+  file that was moved.
+- **Point 7 was wrong and is amended above.** A `uv` workspace has exactly one lock, at the root,
+  covering every member — "the server commits a lock file; the libraries do not" is not expressible.
+  The reasoning was also mistaken: a lock never ships inside a wheel, so committing one cannot pin
+  what `clapback-embed`'s dependents resolve. The real defect it was reaching for is that
+  **nothing was locked at all** and the `Dockerfile` re-resolved every dependency on every
+  production build. One root `uv.lock` is committed and that is fixed.
+- **The server had no ruff configuration**, so point 6's gate found 49 pre-existing findings on its
+  first run. 48 were mechanical and are fixed; three rules are named and ignored in
+  `packages/server/pyproject.toml` rather than silently absent. `DTZ003` is the one worth returning
+  to: six `datetime.utcnow()` calls, deprecated in 3.12, feeding naive `DateTime` columns — the fix
+  changes what is stored and is a migration rather than a lint pass.
+- Nothing is published yet. `embed-release.yml` fires on an `embed-v*` tag and no tag exists, so
+  Familiar's `@main` git reference stays correct until one does.
+- Verified after the move: 40 embedder tests pass (6 artifact-marked skips), 11 server tests pass,
+  `ruff check` is clean in both members, `alembic heads` resolves, and `app.main:app` imports with
+  its 10 routes.
+
 ## Context
 
 `ADR-0001` point 2 decided this is one repository rather than two, on MetaBrainz's resources
@@ -72,15 +96,16 @@ job, and no gate of any kind — `fly-deploy.yml`, which used to push it to prod
 removed under `ADR-0002` and nothing replaced it. `ADR-0003` point 7 is about to make this a public
 service that accepts writes.
 
-### One ignore rule for two kinds of thing
+### Nothing here is locked, and the deployed image re-resolves on every build
 
-`.gitignore:15` ignores `uv.lock` everywhere, and no lock file is tracked. For the embedder that is
-correct and deliberate: a library should not carry one, and `embed-ci.yml` even documents working
-around `setup-uv`'s cache because of it. For the server it is not: a deployed application with no
-committed lock resolves its dependencies afresh at image build time, which is the reproducibility
-the corpus's own arguments depend on everywhere else.
+`.gitignore:15` ignores `uv.lock` everywhere, and no lock file is tracked — `git ls-files` matching
+`lock` returns nothing. `embed-ci.yml` even documents working around `setup-uv`'s cache because the
+glob it keys on matches no file.
 
-One rule serves both because there is only one place to put a rule.
+For a library that is defensible. For the server it is not, and the consequence is concrete rather
+than theoretical: `Dockerfile` copies `pyproject.toml` alone and runs `uv sync`, so **every
+production image resolves every dependency afresh from version ranges**, and two builds of the same
+commit can differ. That is the reproducibility the corpus's own arguments lean on everywhere else.
 
 ### What Familiar actually depends on, audited 2026-09-03
 
@@ -126,7 +151,8 @@ recorded as a rule anywhere — not in an ADR, not in the README, not in a comme
 
 What exists instead is a habit that happens to be right. `docker-compose.omv.yml:4` gives Postgres
 no host port, noted in passing as a property of that deployment rather than as a constraint;
-`docker-compose.yml:9` publishes 5432 with nothing saying it is for development only. A rule that
+`docker-compose.yml:10` publishes the database on the host with nothing saying it is for development
+only. A rule that
 holds because no one has tried the alternative is not a rule, and `ADR-0003` is about to put this
 database on a public host, next to `ADR-0001` point 3's tool — a client that will run on
 contributors' machines and will want, at some point, to go faster.
@@ -186,10 +212,19 @@ the same hazard as the `@main` reference above, arriving through the corpus inst
    public write endpoint; shipping that with no CI at all is not defensible now that the mechanism
    for having some exists.
 
-7. **The server commits a lock file; the libraries do not.** `.gitignore`'s blanket `uv.lock` rule
-   is narrowed to the library members. The distinction is real — an application pins what it
-   deploys, a library must not pin what its dependents resolve — and it only became expressible once
-   the members were peers.
+7. **The workspace commits one lock file, at the root.** `.gitignore`'s blanket `uv.lock` rule goes.
+
+   The distinction this point originally drew — an application pins what it deploys, a library must
+   not pin what its dependents resolve — does not survive contact with either uv or the packaging
+   model. A `uv` workspace has exactly one lock by design, covering every member; and a lock never
+   ships inside a wheel, so what `clapback-embed`'s dependents resolve is set by its `dependencies`
+   ranges no matter what is committed here. The rule was protecting against something that cannot
+   happen.
+
+   What the lock does pin is development, CI and the deployed image — and the server has never had
+   that. `uv.lock` was gitignored while the `Dockerfile` copied only `pyproject.toml` and ran
+   `uv sync`, so every production build re-resolved every dependency from ranges. That is the actual
+   defect the original point was reaching for, and committing the lock fixes it.
 
 8. **The third member is named but not created here.** `packages/cli/` is where the tool of
    `ADR-0001` point 3 will go, and this record deliberately decides nothing about what it does.

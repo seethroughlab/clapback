@@ -9,17 +9,17 @@ Revises: 004_extended_features
 Create Date: 2026-02-20
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB
 
 # revision identifiers, used by Alembic.
 revision: str = "005_features_jsonb"
-down_revision: Union[str, None] = "004_extended_features"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "004_extended_features"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 # The 28 typed columns being replaced
 _FEATURE_COLUMNS = [

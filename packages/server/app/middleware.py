@@ -27,7 +27,7 @@ class IPBanMiddleware(BaseHTTPMiddleware):
             result = await db.execute(
                 select(BannedIP).where(
                     BannedIP.ip_address == client_ip,
-                    BannedIP.is_active == True,  # noqa: E712
+                    BannedIP.is_active == True,
                 )
             )
             banned = result.scalar_one_or_none()
