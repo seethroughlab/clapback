@@ -1,0 +1,12 @@
+[Unit]
+Description=Check clapback disk usage every 15 minutes
+
+[Timer]
+# Frequent, because the point is to notice at 80% rather than at 100%, and the
+# check costs a df.
+OnBootSec=5min
+OnUnitActiveSec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

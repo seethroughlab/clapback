@@ -1,0 +1,9 @@
+[Unit]
+Description=clapback disk usage check (ADR-0004 point 9)
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/ubuntu/clapback/packages/server
+ExecStart=/home/ubuntu/clapback/packages/server/deploy/disk-alert.sh
+User=ubuntu
+Environment=PATH=/snap/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
