@@ -92,6 +92,10 @@ home beside.
 | 0005 | The repository is a workspace of peers | The restructure, publishing `clapback-embed` to PyPI, and the rule separating package version from pipeline identity |
 | 0006 | The pipeline identity is the corpus key | `ADR-0005`'s follow-up: `(fingerprint_hash, pipeline_version)` replaces a key made of a checkpoint and a client's counter, and the 21,890 legacy rows are recomputed rather than relabelled |
 | 0007 | A pipeline proves itself on a reference signal | `ADR-0001` point 4's attestation: a client demonstrates its pipeline on a signal defined arithmetically, and the expected vector is agreed by quorum rather than configured. **Decided, deliberately unbuilt** — see its points 10 and 11 |
+| 0008 | The corpus serves agreement, not a verdict | `ADR-0001` point 9's confidence and deferred item 2's remainder: independent confirmations, contradictions and the worst similarity are reported; no threshold declares a vector trustworthy |
+
+`ADR-0008` closes `ADR-0001` deferred item 2 — the part the cross-machine measurement did not answer,
+being where the agreement threshold sits and what the corpus does with it.
 
 **What is still owed, in execution order:**
 
