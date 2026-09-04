@@ -1,6 +1,6 @@
 # ADR-0004: Contributors Are Identified, But Not Accounts
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-03
 
@@ -8,6 +8,19 @@ Extends [ADR-0001](ADR-0001-clapback-is-a-public-clap-embedding-commons.md), who
 this answers, and is a prerequisite of
 [ADR-0003](ADR-0003-the-commons-runs-on-one-small-server.md) point 7, which makes unauthenticated
 writes a launch blocker.
+
+Implementation:
+- Accepted 2026-09-03. Point 1 is partially built; nothing else is.
+- **A `client_id` is accepted and stored, but nothing counts by it.** The field is optional on
+  `POST /v1/embeddings` (`app/api/routes.py:66`) and recorded against each measured submission
+  (`app/db/models.py:96`, migration `007_submission_agreement`), which is point 3's shape: accepted,
+  and not confirmable without one. **Point 4 is not done** — `contributor_count` is still
+  incremented once per POST in `contribute_embedding`, so it counts submissions rather than distinct
+  clients and must not be read as independence.
+- Points 6 and 7 are entirely owed. There is no revocation path and **no `DELETE` route anywhere in
+  the API**, which point 7 makes non-optional before the endpoint is public.
+- Point 9's ceiling on corpus rows is not implemented. It is the one bound that needs nothing from
+  identity, which makes it the cheapest of these to land first.
 
 ## Context
 

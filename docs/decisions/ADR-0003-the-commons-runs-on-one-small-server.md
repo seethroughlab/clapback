@@ -1,11 +1,22 @@
 # ADR-0003: The Commons Runs on One Small Server
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-03
 
 Extends [ADR-0002](ADR-0002-the-corpus-answers-similarity-queries.md), which decided the corpus
 answers similarity queries and deliberately left the host open.
+
+Implementation:
+- Accepted 2026-09-03. Nothing is deployed: there is no AWS configuration in the repository.
+- The service still runs where the Context found it, on the machine hosting its only client, which
+  is what `ADR-0002` point 5 decided it must stop doing.
+- **Point 7's two launch blockers are both open.** No TLS terminates in front of anything because
+  no public instance exists, and writes are still anonymous.
+  [`ADR-0004`](ADR-0004-contributors-are-identified-but-not-accounts.md) decides how the second is
+  answered but none of it is built.
+- Point 6's nightly `pg_dump` to object storage is not set up. It is named as part of shipping
+  rather than as a follow-up, so it blocks the launch alongside point 7.
 
 ## Context
 
