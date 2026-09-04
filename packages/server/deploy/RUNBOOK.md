@@ -22,8 +22,18 @@ working over the private network throughout.
 ## 1. Provision
 
 ```bash
-BUNDLE=<id from the table it prints> ./deploy/provision.sh
+PROFILE=admin BUNDLE=<id from the table it prints> ./deploy/provision.sh
 ```
+
+`PROFILE` is not optional in practice: the default credentials on this machine are
+`s3_user`, which cannot use Lightsail at all. The script checks that first and says
+so rather than failing four steps later.
+
+**Take `small_3_0` at $12, not `small_ipv6_3_0` at $10.** Same CPU, RAM and disk;
+the two dollars buy a public IPv4 address. `ADR-0003` point 9's table records $10
+and warned its figures were unverified — that row is the IPv6-only bundle, and a
+commons strangers are meant to query cannot be unreachable to IPv4-only clients.
+The script refuses an IPv6-only bundle unless `ALLOW_IPV6_ONLY=1`.
 
 It creates the instance, attaches a static IP, and opens 22, 80 and 443 — and
 nothing else. There is no port for Postgres because the compose file publishes

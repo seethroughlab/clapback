@@ -37,6 +37,14 @@ Implementation:
   scoped to one prefix with no `DeleteObject`, which costs cents rather than nothing. **The other
   three reasons for AWS are untouched**, so the host decision stands; only this argument for it
   fails.
+- **Point 9's price for Lightsail is right about the number and wrong about what it buys.** Its table
+  records `$10 | 2 | 2 GB | 60 GB SSD, 3 TB transfer, all-in`, and warned the figures were
+  unverified. Checked 2026-09-04 via `lightsail get-bundles`: `small_ipv6_3_0` is **$10** and
+  `small_3_0` is **$12** for identical CPU, RAM and disk — the two dollars buy a public IPv4
+  address. A commons meant for strangers to query cannot be IPv6-only, so **the real figure for this
+  project is $12**, and point 10's comparison against EC2 "landing above ten dollars" narrows
+  accordingly without changing its conclusion. `provision.sh` refuses an IPv6-only bundle unless
+  told otherwise, because the cheaper row is the one that matches the record.
 - Still owed before this is done: an instance, a domain (`ADR-0001` deferred item 6), the `pg_dump`
   and restore of the 488 MB currently on the NAS, and point 9's disk alert, which is not built.
 
