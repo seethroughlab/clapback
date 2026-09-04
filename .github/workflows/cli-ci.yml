@@ -1,0 +1,42 @@
+name: clapback (cli)
+
+# `ADR-0005` point 6 gave the server the gate the embedder already had; the third
+# member arrives with one rather than acquiring it later.
+
+on:
+  push:
+    branches: [main]
+    paths: ["packages/cli/**", ".github/workflows/cli-ci.yml"]
+  pull_request:
+    paths: ["packages/cli/**", ".github/workflows/cli-ci.yml"]
+
+jobs:
+  test:
+    name: Lint and test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/cli
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      # `.venv/bin/...` rather than `uv run`, for the reason `embed-ci.yml`
+      # records: in a uv workspace, `uv run` inside a member resolves the
+      # workspace root environment rather than this venv.
+      - name: Install
+        run: |
+          uv venv --python 3.11
+          uv pip install -e ".[dev]"
+
+      - name: Lint
+        run: .venv/bin/ruff check .
+
+      # No ONNX encoders here — they are 614 MB. These cover the store, the
+      # command surface and the decisions ADR-0009 made; embedding itself is
+      # tested in packages/embed against the reference implementation.
+      - name: Test
+        run: .venv/bin/pytest -q
