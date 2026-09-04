@@ -53,8 +53,17 @@ dig +short clapback.seethroughlab.com     # should return the static IP
 
 ## 3. The instance
 
+The instance uses Lightsail's default key pair, which you may never have
+downloaded. Fetch it rather than hunting for it:
+
 ```bash
-ssh ubuntu@clapback.seethroughlab.com
+aws lightsail download-default-key-pair --profile admin --region us-east-1 \
+	--query 'privateKeyBase64' --output text > ~/.ssh/clapback-lightsail.pem
+chmod 600 ~/.ssh/clapback-lightsail.pem
+```
+
+```bash
+ssh -i ~/.ssh/clapback-lightsail.pem ubuntu@clapback.seethroughlab.com
 sudo apt-get update && sudo apt-get install -y docker.io docker-compose-v2 awscli git
 sudo usermod -aG docker ubuntu && exec su -l ubuntu
 git clone https://github.com/seethroughlab/clapback.git && cd clapback/packages/server
@@ -154,7 +163,40 @@ aws s3 ls s3://clapback-backup/postgres/
 **Then test a restore somewhere disposable.** A backup nobody has restored is a
 hypothesis.
 
+## 6b. Reaching the admin dashboard
+
+Caddy 404s `/admin` on the public host, and the application binds to `127.0.0.1`
+on the instance. So administration is a tunnel, and needs SSH — which is the
+point: anyone who can reach it already owns the box.
+
+```bash
+ssh -i ~/.ssh/clapback-lightsail.pem -L 8000:127.0.0.1:8000 ubuntu@clapback.seethroughlab.com
+# then, locally: http://127.0.0.1:8000/admin
+```
+
+`CACHE_ADMIN_PASSWORD` is not recovered from anywhere — it is an environment
+variable compared with `secrets.compare_digest`, stored in no database, so a new
+deployment chooses a new one. `openssl rand -base64 24`.
+
 ## 7. Point Familiar at it
+
+**Reads work immediately; contribution does not, and that is unresolved.**
+
+Set `community_cache_url` to `https://clapback.seethroughlab.com` and lookups
+work at once. Contribution does not: the public host refuses writes by design
+(`ADR-0003` point 7), and the "private network" the NAS deployment used does not
+exist between a house and a Lightsail instance.
+
+Until that is decided, Familiar can look up and cannot contribute. The options,
+none of them taken yet:
+
+- **Tailscale on the instance**, so it rejoins the private side and Familiar
+  writes to `http://clapback:8000` exactly as it did to the NAS. Smallest change,
+  and the shape `ADR-0003` point 7 describes.
+- **Build `ADR-0004`**, after which the public endpoint accepts identified writes
+  and the restriction lifts for everyone rather than for one house.
+- **Accept the pause.** Contribution has been off by default anyway, and the
+  corpus is not growing meaningfully from one client.
 
 Familiar's `community_cache_url` still defaults to `familiar-cache.fly.dev`,
 which is NXDOMAIN (`ADR-0005` records this). Set it to

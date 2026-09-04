@@ -42,9 +42,20 @@ services:
       CACHE_DB_DISABLE_SSL: "true"   # same host, container network — TLS terminates at Caddy
       CACHE_ADMIN_PASSWORD: ${CACHE_ADMIN_PASSWORD:?set CACHE_ADMIN_PASSWORD in .env}
       CACHE_MAX_EMBEDDINGS: ${CACHE_MAX_EMBEDDINGS:-500000}
-    # No `ports:` either. Caddy is the only thing that reaches the app, so there
-    # is no way to bypass TLS or the write restriction by hitting the instance
-    # directly on 8000.
+    # **Loopback only**, which is not the same as no port at all.
+    #
+    # Caddy is the only *public* route in, and it refuses writes and 404s the
+    # admin surface. But a deployment where nothing can reach the application
+    # except through those refusals has no administration path and no way for a
+    # known contributor to write — which is `ADR-0003` point 7's "writes stay
+    # restricted", not "writes are impossible".
+    #
+    # `127.0.0.1` means the Lightsail firewall cannot expose this even by
+    # accident: reaching it requires already having SSH, and anyone with SSH owns
+    # the box regardless. Administration is an `ssh -L` tunnel; contribution is
+    # over Tailscale, which joins the private side rather than the public one.
+    ports:
+      - "127.0.0.1:8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
