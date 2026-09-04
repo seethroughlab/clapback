@@ -180,28 +180,28 @@ deployment chooses a new one. `openssl rand -base64 24`.
 
 ## 7. Point Familiar at it
 
-**Reads work immediately; contribution does not, and that is unresolved.**
+Set `community_cache_url` to `https://clapback.seethroughlab.com`. **Reads work
+the moment DNS resolves.**
 
-Set `community_cache_url` to `https://clapback.seethroughlab.com` and lookups
-work at once. Contribution does not: the public host refuses writes by design
-(`ADR-0003` point 7), and the "private network" the NAS deployment used does not
-exist between a house and a Lightsail instance.
+**Contribution stays closed, for everyone, until the delete path exists.**
+`ADR-0004` point 7 is not a preference:
 
-Until that is decided, Familiar can look up and cannot contribute. The options,
-none of them taken yet:
+> A delete path exists before the endpoint is public. Non-optional. A public
+> corpus needs takedown for legal requests and retraction for poisoned
+> recordings, and there is no `DELETE` route anywhere today.
 
-- **Tailscale on the instance**, so it rejoins the private side and Familiar
-  writes to `http://clapback:8000` exactly as it did to the NAS. Smallest change,
-  and the shape `ADR-0003` point 7 describes.
-- **Build `ADR-0004`**, after which the public endpoint accepts identified writes
-  and the restriction lifts for everyone rather than for one house.
-- **Accept the pause.** Contribution has been off by default anyway, and the
-  corpus is not growing meaningfully from one client.
+There still is not one. So the launch is read-only, and the thing that opens
+writes is building that route plus point 9's disk alert — not finding a private
+channel for one contributor.
 
-Familiar's `community_cache_url` still defaults to `familiar-cache.fly.dev`,
-which is NXDOMAIN (`ADR-0005` records this). Set it to
-`https://clapback.seethroughlab.com` for reads. Contribution continues over the
-private network, because the public host refuses writes.
+**A private write path would be the wrong answer even though it is available.**
+Putting the instance on a Tailnet would let Familiar keep contributing tomorrow,
+and would make the commons's only write path a network that one person can join.
+That is not a restricted commons, it is a single-contributor corpus with a public
+mirror — and a permanent one, because `ADR-0007`'s attestation and `ADR-0008`'s
+confirmations both need a second party that the architecture would now forbid.
+The pause is the honest state: the corpus stops growing for as long as it takes
+to build a `DELETE` route, and then grows from anyone.
 
 ## What is still not done after all of this
 

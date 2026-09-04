@@ -52,8 +52,13 @@ services:
     #
     # `127.0.0.1` means the Lightsail firewall cannot expose this even by
     # accident: reaching it requires already having SSH, and anyone with SSH owns
-    # the box regardless. Administration is an `ssh -L` tunnel; contribution is
-    # over Tailscale, which joins the private side rather than the public one.
+    # the box regardless. Administration is an `ssh -L` tunnel.
+    #
+    # This is not a contribution channel and must not become one. Writes open
+    # publicly, to everyone, once `ADR-0004` point 7's delete path exists — a
+    # private write path would make the commons a single-contributor corpus by
+    # construction, which is the state four accepted records are waiting to
+    # escape.
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
