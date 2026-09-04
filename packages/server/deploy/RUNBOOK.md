@@ -62,8 +62,16 @@ aws lightsail download-default-key-pair --profile admin --region us-east-1 \
 chmod 600 ~/.ssh/clapback-lightsail.pem
 ```
 
+**Force `apt` onto IPv4 first, or the first `apt-get update` takes forever.** A
+Lightsail dual-stack instance comes up with a public IPv6 address and a default
+IPv6 route from router advertisement — and, measured on this one, no working IPv6
+egress at all. `curl -4` to the Ubuntu mirror returned 200 in 1.2 s while `curl -6`
+timed out. `apt` tries IPv6 first for every mirror connection, so an update that
+should take seconds crawls for ten minutes and looks like a hung machine.
+
 ```bash
 ssh -i ~/.ssh/clapback-lightsail.pem ubuntu@clapback.seethroughlab.com
+printf 'Acquire::ForceIPv4 "true";\n' | sudo tee /etc/apt/apt.conf.d/99force-ipv4
 sudo apt-get update && sudo apt-get install -y docker.io docker-compose-v2 awscli git
 sudo usermod -aG docker ubuntu && exec su -l ubuntu
 git clone https://github.com/seethroughlab/clapback.git && cd clapback/packages/server
@@ -202,6 +210,25 @@ mirror — and a permanent one, because `ADR-0007`'s attestation and `ADR-0008`'
 confirmations both need a second party that the architecture would now forbid.
 The pause is the honest state: the corpus stops growing for as long as it takes
 to build a `DELETE` route, and then grows from anyone.
+
+## If something hangs
+
+**Anything slow and network-shaped is IPv6 until proven otherwise.** The instance
+advertises IPv6 it cannot actually use. `apt` is handled above; if Caddy is slow
+to obtain a certificate or a `docker pull` stalls, test the same way before
+assuming anything else is wrong:
+
+```bash
+curl -4 -s -o /dev/null -w '%{http_code} %{time_total}s\n' http://archive.ubuntu.com/
+curl -6 -s -o /dev/null -w '%{http_code} %{time_total}s\n' http://archive.ubuntu.com/
+```
+
+Public clients are unaffected — DNS has an `A` record and no `AAAA`, so nothing
+reaching this host is asked to use IPv6.
+
+**Do not `pkill -f apt-get` over SSH.** The pattern matches the remote command
+string carrying it, so the shell kills itself and everything after it silently
+does not run.
 
 ## What is still not done after all of this
 
