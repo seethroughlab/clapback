@@ -1,13 +1,15 @@
-# `ADR-0003` point 7, both halves: TLS in front of the application, and no
-# anonymous writes on the public endpoint.
+# `ADR-0003` point 7: TLS terminates in front of the application.
 #
-# Reads are public. Writes are refused here rather than in the application,
-# because the point of this first step is that no new authentication code stands
-# between a contributor and the corpus — the restriction is topological. Familiar
-# keeps contributing over the private network, reaching the app directly.
+# **Writes are open.** They were refused here while `ADR-0004` point 7's delete
+# path did not exist — "a public corpus needs takedown for legal requests and
+# retraction for poisoned recordings" — and that route now does, admin-only, by
+# fingerprint hash and by client identifier. The refusal was topological rather
+# than an authentication scheme precisely so that removing it would be one block
+# of this file and nothing else.
 #
-# When `ADR-0004`'s identity work lands, the `respond` below is what gets
-# deleted, and nothing else about this file changes.
+# What still bounds a write, none of which is a wall in front of contributing:
+# a per-address rate limit, `ADR-0004` point 9's ceiling on corpus rows, and the
+# fact that an unattributed submission can never be confirmed (point 3).
 
 {
 	email {$TLS_EMAIL}
@@ -15,15 +17,6 @@
 
 {$DOMAIN} {
 	encode zstd gzip
-
-	# Anything that writes is refused, with a body that says why rather than a
-	# bare 405. A contributor who reads this should know the corpus is not
-	# closed, only not open yet.
-	@writes method POST PUT PATCH DELETE
-	handle @writes {
-		header Content-Type application/json
-		respond `{"detail":"This endpoint serves reads publicly. Contribution is not yet open to anonymous clients — see ADR-0003 point 7 and ADR-0004 in https://github.com/seethroughlab/clapback."}` 403
-	}
 
 	# The admin surface is not a public thing. It is password-protected in the
 	# application, but a login form on a public host is a login form to guess at.
