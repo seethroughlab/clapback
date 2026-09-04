@@ -19,7 +19,7 @@ no longer resolves.
 ## The package
 
 ```bash
-pip install clapback-embed   # on the first `embed-v*` tag; not yet released
+pip install clapback-embed
 ```
 
 ```python
