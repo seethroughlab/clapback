@@ -53,8 +53,17 @@ dig +short clapback.seethroughlab.com     # should return the static IP
 
 ## 3. The instance
 
+The instance uses Lightsail's default key pair, which you may never have
+downloaded. Fetch it rather than hunting for it:
+
 ```bash
-ssh ubuntu@clapback.seethroughlab.com
+aws lightsail download-default-key-pair --profile admin --region us-east-1 \
+	--query 'privateKeyBase64' --output text > ~/.ssh/clapback-lightsail.pem
+chmod 600 ~/.ssh/clapback-lightsail.pem
+```
+
+```bash
+ssh -i ~/.ssh/clapback-lightsail.pem ubuntu@clapback.seethroughlab.com
 sudo apt-get update && sudo apt-get install -y docker.io docker-compose-v2 awscli git
 sudo usermod -aG docker ubuntu && exec su -l ubuntu
 git clone https://github.com/seethroughlab/clapback.git && cd clapback/packages/server
@@ -154,12 +163,45 @@ aws s3 ls s3://clapback-backup/postgres/
 **Then test a restore somewhere disposable.** A backup nobody has restored is a
 hypothesis.
 
+## 6b. Reaching the admin dashboard
+
+Caddy 404s `/admin` on the public host, and the application binds to `127.0.0.1`
+on the instance. So administration is a tunnel, and needs SSH — which is the
+point: anyone who can reach it already owns the box.
+
+```bash
+ssh -i ~/.ssh/clapback-lightsail.pem -L 8000:127.0.0.1:8000 ubuntu@clapback.seethroughlab.com
+# then, locally: http://127.0.0.1:8000/admin
+```
+
+`CACHE_ADMIN_PASSWORD` is not recovered from anywhere — it is an environment
+variable compared with `secrets.compare_digest`, stored in no database, so a new
+deployment chooses a new one. `openssl rand -base64 24`.
+
 ## 7. Point Familiar at it
 
-Familiar's `community_cache_url` still defaults to `familiar-cache.fly.dev`,
-which is NXDOMAIN (`ADR-0005` records this). Set it to
-`https://clapback.seethroughlab.com` for reads. Contribution continues over the
-private network, because the public host refuses writes.
+Set `community_cache_url` to `https://clapback.seethroughlab.com`. **Reads work
+the moment DNS resolves.**
+
+**Contribution stays closed, for everyone, until the delete path exists.**
+`ADR-0004` point 7 is not a preference:
+
+> A delete path exists before the endpoint is public. Non-optional. A public
+> corpus needs takedown for legal requests and retraction for poisoned
+> recordings, and there is no `DELETE` route anywhere today.
+
+There still is not one. So the launch is read-only, and the thing that opens
+writes is building that route plus point 9's disk alert — not finding a private
+channel for one contributor.
+
+**A private write path would be the wrong answer even though it is available.**
+Putting the instance on a Tailnet would let Familiar keep contributing tomorrow,
+and would make the commons's only write path a network that one person can join.
+That is not a restricted commons, it is a single-contributor corpus with a public
+mirror — and a permanent one, because `ADR-0007`'s attestation and `ADR-0008`'s
+confirmations both need a second party that the architecture would now forbid.
+The pause is the honest state: the corpus stops growing for as long as it takes
+to build a `DELETE` route, and then grows from anyone.
 
 ## What is still not done after all of this
 
