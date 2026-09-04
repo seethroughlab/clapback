@@ -1,4 +1,11 @@
-# Development docker-compose
+# Development docker-compose.
+#
+# The database is published on the host (5433 below) for local work — psql, a GUI
+# client, poking at a migration. That is a convenience on a throwaway database and
+# **not an access path**: `ADR-0005` point 12 makes the HTTP API the only way into
+# the corpus, because every guarantee it makes lives in the application rather than
+# the schema. The deployed configuration exposes no database port at all
+# (`docker-compose.omv.yml`, and whatever succeeds it under `ADR-0003`).
 services:
   postgres:
     image: pgvector/pgvector:pg16

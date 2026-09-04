@@ -10,9 +10,9 @@ from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.api.routes import router
 from app.api.admin import admin_router
 from app.api.browse import browse_router
+from app.api.routes import router
 from app.limiter import limiter
 from app.middleware import IPBanMiddleware
 

@@ -11,7 +11,6 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 class Base(DeclarativeBase):
     """Base class for all models."""
 
-    pass
 
 
 class Embedding(Base):

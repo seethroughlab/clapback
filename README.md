@@ -18,6 +18,10 @@ no longer resolves.
 
 ## The package
 
+```bash
+pip install clapback-embed   # on the first `embed-v*` tag; not yet released
+```
+
 ```python
 from clapback_embed import embed_file, embed_text
 
@@ -166,16 +170,24 @@ Response: 201 (created) or 200 (confirmed, contributor count incremented).
 
 ## Development
 
+The repository is a `uv` workspace of peer members (`ADR-0005`): `packages/embed` is the
+published library, `packages/server` is the commons. The root builds nothing.
+
 ```bash
-# Install dependencies
+# Install everything, from the root
 uv sync
 
-# Run locally (requires PostgreSQL with pgvector)
+# The server
+cd packages/server
 CACHE_DATABASE_URL="postgresql+asyncpg://cache:cache@localhost:5432/cache" \
   uv run uvicorn app.main:app --reload
+uv run pytest
+docker compose up          # includes PostgreSQL
 
-# Run with Docker (includes PostgreSQL)
-docker compose up
+# The library
+cd packages/embed
+uv pip install -e '.[dev]'
+pytest                     # add -m artifacts once the encoders are exported
 ```
 
 ## Deployment
@@ -188,11 +200,9 @@ than as a live target.
 ### Self-hosted
 
 ```bash
-# Docker Compose
+cd packages/server
 docker compose up -d
 docker compose exec api uv run alembic upgrade head
-
-# Test
 curl http://localhost:8000/health
 ```
 
@@ -211,7 +221,12 @@ Fly.io also reads `DATABASE_URL` and converts `postgres://` to `postgresql+async
 
 ## Architecture
 
+- **Layout**: a `uv` workspace — `packages/embed` (the published library),
+  `packages/server` (the commons). Neither is the repository root.
 - **API**: FastAPI + uvicorn
 - **Database**: PostgreSQL with pgvector extension
-- **Hosting**: Fly.io (app) + Neon (database)
-- **CI/CD**: GitHub Actions auto-deploy on push to main
+- **Hosting**: self-hosted today; [`ADR-0003`](docs/decisions/ADR-0003-the-commons-runs-on-one-small-server.md)
+  chose one small AWS instance, and nothing is deployed there yet
+- **CI**: `embed-ci.yml` lints, tests and checks the embedder against `transformers`;
+  `server-ci.yml` lints and tests the server; `embed-release.yml` publishes on an
+  `embed-v*` tag. There is no auto-deploy.

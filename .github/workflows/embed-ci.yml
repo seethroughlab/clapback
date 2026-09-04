@@ -1,8 +1,10 @@
 name: clapback-embed
 
-# The first CI gate in this repository. `fly-deploy.yml` pushes to production on
-# every commit to `main` with nothing checking it first, which was tolerable for a
-# server nobody else depended on and is not once a package is published from here.
+# The first CI gate this repository had. It was written when `fly-deploy.yml` pushed
+# to production on every commit to `main` with nothing checking it first — tolerable
+# for a server nobody else depended on, and not once a package is published from
+# here. That workflow was removed under `ADR-0002`; the server's own gate is
+# `server-ci.yml`, added under `ADR-0005` point 6.
 on:
   push:
     branches: [main]
@@ -24,10 +26,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # No `enable-cache`: it keys on `**/uv.lock`, which this repository
-      # gitignores (.gitignore:15), and setup-uv hard-errors rather than warning
-      # when the glob matches nothing. A library should not carry a lock file.
+      # The workspace lock is committed as of `ADR-0005` point 7, so the cache
+      # this action wants has a key to hang on. It previously could not be
+      # enabled at all: it keys on `**/uv.lock`, nothing was tracked, and
+      # setup-uv hard-errors rather than warning when the glob matches nothing.
       - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
 
       # A venv rather than `--system`: the runner's interpreter is externally
       # managed (PEP 668) and uv refuses to install into it.
