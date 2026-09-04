@@ -87,7 +87,8 @@ ssh -i ~/.ssh/clapback-lightsail.pem ubuntu@clapback.seethroughlab.com
 sudo sed -i 's|us-east-1.ec2.archive.ubuntu.com|archive.ubuntu.com|g' \
 	/etc/apt/sources.list.d/ubuntu.sources
 printf 'Acquire::ForceIPv4 "true";\n' | sudo tee /etc/apt/apt.conf.d/99force-ipv4
-sudo apt-get update && sudo apt-get install -y docker.io docker-compose-v2 awscli git
+sudo apt-get update && sudo apt-get install -y docker.io docker-compose-v2 git
+sudo snap install aws-cli --classic   # `awscli` was dropped from 24.04's repos
 sudo usermod -aG docker ubuntu && exec su -l ubuntu
 git clone https://github.com/seethroughlab/clapback.git && cd clapback/packages/server
 cp deploy/env.example .env && ${EDITOR:-nano} .env
@@ -175,6 +176,11 @@ key an attacker inherits — so the policy grants `PutObject` on one prefix and
 host cannot erase or overwrite what it has already written: it can add objects,
 and every previous version survives. Expiry belongs to the lifecycle rule, which
 runs on S3's side where the instance cannot reach it.
+
+The backup script needs `aws` on `PATH`. Ubuntu 24.04 has **no `awscli`
+package** — `apt-cache policy awscli` reports no candidate even with universe
+enabled — so it comes from snap, which is what `deploy/clapback-backup.service`
+assumes.
 
 ```bash
 sudo cp deploy/clapback-backup.service deploy/clapback-backup.timer /etc/systemd/system/
