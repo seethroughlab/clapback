@@ -28,6 +28,18 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=7.4.0", "ruff>=0.1.0"]
 
+# In this workspace, take the embedder from the checkout rather than the index, so
+# a change to the reference implementation is testable here before it is released.
+# This is development metadata only: `uv` reads it, build backends do not, so the
+# published wheel still depends on `clapback-embed>=0.1.0,<0.2` from PyPI exactly
+# as declared above.
+#
+# It is also not optional. `clapback-embed` is a workspace member, and uv refuses
+# to resolve a member depending on another member without being told which source
+# to use — which is how this arrived as a red build on `main`.
+[tool.uv.sources]
+clapback-embed = { workspace = true }
+
 [project.scripts]
 clapback = "clapback_cli.cli:main"
 

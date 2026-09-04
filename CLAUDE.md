@@ -110,15 +110,32 @@ being where the agreement threshold sits and what the corpus does with it.
 | 4 | The recording-id key | `ADR-0002` point 4 makes it a prerequisite: similarity search over a hash-keyed corpus returns hashes nobody can resolve |
 | 6 | The rename, and what the domain serves | Cheap, and last on purpose — nothing above depends on it |
 
-**Two launch blockers are decided but unbuilt**, both from `ADR-0003` point 7: a public endpoint
-needs TLS in front of it, and it must not accept anonymous writes. `ADR-0004` decides how the second
-is answered; none of it is implemented beyond `client_id` being accepted and stored.
+### What is actually running, as of 2026-09-04
 
-**Most of what is accepted is not built.** Of eight records only `ADR-0001`'s measurement work and
-`ADR-0005`'s restructure have shipped. That is a real liability rather than a tidy backlog, and the
-`Implementation:` block is the only thing keeping it legible — so write one the day work starts, and
-keep it current. The cheapest unblocking change is not in this repository at all: Familiar sending a
-`client_id`, which `ADR-0004`, `ADR-0006` and `ADR-0008` all wait on.
+The commons is public at **https://clapback.seethroughlab.com** — one AWS instance, TLS via Caddy,
+nightly `pg_dump` to `s3://clapback-backup`, and a corpus being replaced in place by a backfill from
+Familiar. All three members of `ADR-0001` point 3 now exist: `clapback-embed` on PyPI, the server
+deployed, and the tool in `packages/cli`.
+
+Shipped since the records were written: `ADR-0002`'s similarity endpoint (HNSW, ~3 ms),
+`ADR-0003`'s deployment and backups, `ADR-0004` point 7's delete path and point 9's row ceiling,
+`ADR-0005`'s restructure and PyPI release, and `ADR-0009`'s tool.
+
+**Still unbuilt, and the first is the one with consequences:**
+
+- **`ADR-0004` point 9's disk alert.** "A full disk is an outage; 80% of one is a Tuesday
+  afternoon." The row ceiling bounds growth; nothing watches the disk.
+- **`ADR-0006` entirely** — the pipeline identity as the corpus key, and the four-phase migration
+  that makes the corpus coherent. The corpus still holds 21,890 middle-10s vectors from the pipeline
+  `ADR-0104` rejected.
+- **`ADR-0007`**, deliberately, until a second contributor exists.
+- **`ADR-0008`** — the corpus cannot yet tell anyone how corroborated a vector is.
+- **`ADR-0009` point 6** — the tool does not contribute yet; only its local half is built.
+
+**The pattern worth keeping.** For most of this project's life the decisions ran far ahead of the
+code, and the `Implementation:` block is the only thing that kept that legible. Write one the day
+work starts, and correct the record when building disproves it — several premises here were wrong
+and are marked so rather than quietly overtaken.
 
 ## Compatibility with Familiar
 

@@ -31,8 +31,12 @@ Implementation:
 - Point 6's *softer* form — marking submissions unconfirmed rather than deleting them — is still
   owed, and needs the confirmation machinery [`ADR-0008`](ADR-0008-the-corpus-serves-agreement-not-a-verdict.md)
   describes.
-- Point 9's ceiling on corpus rows is not implemented. It is the one bound that needs nothing from
-  identity, which makes it the cheapest of these to land first.
+- **Point 9's first two bounds are built.** The ceiling on corpus rows landed with the deployment;
+  the disk alert (`deploy/disk-alert.sh`, a 15-minute timer at 80%) landed 2026-09-04. They are not
+  the same guard and the second is not implied by the first: the ceiling bounds embeddings, and
+  nothing bounds docker images, journald, or the dump written locally before it is uploaded.
+- Point 9's third bound, per-client quotas, is still owed and needs point 1's identifier to be
+  arriving, which it now is.
 
 ## Context
 
