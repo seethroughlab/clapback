@@ -1,12 +1,26 @@
 # ADR-0009: The Tool Is Useful Before the Corpus Is
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-04
 
 Answers [ADR-0001](ADR-0001-clapback-is-a-public-clap-embedding-commons.md) deferred item 5 and fills
 the directory [ADR-0005](ADR-0005-the-repository-is-a-workspace-of-peers.md) point 8 reserved without
 deciding anything about it.
+
+Implementation:
+- Accepted 2026-09-04. **Nothing is built**, and `packages/cli/` does not exist — `ADR-0005` point 8
+  reserved the name and deliberately created no directory, which is still the honest state.
+- The four records waiting on this are unchanged: `ADR-0004` point 4 cannot count independence,
+  `ADR-0007` cannot reach a quorum of two, `ADR-0008` reports zero confirmations, and `ADR-0002`
+  justifies an endpoint nobody outside this project yet has reason to query. Point 3's search now
+  exists and answers in 3 ms; what it lacks is a second party to ask it anything.
+- Two of this record's premises were confirmed by building other things in the meantime. The
+  brute-force measurement in the Context holds — the corpus is now HNSW-indexed for the *server's*
+  similarity endpoint, and that index exists because 22,000 vectors live in Postgres rather than on
+  a laptop. And point 5's chromaprint caution proved right for a reason the record did not
+  anticipate: the fingerprint reaches storage hex-escaped rather than raw, and a tool that decoded
+  it the obvious way would key every contribution to a hash nobody looks up.
 
 ## Context
 

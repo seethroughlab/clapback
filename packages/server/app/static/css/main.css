@@ -29,11 +29,35 @@ h3 { margin: 20px 0 10px; color: #c4b5fd; font-size: 16px; }
     margin-bottom: 20px;
 }
 
+/* The two pages worth arriving at, and everything else.
+   They used to be five equal 14px links in a row, so the map and the API had the
+   same visual weight as a database health check — findable only by someone
+   already looking for them. */
+.primary-nav {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+    margin: 4px 0 16px;
+}
+.primary-nav a {
+    display: block;
+    padding: 14px 18px;
+    background: #16213e;
+    border: 1px solid #2a2a5e;
+    border-radius: 10px;
+    text-decoration: none;
+    transition: border-color 0.15s, background 0.15s;
+}
+.primary-nav a:hover { background: #1a1a3e; border-color: #7c3aed; text-decoration: none; }
+.primary-nav strong { display: block; color: #a78bfa; font-size: 15px; margin-bottom: 3px; }
+.primary-nav span { color: #888; font-size: 13px; }
+
 .header-links {
     display: flex;
     gap: 16px;
-    font-size: 14px;
-    margin-bottom: 24px;
+    font-size: 13px;
+    margin-bottom: 28px;
+    color: #666;
 }
 
 /* Stats grid */
