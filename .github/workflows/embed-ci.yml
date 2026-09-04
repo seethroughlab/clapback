@@ -37,20 +37,28 @@ jobs:
 
       # A venv rather than `--system`: the runner's interpreter is externally
       # managed (PEP 668) and uv refuses to install into it.
+      #
+      # The steps below call `.venv/bin/...` directly rather than `uv run`.
+      # Since `ADR-0005` made this repository a uv workspace, `uv run` inside a
+      # member resolves the *workspace root* environment, which is not the venv
+      # these two lines just populated — it fails with "Failed to spawn: ruff".
+      # `uv sync` would be the workspace-native fix and is the wrong one here:
+      # the point of installing this way is that a library resolves its own
+      # dependencies from ranges rather than from the workspace lock.
       - name: Install
         run: |
           uv venv --python 3.11
           uv pip install -e ".[dev]"
 
       - name: Lint
-        run: uv run ruff check .
+        run: .venv/bin/ruff check .
 
       # Runs the windowing rule, the front-end arithmetic and the pooling. The
       # ONNX artifacts are 614 MB and are not fetched here, so the tests marked
       # `artifacts` skip — see the conformance job below for why that is not the
       # whole story.
       - name: Test
-        run: uv run pytest -q
+        run: .venv/bin/pytest -q
 
   conformance:
     name: Conformance against transformers
@@ -76,4 +84,4 @@ jobs:
           uv pip install transformers
 
       - name: Front-end must match ClapFeatureExtractor
-        run: uv run pytest tests/test_mel.py -q
+        run: .venv/bin/pytest tests/test_mel.py -q

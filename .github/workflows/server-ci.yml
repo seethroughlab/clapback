@@ -26,12 +26,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Unlike the embedder, the server commits its lock file — `ADR-0005`
-      # point 7 — so the cache key this action wants actually exists here.
+      # The lock is at the workspace root, not here — `ADR-0005` point 7, as
+      # amended: a uv workspace has exactly one, covering every member.
       - uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
-          cache-dependency-glob: "packages/server/uv.lock"
+          cache-dependency-glob: "uv.lock"
 
       - name: Install
         run: uv sync
