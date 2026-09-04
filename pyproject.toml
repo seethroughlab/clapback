@@ -9,4 +9,4 @@
 #   packages/server  clapback-server — the commons, deployed
 #   packages/cli                     — `ADR-0005` point 8 reserves the name; not yet decided
 [tool.uv.workspace]
-members = ["packages/embed", "packages/server"]
+members = ["packages/embed", "packages/server", "packages/cli"]
