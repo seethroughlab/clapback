@@ -90,7 +90,7 @@ home beside.
 | # | ADR | Answers |
 |---|---|---|
 | 0005 | The repository is a workspace of peers | The restructure, publishing `clapback-embed` to PyPI, and the rule separating package version from pipeline identity |
-| 0006 | A submission declares the pipeline that produced it | `ADR-0005`'s follow-up: the corpus refuses to hold two pipelines under one key, so version drift is rejected rather than recorded as contributor disagreement |
+| 0006 | The pipeline identity is the corpus key | `ADR-0005`'s follow-up: `(fingerprint_hash, pipeline_version)` replaces a key made of a checkpoint and a client's counter, and the 21,890 legacy rows are recomputed rather than relabelled |
 
 **What is still owed, in execution order:**
 
@@ -133,10 +133,10 @@ one exposes no port.
 **The version that lives in two places.** `PIPELINE_VERSION` here and `EMBEDDING_VERSION` in
 Familiar's `backend/app/config.py` are the same fact — the identity of the embedding pipeline —
 maintained separately by hand. Moving one without the other contributes incomparable vectors under a
-key asserting they are comparable. `ADR-0006` (`proposed`) makes the corpus reject that rather than
-record it as contributor disagreement; until it lands and Familiar sends `pipeline_version`, nothing
-detects it, and **any change that moves `PIPELINE_VERSION` requires a matching bump in Familiar in
-the same breath.**
+key asserting they are comparable. `ADR-0006` (`proposed`) makes `PIPELINE_VERSION` the key itself so
+the case cannot arise, and phases the change so the endpoint contract never breaks. Until it lands,
+nothing detects the drift, and **any change that moves `PIPELINE_VERSION` requires a matching bump in
+Familiar in the same breath.**
 
 ## Development
 
