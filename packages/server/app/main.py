@@ -1,4 +1,4 @@
-"""Familiar Cache - Community embedding cache server."""
+"""clapback — a public commons of CLAP audio embeddings."""
 
 from contextlib import asynccontextmanager
 from typing import Any
@@ -26,8 +26,12 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Familiar Cache",
-    description="Community embedding cache for Familiar music player",
+    title="clapback",
+    description=(
+        "A public commons of CLAP audio embeddings, keyed on the SHA256 of an "
+        "AcoustID fingerprint. Reads are open to everyone; contribution is not yet "
+        "open to anonymous clients — see ADR-0003 point 7 and ADR-0004."
+    ),
     version="0.1.0",
     lifespan=lifespan,
 )

@@ -1,17 +1,23 @@
 {% extends "base.html" %}
 
-{% block title %}Familiar Cache{% endblock %}
+{% block title %}clapback{% endblock %}
 
 {% block body %}
-<h1>🎵 Familiar Cache</h1>
+<h1>🎵 clapback</h1>
 <p class="tagline">
-    Community embedding cache for the
-    <a href="https://github.com/seethroughlab/familiar">Familiar music player</a>.
-    Tracks contributed are anonymized SHA256 fingerprint hashes — no titles, artists, or files.
+    A public commons of <strong>CLAP audio embeddings</strong> — 512-dimensional vectors
+    describing what a recording sounds like. Expensive to compute, trivial to compare, so
+    worth computing once and sharing.
+</p>
+<p class="tagline">
+    Keyed on anonymised SHA256 fingerprint hashes: no titles, no artists, no filenames.
+    <a href="https://github.com/seethroughlab/familiar">Familiar</a> is its first client and
+    largest contributor, and is not its owner — anything can contribute.
 </p>
 <div class="header-links">
     <a href="/docs">API docs</a>
-    <a href="https://github.com/seethroughlab/familiar-cache">GitHub</a>
+    <a href="https://github.com/seethroughlab/clapback">GitHub</a>
+    <a href="https://github.com/seethroughlab/clapback/tree/main/docs/decisions">Decisions</a>
     <a href="/health/db">Health</a>
 </div>
 
@@ -82,9 +88,12 @@
 </div>
 
 <p class="muted footnote">
-    Looking up a specific fingerprint? Paste it as
-    <code>/browse/{your-hash}</code> in the URL bar. Want to contribute? Enable the
-    cache toggle in Familiar's Admin settings — it's opt-in.
+    Looking up a specific fingerprint? Paste it as <code>/browse/{your-hash}</code> in the
+    URL bar, or use <code>GET /v1/embeddings/{hash}</code>. <strong>Reads are open to
+    everyone.</strong> Contribution is not yet: it opens once there is a way to retract a
+    recording, which
+    <a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0004-contributors-are-identified-but-not-accounts.md">ADR-0004</a>
+    makes a precondition of a public corpus rather than a follow-up.
 </p>
 {% endblock %}
 
