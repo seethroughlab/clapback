@@ -28,6 +28,15 @@ Implementation:
 - **`ADR-0004` point 9's row ceiling is implemented**, that point's one bound needing nothing from
   identity, defaulting to point 11's stated 500,000. It is checked only where a submission would
   create a new row, so a confirmation of an existing vector is never refused.
+- **Point 9's fourth reason does not survive contact.** It argued "there is already a footprint:
+  Familiar backs up to an S3 bucket in `us-east-1`, so the backup destination in point 6 exists and
+  is paid for". The bucket exists and is Jeff's personal music library — `artwork/`, `audio/`,
+  `videos/`. Using it would mean a public, internet-facing instance holding credentials that can
+  write to an irreplaceable personal archive, in order to protect 488 MB of vectors that
+  contributors could recompute. The trade is backwards. The commons gets its own bucket and a key
+  scoped to one prefix with no `DeleteObject`, which costs cents rather than nothing. **The other
+  three reasons for AWS are untouched**, so the host decision stands; only this argument for it
+  fails.
 - Still owed before this is done: an instance, a domain (`ADR-0001` deferred item 6), the `pg_dump`
   and restore of the 488 MB currently on the NAS, and point 9's disk alert, which is not built.
 

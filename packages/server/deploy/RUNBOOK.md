@@ -11,9 +11,11 @@ working over the private network throughout.
 
 - The domain is `clapback.seethroughlab.com`. DNS for `seethroughlab.com` is at
   Porkbun, not Route 53.
-- The backup bucket `familiar-backup` already exists in `us-east-1` (`ADR-0003`
-  point 9), so `BACKUP_S3_BUCKET=familiar-backup` and the prefix keeps clapback's
-  dumps clear of Familiar's.
+- **The backup bucket is this project's own, and must be created.** `ADR-0003`
+  point 9 assumed one existed because Familiar backs up to S3 — but that bucket
+  is a personal music library (`artwork/`, `audio/`, `videos/`), and a public
+  server holding credentials for it would trade a recomputable corpus for
+  something irreplaceable. See step 6.
 - Provisioning needs AWS credentials that can use Lightsail. The `s3_user`
   identity cannot — it is scoped to S3 and `lightsail:*` is denied.
 
@@ -100,16 +102,42 @@ restore again rather than to start serving.
 
 `ADR-0003` point 6 makes this part of shipping, not a follow-up.
 
+First, a bucket of its own and a key that can reach nothing else:
+
+```bash
+aws s3 mb s3://clapback-backup --region us-east-1
+aws s3api put-public-access-block --bucket clapback-backup \
+	--public-access-block-configuration \
+	BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+```
+
+Then an IAM user whose policy names only that bucket. This is the part worth not
+skipping: the instance is public, and a key that reaches further than this is a
+key an attacker inherits.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    { "Effect": "Allow", "Action": ["s3:PutObject"],
+      "Resource": "arn:aws:s3:::clapback-backup/postgres/*" },
+    { "Effect": "Allow", "Action": ["s3:ListBucket"],
+      "Resource": "arn:aws:s3:::clapback-backup" }
+  ]
+}
+```
+
+No `s3:DeleteObject`: a compromised host should not be able to erase the backups
+it has been writing. Expiry is the bucket's job, not the instance's — a lifecycle
+rule that deletes after 90 days keeps the cost at cents without handing the
+delete verb to a public server.
+
 ```bash
 sudo cp deploy/clapback-backup.service deploy/clapback-backup.timer /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now clapback-backup.timer
 ./deploy/backup.sh                        # run once by hand; do not wait for 04:12 to find out
-aws s3 ls s3://familiar-backup/clapback/postgres/
+aws s3 ls s3://clapback-backup/postgres/
 ```
-
-The instance needs AWS credentials that can write that prefix. An instance role
-is better than a key in `.env`; a key that can only `PutObject` on that prefix is
-acceptable and is what `s3_user` already resembles.
 
 **Then test a restore somewhere disposable.** A backup nobody has restored is a
 hypothesis.

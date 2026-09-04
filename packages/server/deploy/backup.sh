@@ -5,6 +5,10 @@
 # this. Not a follow-up. The corpus is contributed data that cannot be
 # regenerated without the contributors' audio — nobody here can rebuild it."
 #
+# The bucket must be this project's own, with credentials that can write nothing
+# else. This host is public; a key on it that reaches a personal backup would
+# trade a recomputable corpus for something irreplaceable.
+#
 # Install (on the instance, as the user that owns the compose project):
 #   sudo cp deploy/clapback-backup.service deploy/clapback-backup.timer /etc/systemd/system/
 #   sudo systemctl enable --now clapback-backup.timer
