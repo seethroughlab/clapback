@@ -102,35 +102,37 @@ restore again rather than to start serving.
 
 `ADR-0003` point 6 makes this part of shipping, not a follow-up.
 
-First, a bucket of its own and a key that can reach nothing else:
+**`s3://clapback-backup` already exists and is configured.** Created and verified
+2026-09-04, in `us-east-1` alongside the instance:
+
+| | |
+|---|---|
+| public access | fully blocked, all four settings |
+| encryption at rest | AES256, bucket keys on |
+| versioning | enabled |
+| lifecycle | dumps expire after 90 days, noncurrent versions after 30, incomplete multipart aborted after 7 |
+
+What remains is an IAM user for the instance, which needs IAM permissions the
+`s3_user` credentials do not have. `deploy/iam-backup-policy.json` is the policy:
 
 ```bash
-aws s3 mb s3://clapback-backup --region us-east-1
-aws s3api put-public-access-block --bucket clapback-backup \
-	--public-access-block-configuration \
-	BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+aws iam create-user --user-name clapback-backup-writer
+aws iam put-user-policy --user-name clapback-backup-writer \
+	--policy-name clapback-backup-write \
+	--policy-document file://deploy/iam-backup-policy.json
+aws iam create-access-key --user-name clapback-backup-writer
 ```
 
-Then an IAM user whose policy names only that bucket. This is the part worth not
-skipping: the instance is public, and a key that reaches further than this is a
-key an attacker inherits.
+Put the key in `.env` as `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`.
 
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    { "Effect": "Allow", "Action": ["s3:PutObject"],
-      "Resource": "arn:aws:s3:::clapback-backup/postgres/*" },
-    { "Effect": "Allow", "Action": ["s3:ListBucket"],
-      "Resource": "arn:aws:s3:::clapback-backup" }
-  ]
-}
-```
+This is the part worth not skipping. The instance is public, and a key on it is a
+key an attacker inherits — so the policy grants `PutObject` on one prefix and
+`ListBucket` on that prefix, and nothing else.
 
-No `s3:DeleteObject`: a compromised host should not be able to erase the backups
-it has been writing. Expiry is the bucket's job, not the instance's — a lifecycle
-rule that deletes after 90 days keeps the cost at cents without handing the
-delete verb to a public server.
+**No `s3:DeleteObject`, and versioning is on.** Together those mean a compromised
+host cannot erase or overwrite what it has already written: it can add objects,
+and every previous version survives. Expiry belongs to the lifecycle rule, which
+runs on S3's side where the instance cannot reach it.
 
 ```bash
 sudo cp deploy/clapback-backup.service deploy/clapback-backup.timer /etc/systemd/system/
