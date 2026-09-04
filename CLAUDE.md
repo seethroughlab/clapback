@@ -94,6 +94,11 @@ three are decided and outstanding, and each says so in its `Implementation:` blo
 | 0006 | The pipeline identity is the corpus key | `ADR-0005`'s follow-up: `(fingerprint_hash, pipeline_version)` replaces a key made of a checkpoint and a client's counter, and the 21,890 legacy rows are recomputed rather than relabelled |
 | 0007 | A pipeline proves itself on a reference signal | `ADR-0001` point 4's attestation: a client demonstrates its pipeline on a signal defined arithmetically, and the expected vector is agreed by quorum rather than configured. **Decided, deliberately unbuilt** — see its points 10 and 11 |
 | 0008 | The corpus serves agreement, not a verdict | `ADR-0001` point 9's confidence and deferred item 2's remainder: independent confirmations, contradictions and the worst similarity are reported; no threshold declares a vector trustworthy |
+| 0009 | The tool is useful before the corpus is | `ADR-0001` deferred item 5: a local library index that searches by description and finds near-duplicates, with contribution as a byproduct — the only queued work whose output is a contributor who was not already here |
+
+`ADR-0009` (`proposed`) answers deferred item 5, which nothing else can: four accepted records —
+`ADR-0004` point 4, `ADR-0007`, `ADR-0008` and `ADR-0002` — are each waiting on a second contributor,
+and the tool is the only queued work that produces one.
 
 `ADR-0008` closes `ADR-0001` deferred item 2 — the part the cross-machine measurement did not answer,
 being where the agreement threshold sits and what the corpus does with it.
@@ -102,7 +107,6 @@ being where the agreement threshold sits and what the corpus does with it.
 
 | ADR-0001 item | Decision | Why here |
 |---|---|---|
-| 5 | The tool's local features | `ADR-0001` point 8's draw, and the only thing that produces a second contributor |
 | 4 | The recording-id key | `ADR-0002` point 4 makes it a prerequisite: similarity search over a hash-keyed corpus returns hashes nobody can resolve |
 | 6 | The rename, and what the domain serves | Cheap, and last on purpose — nothing above depends on it |
 
