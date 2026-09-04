@@ -29,6 +29,13 @@ SECONDS_PER_ANALYSIS = 15  # rough CLAP analysis time on a typical client
 # ---------- aggregation helpers (each cached separately under stats_cache) ----------
 
 
+async def _fetch_counts(db: AsyncSession) -> dict:
+    """Row counts for the API page. Two cheap aggregates, not the dashboard's full set."""
+    embeddings = await db.scalar(select(func.count()).select_from(Embedding))
+    features = await db.scalar(select(func.count()).select_from(Features))
+    return {"embeddings": embeddings or 0, "features": features or 0}
+
+
 async def _fetch_top_stats(db: AsyncSession) -> dict:
     """Headline numbers: tracks, analyses, hours saved, hit rate."""
     tracks = (await db.execute(
@@ -142,6 +149,27 @@ async def index(request: Request, db: DbSession) -> HTMLResponse:
             "bpm": bpm,
             "keys": keys,
             "mood": mood,
+        },
+    )
+
+
+@browse_router.get("/api", response_class=HTMLResponse)
+async def api_page(request: Request, db: DbSession) -> HTMLResponse:
+    """The page a developer lands on, as opposed to the schema at `/docs`.
+
+    `/docs` answers "what are the fields"; nobody arrives with that question. They
+    arrive asking what this is, whether it costs anything, and what to do when the
+    corpus does not have their track — which is the question the published package
+    answers and the schema cannot.
+    """
+    counts = await _fetch_counts(db)
+    return templates.TemplateResponse(
+        request,
+        "api.html",
+        {
+            "counts": counts,
+            "host": request.url.hostname or "clapback.seethroughlab.com",
+            "lookup_limit": settings.lookup_rate_limit.replace("/", " per "),
         },
     )
 
