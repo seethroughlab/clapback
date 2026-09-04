@@ -32,7 +32,7 @@ cases where the vector is wrong for the same reason:
   truthfully, by its own lights, and computes something else.
 - **The wrong precision.** `Precision.FP16` exists for vectors that never leave the machine, and
   `PIPELINE_VERSION` hard-codes `+fp32` in its string
-  (`packages/embed/src/clapback_embed/__init__.py:54-59`) rather than deriving it from the session
+  (`packages/embed/src/clapback_embed/__init__.py:65-70`) rather than deriving it from the session
   that ran. A client embedding at fp16 declares fp32.
 - **An unverified execution provider.** `artifacts.py` records that an accelerated provider "is not
   known to produce vectors comparable with the CPU ones, and that has to be measured per provider
@@ -259,7 +259,7 @@ already identified what changes that, and it is not a verification scheme.
 - **Tradeoff** — one more endpoint, one more table, and a state machine (`provisional` → `confirmed`
   → refused) on a service that `ADR-0003` deliberately sized small.
 - **Follow-up** — a second reference signal shorter than one window, to exercise the `repeatpad` path
-  (`chunking.py:46`) that the 25-second signal does not reach.
+  (`packages/embed/src/clapback_embed/chunking.py:46`) that the 25-second signal does not reach.
 - **Follow-up** — how a failed attestation interacts with data already accepted from that client:
   `ADR-0004` point 6 says revocation cascades, and this is its first concrete trigger.
 - **Follow-up** — whether the execution provider should be named in the attestation. `artifacts.py`

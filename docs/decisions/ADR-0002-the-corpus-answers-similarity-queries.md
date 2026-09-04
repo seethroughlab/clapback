@@ -58,7 +58,7 @@ is not:
 - **No vector index exists.** The three indexes on the table are all btree: the primary key and two
   timestamps.
 - `_cosine_similarity`, which measures agreement between submissions, is a pure Python function in
-  `app/api/routes.py`. Even that does not use the database.
+  `packages/server/app/api/routes.py`. Even that does not use the database.
 
 `pgvector` appears once, as `Vector(512)` in the model. Today the corpus is a key-value store that
 happens to be spelled in Postgres, and 67 MB of it would fit anywhere.

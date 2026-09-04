@@ -12,8 +12,8 @@ writes a launch blocker.
 Implementation:
 - Accepted 2026-09-03. Point 1 is partially built; nothing else is.
 - **A `client_id` is accepted and stored, but nothing counts by it.** The field is optional on
-  `POST /v1/embeddings` (`app/api/routes.py:66`) and recorded against each measured submission
-  (`app/db/models.py:96`, migration `007_submission_agreement`), which is point 3's shape: accepted,
+  `POST /v1/embeddings` (`packages/server/app/api/routes.py:66`) and recorded against each measured submission
+  (`packages/server/app/db/models.py:95`, migration `007_submission_agreement`), which is point 3's shape: accepted,
   and not confirmable without one. **Point 4 is not done** — `contributor_count` is still
   incremented once per POST in `contribute_embedding`, so it counts submissions rather than distinct
   clients and must not be read as independence.

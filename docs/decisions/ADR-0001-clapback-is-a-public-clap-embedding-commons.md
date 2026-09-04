@@ -341,7 +341,7 @@ Each needs its own ADR, and the execution order differs from the numbering:
   A better model does not invalidate the corpus, but adopting one becomes a campaign rather than a
   version bump.
 - **Follow-up** — the "44 contributors" figure appears in `ADR-0102`'s context, in this repository's
-  `007_submission_agreement` migration docstring, and in `tests/test_submission_agreement.py`. All
+  `007_submission_agreement` migration docstring, and in `packages/server/tests/test_submission_agreement.py`. All
   three should be corrected to the measured 9, and the test comment that says rejecting a required
   `client_id` "would reject all 44 contributing installations" is wrong on both the number and the
   reasoning.

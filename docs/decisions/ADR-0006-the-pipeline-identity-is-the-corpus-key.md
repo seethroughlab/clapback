@@ -23,10 +23,10 @@ That sentence is currently false, and nothing in the corpus would reveal it.
 
 | | |
 |---|---|
-| `PIPELINE_VERSION` (`packages/embed/src/clapback_embed/__init__.py:54`) | `laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32` |
-| composed from | `CHECKPOINT` (`artifacts.py:48`), `FRONTEND_VERSION` (`mel.py:29`), `ARTIFACT_VERSION` (`artifacts.py:51`), `POOLING_VERSION` (`__init__.py:52`), precision |
+| `PIPELINE_VERSION` (`packages/embed/src/clapback_embed/__init__.py:65`) | `laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32` |
+| composed from | `CHECKPOINT` (`packages/embed/src/clapback_embed/artifacts.py:48`), `FRONTEND_VERSION` (`packages/embed/src/clapback_embed/mel.py:29`), `ARTIFACT_VERSION` (`packages/embed/src/clapback_embed/artifacts.py:51`), `POOLING_VERSION` (`packages/embed/src/clapback_embed/__init__.py:63`), precision |
 | `EMBEDDING_VERSION` (Familiar, `backend/app/config.py:122`) | `7` |
-| `CLAP_MODEL_VERSION` (Familiar, `community_cache.py:34`) | `laion/clap-htsat-unfused:v1` |
+| `CLAP_MODEL_VERSION` (Familiar, `backend/app/services/community_cache.py:34`) | `laion/clap-htsat-unfused:v1` |
 | what Familiar sends | `analysis_version=7`, `clap_model_version="laion/clap-htsat-unfused:v1"` |
 
 Both sides are individually correct and well documented. This package says two vectors are comparable
@@ -40,8 +40,8 @@ it is printed. Nothing compares it to anything.
 
 ### The key is made of the wrong things, audited 2026-09-03
 
-The key is `(fingerprint_hash, analysis_version, clap_model_version)` (`app/db/models.py:30-32`), and
-the server accepts any value for either version component (`app/api/routes.py:57-58`):
+The key is `(fingerprint_hash, analysis_version, clap_model_version)` (`packages/server/app/db/models.py:29-31`), and
+the server accepts any value for either version component (`packages/server/app/api/routes.py:57-58`):
 
 ```python
 analysis_version: int = Field(..., ge=1)
@@ -54,7 +54,7 @@ Neither component means what the key needs it to mean:
   error `ADR-0104` point 6 corrected on Familiar's side and the package's own module docstring warns
   about: pooling can change every vector while `laion/clap-htsat-unfused` stays fixed.
 - **`analysis_version` is a client-owned counter that moves for unrelated reasons.** Its history
-  (`config.py:111-115`) records `v6: Matched features version at loudness addition` — a bump taken to
+  (`backend/app/config.py:111-115`) records `v6: Matched features version at loudness addition` — a bump taken to
   stay in step with `FEATURES_VERSION`, not because the embedding pipeline changed. A key component
   that moves when the pipeline does not is not a comparability key; it is a client's changelog.
 
@@ -71,7 +71,7 @@ in a different repository, which is the whole of what it takes.
    vector, so **the corpus quietly serves the old pipeline's answer to a client running the new
    one**, and the client cannot tell.
 3. `contribute_embedding` scores the submission against the stored vector and writes the result to
-   `submission_agreement` (`app/api/routes.py:174-185`).
+   `submission_agreement` (`packages/server/app/api/routes.py:174-185`).
 
 Step 3 is what turns a bug into a corrupted instrument. That table exists to answer `ADR-0001`
 point 9's question — *do two machines computing the same audio produce the same vector?* — and its
@@ -99,7 +99,7 @@ permanent unconfirmed tier inside a corpus whose whole argument is provenance.
 
 **Recomputing them is affordable, and the mechanism already exists.** Familiar's `ADR-0104` point 7
 records that re-analysis rides the existing sync phase rather than being scheduled, selecting on
-`embedding_version < EMBEDDING_VERSION` — today at `analysis_queue.py:119` and `:276`, the ADR's own
+`embedding_version < EMBEDDING_VERSION` — today at `backend/app/services/tasks/analysis_queue.py:119` and `:276`, the ADR's own
 line reference having drifted. Moving every vector in the library by bumping that constant is not
 hypothetical work: `ADR-0104` did it, from middle-ten-seconds to a whole-track mean, in September.
 

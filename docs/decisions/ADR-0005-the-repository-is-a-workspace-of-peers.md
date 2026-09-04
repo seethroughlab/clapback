@@ -32,6 +32,16 @@ Implementation:
 - Verified after the move: 40 embedder tests pass (6 artifact-marked skips), 11 server tests pass,
   `ruff check` is clean in both members, `alembic heads` resolves, and `app.main:app` imports with
   its 10 routes.
+- **CI found two faults in its own new workflows**, both caused by the restructure. `server-ci.yml`
+  pointed its cache glob at a lock path that stopped existing when point 7 was amended; and because
+  the repository is now a workspace, `uv run` inside a member resolves the workspace root
+  environment rather than the member-local venv that `uv venv` populates, so the embedder's lint and
+  test steps failed with "Failed to spawn: ruff". Both files now call `.venv/bin/...` directly.
+- **Every `path:line` citation across the records was rechecked afterwards** (2026-09-04). The move
+  invalidated ten of them, and two had also drifted by a line or two: the ruff autofix removed a line
+  above `models.py`'s key columns, and widening `__all__` pushed `PIPELINE_VERSION` down eleven.
+  Fifteen more named a file without its directory — harmless until `config.py` in another repository
+  resolved against this one's, so citations now carry a repository-root-relative path.
 
 ## Context
 
@@ -112,16 +122,17 @@ commit can differ. That is the reproducibility the corpus's own arguments lean o
 There is one client, `ADR-0001` point 1 says it is not the owner, and it is nonetheless the thing
 that must not break. Its dependency is two surfaces, not one.
 
-**The package.** Familiar imports more than the documented API:
+**The package.** Familiar imports more than the documented API (paths below are in Familiar's
+repository):
 
 | import | where | in `__all__`? |
 |---|---|---|
-| `embed_file`, `embed_text`, `embed_audio` | `analysis.py:165`, `:201`, `smoke_test_clap.py:73` | yes |
-| `PIPELINE_VERSION` | `smoke_test_clap.py:42` | yes |
-| `clapback_embed.artifacts.audio_session` | `analysis.py:73` | **no** |
-| `clapback_embed.artifacts.providers` | `analysis.py:63` | **no** |
-| `clapback_embed.artifacts.model_dir` | `smoke_test_clap.py:39` | **no** |
-| `clapback_embed.mel.SAMPLE_RATE` | `smoke_test_clap.py:74` | re-exported at top level, imported from the submodule anyway |
+| `embed_file`, `embed_text`, `embed_audio` | `backend/app/services/analysis.py:165`, `:201`, `backend/scripts/smoke_test_clap.py:73` | yes |
+| `PIPELINE_VERSION` | `backend/scripts/smoke_test_clap.py:42` | yes |
+| `clapback_embed.artifacts.audio_session` | `backend/app/services/analysis.py:73` | **no** |
+| `clapback_embed.artifacts.providers` | `backend/app/services/analysis.py:63` | **no** |
+| `clapback_embed.artifacts.model_dir` | `backend/scripts/smoke_test_clap.py:39` | **no** |
+| `clapback_embed.mel.SAMPLE_RATE` | `backend/scripts/smoke_test_clap.py:74` | re-exported at top level, imported from the submodule anyway |
 
 Three of those are not in `__all__`, so the package's real contract is wider than its declared one.
 Worse for anyone planning to reorganise: `backend/tests/test_embedder_delegation.py:42-50` stubs
@@ -140,8 +151,9 @@ that this repository's own documents get wrong:
   unconfirmable — which is correct behaviour, and not what anyone would predict from
   `contributor_count` today.
 
-**The default host is dead in both repositories.** `community_cache.py:38` and
-`app_settings.py:81` both default to `https://familiar-cache.fly.dev`, which `ADR-0002` established
+**The default host is dead in both repositories.** Familiar's
+`backend/app/services/community_cache.py:38` and `backend/app/services/app_settings.py:81` both
+default to `https://familiar-cache.fly.dev`, which `ADR-0002` established
 is NXDOMAIN. The running instance works only because it is overridden in app settings.
 
 ### The access path nobody has written down
@@ -149,9 +161,9 @@ is NXDOMAIN. The running instance works only because it is overridden in app set
 Familiar reaches the corpus over HTTP and always has, so the question has never come up. It is not
 recorded as a rule anywhere — not in an ADR, not in the README, not in a comment on the schema.
 
-What exists instead is a habit that happens to be right. `docker-compose.omv.yml:4` gives Postgres
+What exists instead is a habit that happens to be right. `packages/server/docker-compose.omv.yml:4` gives Postgres
 no host port, noted in passing as a property of that deployment rather than as a constraint;
-`docker-compose.yml:10` publishes the database on the host with nothing saying it is for development
+`packages/server/docker-compose.yml:17` publishes the database on the host with nothing saying it is for development
 only. A rule that
 holds because no one has tried the alternative is not a rule, and `ADR-0003` is about to put this
 database on a public host, next to `ADR-0001` point 3's tool — a client that will run on
@@ -160,7 +172,7 @@ contributors' machines and will want, at some point, to go faster.
 ### The version that has to be bumped in two repositories at once
 
 `PIPELINE_VERSION` composes checkpoint, front-end, artifact, pooling and precision into a string.
-Familiar sends `analysis_version=EMBEDDING_VERSION`, a hand-maintained integer (`config.py:122`,
+Familiar sends `analysis_version=EMBEDDING_VERSION`, a hand-maintained integer (`backend/app/config.py:122`,
 currently 7) whose comment correctly states that it "is the identity of the embedding *pipeline*,
 not of the checkpoint" and that "vectors from two pipelines are not comparable".
 
@@ -339,7 +351,8 @@ the same hazard as the `@main` reference above, arriving through the corpus inst
   `PIPELINE_VERSION` instead of maintaining its own integer, to the server rejecting a submission
   whose declared version it has not been told about. It is a corpus-integrity decision, it affects
   the stored key, and it deserves its own ADR rather than a paragraph in a restructuring one.
-- **Follow-up** — the dead default host in `community_cache.py:38` and `app_settings.py:81` is
+- **Follow-up** — the dead default host in Familiar's `backend/app/services/community_cache.py:38`
+  and `backend/app/services/app_settings.py:81` is
   Familiar's to fix, and becomes urgent at `ADR-0003`'s launch rather than now.
 - **Follow-up** — Familiar sending a `client_id` is a one-line change with an outsized effect: it
   moves the largest contributor from permanently unconfirmable to countable under `ADR-0004`

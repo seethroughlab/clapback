@@ -22,9 +22,9 @@ and nothing else.
 `SubmissionAgreement` exists because the answer was being discarded: `contribute_embedding` used to
 increment a counter and drop the submitted vector. It now scores every resubmission against the
 stored one and records the similarity with the submitting `client_id`
-(`app/api/routes.py:174-185`), indexed by key (`ix_submission_agreement_key`).
+(`packages/server/app/api/routes.py:174-185`), indexed by key (`ix_submission_agreement_key`).
 
-Nothing consumes it. The lookup path (`app/api/routes.py:135-141`) returns:
+Nothing consumes it. The lookup path (`packages/server/app/api/routes.py:135-141`) returns:
 
 ```python
 EmbeddingResponse(
@@ -38,7 +38,7 @@ that signal.
 
 ### What `contributor_count` actually counts
 
-It is incremented once per POST that hits an existing row (`app/api/routes.py:186`, and identically
+It is incremented once per POST that hits an existing row (`packages/server/app/api/routes.py:186`, and identically
 at `:278` and `:389` for features and analysis detail). It therefore counts **submissions**, and:
 
 - The same install resubmitting after a version bump increments it. `ADR-0004` point 4 says so
