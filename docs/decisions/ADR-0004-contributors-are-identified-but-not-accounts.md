@@ -17,8 +17,20 @@ Implementation:
   and not confirmable without one. **Point 4 is not done** — `contributor_count` is still
   incremented once per POST in `contribute_embedding`, so it counts submissions rather than distinct
   clients and must not be read as independence.
-- Points 6 and 7 are entirely owed. There is no revocation path and **no `DELETE` route anywhere in
-  the API**, which point 7 makes non-optional before the endpoint is public.
+- **Point 7's delete path is built** (2026-09-04): `DELETE /admin/corpus/recordings/{hash}` for
+  takedown and `DELETE /admin/corpus/clients/{client_id}` for retraction, both admin-only. A
+  takedown removes every table keyed on the fingerprint, because leaving the feature rows behind
+  would answer a legal request with a partial deletion.
+- **Point 6's cascade needed a column that did not exist.** Only `submission_agreement` carried a
+  `client_id`, and only for *duplicate* submissions — the row that created an embedding recorded
+  nothing about who sent it, so "deletion by client identifier" had no rows to select and point 6
+  was a promise the schema could not keep. Migration `008` adds `embeddings.client_id`.
+  It stays nullable and is not backfilled: nobody recorded who contributed the 21,890 existing rows,
+  and point 3 already decided what an unattributed submission is worth. The same property that makes
+  them unconfirmable makes them unrevokable, which is a real cost of having accepted them.
+- Point 6's *softer* form — marking submissions unconfirmed rather than deleting them — is still
+  owed, and needs the confirmation machinery [`ADR-0008`](ADR-0008-the-corpus-serves-agreement-not-a-verdict.md)
+  describes.
 - Point 9's ceiling on corpus rows is not implemented. It is the one bound that needs nothing from
   identity, which makes it the cheapest of these to land first.
 
