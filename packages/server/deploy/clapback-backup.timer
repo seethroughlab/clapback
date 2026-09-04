@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the clapback backup nightly
+
+[Timer]
+# 04:12 rather than 04:00: nothing else should be running, and an off-the-hour
+# time is one fewer thing contending with every other cron job on the internet.
+OnCalendar=*-*-* 04:12:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

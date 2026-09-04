@@ -5,7 +5,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.api.deps import DbSession
 from app.config import settings
@@ -189,6 +189,26 @@ async def contribute_embedding(
             status="confirmed",
             contributor_count=existing.contributor_count,
         )
+
+    # **The ceiling is checked here and not above.** A submission that confirms an
+    # existing vector adds no row, so refusing it would reject evidence the corpus
+    # wants while doing nothing for the disk. Only a new key grows the corpus.
+    #
+    # `ADR-0004` point 9: rejected "with a clear error". A contributor who hits
+    # this has done nothing wrong and should be told what happened rather than
+    # given a bare 507.
+    if settings.max_embeddings:
+        total = await db.scalar(select(func.count()).select_from(Embedding))
+        if total is not None and total >= settings.max_embeddings:
+            raise HTTPException(
+                status_code=507,
+                detail=(
+                    f"The corpus has reached its configured ceiling of "
+                    f"{settings.max_embeddings} embeddings and is not accepting new "
+                    f"recordings. Lookups and confirmations of existing recordings "
+                    f"are unaffected. See ADR-0004 point 9."
+                ),
+            )
 
     # Create new embedding
     emb = Embedding(

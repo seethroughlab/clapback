@@ -8,15 +8,45 @@ Extends [ADR-0002](ADR-0002-the-corpus-answers-similarity-queries.md), which dec
 answers similarity queries and deliberately left the host open.
 
 Implementation:
-- Accepted 2026-09-03. Nothing is deployed: there is no AWS configuration in the repository.
-- The service still runs where the Context found it, on the machine hosting its only client, which
-  is what `ADR-0002` point 5 decided it must stop doing.
-- **Point 7's two launch blockers are both open.** No TLS terminates in front of anything because
-  no public instance exists, and writes are still anonymous.
-  [`ADR-0004`](ADR-0004-contributors-are-identified-but-not-accounts.md) decides how the second is
-  answered but none of it is built.
-- Point 6's nightly `pg_dump` to object storage is not set up. It is named as part of shipping
-  rather than as a follow-up, so it blocks the launch alongside point 7.
+- Accepted 2026-09-03. The service still runs where the Context found it, on the machine hosting its
+  only client, which is what `ADR-0002` point 5 decided it must stop doing.
+- **The deployment configuration reached `main` on 2026-09-04**, satisfying point 8 and `ADR-0002`
+  point 7. `packages/server/docker-compose.aws.yml` is the instance this record chose: Postgres 17
+  with pgvector, the application, and Caddy terminating TLS in front of both. Nothing is provisioned
+  yet — this is the configuration, not the deployment.
+- **Point 7's write restriction is topological rather than a second authentication scheme.** Caddy
+  refuses writes on the public host with a body saying the corpus is not closed but not yet open,
+  and 404s the admin surface; Familiar keeps contributing over the private network by reaching the
+  application directly. When [`ADR-0004`](ADR-0004-contributors-are-identified-but-not-accounts.md)
+  lands, one `respond` line is deleted and nothing else changes. Neither Postgres nor the
+  application publishes a port, so there is no way to reach `8000` and bypass either TLS or the
+  restriction.
+- **Point 6's backups are written and not yet installed.** `deploy/backup.sh` dumps to plain gzipped
+  SQL — so a restore needs only `psql`, not a matching `pg_restore` — and uploads to the bucket
+  point 9 says already exists, with a systemd timer beside it. It refuses to upload a dump under
+  1 MB, because a truncated backup that looks like success is worse than a failed one.
+- **`ADR-0004` point 9's row ceiling is implemented**, that point's one bound needing nothing from
+  identity, defaulting to point 11's stated 500,000. It is checked only where a submission would
+  create a new row, so a confirmation of an existing vector is never refused.
+- **Point 9's fourth reason does not survive contact.** It argued "there is already a footprint:
+  Familiar backs up to an S3 bucket in `us-east-1`, so the backup destination in point 6 exists and
+  is paid for". The bucket exists and is Jeff's personal music library — `artwork/`, `audio/`,
+  `videos/`. Using it would mean a public, internet-facing instance holding credentials that can
+  write to an irreplaceable personal archive, in order to protect 488 MB of vectors that
+  contributors could recompute. The trade is backwards. The commons gets its own bucket and a key
+  scoped to one prefix with no `DeleteObject`, which costs cents rather than nothing. **The other
+  three reasons for AWS are untouched**, so the host decision stands; only this argument for it
+  fails.
+- **Point 9's price for Lightsail is right about the number and wrong about what it buys.** Its table
+  records `$10 | 2 | 2 GB | 60 GB SSD, 3 TB transfer, all-in`, and warned the figures were
+  unverified. Checked 2026-09-04 via `lightsail get-bundles`: `small_ipv6_3_0` is **$10** and
+  `small_3_0` is **$12** for identical CPU, RAM and disk — the two dollars buy a public IPv4
+  address. A commons meant for strangers to query cannot be IPv6-only, so **the real figure for this
+  project is $12**, and point 10's comparison against EC2 "landing above ten dollars" narrows
+  accordingly without changing its conclusion. `provision.sh` refuses an IPv6-only bundle unless
+  told otherwise, because the cheaper row is the one that matches the record.
+- Still owed before this is done: an instance, a domain (`ADR-0001` deferred item 6), the `pg_dump`
+  and restore of the 488 MB currently on the NAS, and point 9's disk alert, which is not built.
 
 ## Context
 

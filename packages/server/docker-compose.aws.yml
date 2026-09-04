@@ -1,0 +1,81 @@
+# The public commons, on one small AWS instance — `ADR-0003`.
+#
+# Three services: Postgres with pgvector, the application, and Caddy in front of
+# it terminating TLS. `ADR-0003` point 1 keeps the database on the same box as
+# the app; at this size splitting them doubles the bill and the number of things
+# that can be down.
+#
+# Before first run:
+#   1. cp deploy/env.example .env  and fill it in (DOMAIN is required for TLS)
+#   2. docker compose -f docker-compose.aws.yml up -d
+#   3. docker compose -f docker-compose.aws.yml exec api uv run alembic upgrade head
+#   4. install the backup timer — see deploy/backup.sh
+# A named project, so the instance does not end up with a compose project
+# called "server" taken from the directory name.
+name: clapback
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17  # matches the source instance, so pg_dump/restore is a straight copy
+    environment:
+      POSTGRES_USER: cache
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: cache
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # No `ports:`. `ADR-0005` point 12 — the API is the only way into the corpus,
+    # because every guarantee the corpus makes lives in the application rather
+    # than the schema. Backups reach it through `docker compose exec`, not a port.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cache"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks: [internal]
+    shm_size: 256mb  # pgvector index builds spill to shared memory; the 64mb default is not enough
+
+  api:
+    build: .
+    environment:
+      CACHE_DATABASE_URL: postgresql+asyncpg://cache:${POSTGRES_PASSWORD:?}@postgres:5432/cache
+      CACHE_DB_DISABLE_SSL: "true"   # same host, container network — TLS terminates at Caddy
+      CACHE_ADMIN_PASSWORD: ${CACHE_ADMIN_PASSWORD:?set CACHE_ADMIN_PASSWORD in .env}
+      CACHE_MAX_EMBEDDINGS: ${CACHE_MAX_EMBEDDINGS:-500000}
+    # No `ports:` either. Caddy is the only thing that reaches the app, so there
+    # is no way to bypass TLS or the write restriction by hitting the instance
+    # directly on 8000.
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [internal]
+
+  caddy:
+    image: caddy:2-alpine
+    # `ADR-0003` point 7: TLS terminates in front of the application. Caddy is
+    # here rather than nginx because it obtains and renews the certificate on its
+    # own — on a box whose whole operational argument is that it is one box, a
+    # certificate that renews itself is worth more than a familiar config syntax.
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env — Caddy needs it to obtain a certificate}
+      TLS_EMAIL: ${TLS_EMAIL:?set TLS_EMAIL in .env for Let's Encrypt expiry notices}
+    ports:
+      - "80:80"    # redirects to 443, and answers the ACME HTTP-01 challenge
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data      # certificates — losing this means re-issuing, and rate limits are real
+      - caddy_config:/config
+    depends_on: [api]
+    restart: unless-stopped
+    networks: [internal]
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  internal:
+    driver: bridge

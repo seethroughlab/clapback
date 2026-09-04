@@ -21,6 +21,19 @@ class Settings(BaseSettings):
     # Admin dashboard
     admin_password: str = ""  # Set via CACHE_ADMIN_PASSWORD env var
 
+    # `ADR-0004` point 9's first bound: a ceiling on corpus rows, checked on write
+    # and rejecting past it with a clear error, "raised deliberately as the corpus
+    # grows, so growth is a decision rather than a surprise".
+    #
+    # It is the only one of that point's three bounds that needs nothing from
+    # identity, which is why it can exist before `ADR-0004` is built. It bounds
+    # the total rather than the rate: rate limits let a determined client add rows
+    # forever, just slowly, and the failure this guards against is a full disk on
+    # a 2 GB instance rather than an attacker.
+    #
+    # 0 disables it. The default is `ADR-0003` point 11's stated comfortable limit.
+    max_embeddings: int = 500_000
+
     # Server
     debug: bool = False
 
