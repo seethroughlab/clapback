@@ -81,20 +81,43 @@ query  = embed_text("dreamy ambient with piano")   # the same space</code></pre>
 </div>
 
 <div class="card">
+    <h2>Ask what a vector is near</h2>
+    <pre><code>curl -X POST https://{{ host }}/v1/similar \
+  -H 'Content-Type: application/json' \
+  -d '{"embedding": [ ...512 floats... ], "limit": 20, "analysis_version": 7}'</code></pre>
+    <p class="muted">
+        Returns the nearest recordings by cosine similarity, each labelled with the pipeline that
+        produced it — vectors from two pipelines are not comparable, so a result that did not say
+        which one it came from would invite exactly that mistake. Backed by an HNSW index:
+        <strong>3&nbsp;ms</strong> across the corpus.
+    </p>
+    <p class="muted">
+        <strong>It returns fingerprint hashes, which is a real limit and not an oversight.</strong>
+        If you do not already hold the audio, you cannot resolve what comes back. That makes this
+        useful for "does the corpus already know this recording" and not yet for "what does this
+        record I do not own sound like" — the second needs a recording id as a second key, which is
+        decided and unbuilt.
+    </p>
+</div>
+
+<div class="card">
     <h2>Endpoints</h2>
     <table>
         <tr><th>Method</th><th>Path</th><th>Status</th></tr>
         <tr><td><code>GET</code></td><td><code>/v1/embeddings/{hash}</code></td><td>open</td></tr>
+        <tr><td><code>POST</code></td><td><code>/v1/similar</code></td><td>open · a read that needs a body</td></tr>
         <tr><td><code>GET</code></td><td><code>/v1/features/{hash}</code></td><td>open · legacy</td></tr>
         <tr><td><code>GET</code></td><td><code>/v1/analysis-detail/{hash}</code></td><td>open · legacy</td></tr>
         <tr><td><code>GET</code></td><td><code>/health</code>, <code>/health/db</code></td><td>open</td></tr>
-        <tr><td><code>POST</code></td><td><em>any write</em></td><td><strong>403 — not yet open</strong></td></tr>
+        <tr><td><code>POST</code></td><td><code>/v1/embeddings</code></td><td><strong>open</strong></td></tr>
     </table>
     <p class="muted">
-        Writes are refused at the edge, deliberately. A public corpus needs a way to retract a
-        recording before it accepts one from a stranger, and there is no delete path yet —
+        <strong>Contribution is open.</strong> It was refused until the corpus had a way to retract a
+        recording, which
         <a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0004-contributors-are-identified-but-not-accounts.md">ADR-0004</a>
-        makes that a precondition rather than a follow-up. The <code>features</code> endpoints are
+        makes a precondition rather than a follow-up; that path now exists. Send a
+        <code>client_id</code> — any opaque string your installation keeps — or your submission is
+        accepted and can never count toward independent agreement. The <code>features</code> endpoints are
         legacy: they still serve {{ "{:,}".format(counts.features) }} rows and are not where this is
         going, because bpm and key are claims about the world that consensus cannot verify — which
         is what stopped AcousticBrainz.

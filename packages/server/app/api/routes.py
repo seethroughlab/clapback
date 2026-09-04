@@ -46,6 +46,32 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float | None:
     return max(-1.0, min(1.0, value))
 
 
+class SimilarRequest(BaseModel):
+    """Ask the corpus what a vector is near."""
+
+    embedding: list[float] = Field(..., min_length=512, max_length=512)
+    limit: int = Field(default=20, ge=1, le=100)
+    #: Only compare against vectors from this pipeline. Defaults to none, meaning
+    #: every pipeline in the corpus — which is almost never what a caller wants
+    #: and is the default only because filtering to a version they guess wrong
+    #: returns nothing at all, silently.
+    analysis_version: int | None = Field(default=None, ge=1)
+
+
+class Neighbour(BaseModel):
+    """One result. A hash, not a recording — see `similar`'s docstring."""
+
+    fingerprint_hash: str
+    similarity: float
+    analysis_version: int
+    clap_model_version: str
+
+
+class SimilarResponse(BaseModel):
+    neighbours: list[Neighbour]
+    searched: int
+
+
 # --- Embedding models ---
 
 
@@ -225,6 +251,65 @@ async def contribute_embedding(
     await db.commit()
 
     return ContributeResponse(status="created", contributor_count=1)
+
+
+@router.post("/similar", response_model=SimilarResponse)
+@limiter.limit(settings.lookup_rate_limit)
+async def similar(
+    request: Request,
+    req: SimilarRequest,
+    db: DbSession,
+) -> SimilarResponse:
+    """Nearest recordings to a vector — `ADR-0002` point 1's whole reason to exist.
+
+    "Given a vector, it returns the nearest recordings in the corpus. This is the
+    capability the commons exists to provide; exact-key lookup is a cache, and a
+    cache is not worth a public endpoint."
+
+    **It returns fingerprint hashes, and that is the known limit rather than an
+    oversight.** `ADR-0002` point 4 is explicit: a caller who does not already
+    hold the audio cannot resolve what came back, so this is useful for "is this
+    recording already known" and not yet for "what does this record I do not own
+    sound like". The second needs a recording id as a second key — `ADR-0001`
+    deferred item 4 — and that record says plainly: do not ship the endpoint and
+    call the capability delivered.
+
+    A read, so it is unauthenticated (`ADR-0004` point 8) and carries the lookup
+    rate limit rather than the contribution one.
+    """
+    stmt = select(
+        Embedding.fingerprint_hash,
+        Embedding.analysis_version,
+        Embedding.clap_model_version,
+        # `<=>` is cosine *distance*; similarity is what every other number in
+        # this project is quoted as, so it is converted here rather than leaving
+        # a caller to notice the sign.
+        (1 - Embedding.embedding.cosine_distance(req.embedding)).label("similarity"),
+    )
+    if req.analysis_version is not None:
+        stmt = stmt.where(Embedding.analysis_version == req.analysis_version)
+    stmt = stmt.order_by(Embedding.embedding.cosine_distance(req.embedding)).limit(req.limit)
+
+    rows = (await db.execute(stmt)).all()
+    searched = await db.scalar(
+        select(func.count()).select_from(Embedding).where(
+            Embedding.analysis_version == req.analysis_version
+        )
+        if req.analysis_version is not None
+        else select(func.count()).select_from(Embedding)
+    )
+    return SimilarResponse(
+        neighbours=[
+            Neighbour(
+                fingerprint_hash=r.fingerprint_hash,
+                similarity=float(r.similarity),
+                analysis_version=r.analysis_version,
+                clap_model_version=r.clap_model_version,
+            )
+            for r in rows
+        ],
+        searched=searched or 0,
+    )
 
 
 # --- Features endpoints ---
