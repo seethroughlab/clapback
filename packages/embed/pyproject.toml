@@ -4,7 +4,11 @@ version = "0.1.0"
 description = "Deterministic CLAP audio and text embeddings, without torch or transformers"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = "MIT"
+# Shipped, not merely declared: a wheel that claims a licence without carrying its
+# text gives a reader nothing to rely on. A copy lives here as well as at the repo
+# root because hatchling builds from this directory and cannot reach above it.
+license-files = ["LICENSE"]
 
 # No torch, no transformers. That is the point of the package, and it is
 # measured rather than assumed: the ONNX path reproduces both the audio and the
