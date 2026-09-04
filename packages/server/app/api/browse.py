@@ -174,6 +174,17 @@ async def api_page(request: Request, db: DbSession) -> HTMLResponse:
     )
 
 
+@browse_router.get("/map", response_class=HTMLResponse)
+async def map_page(request: Request) -> HTMLResponse:
+    """The corpus as a picture.
+
+    Serves a template and a static artifact; the projection itself is computed
+    offline by `scripts/build_map.py`, because UMAP's dependencies have no
+    business on an instance sized for a vector index (`ADR-0001` point 3).
+    """
+    return templates.TemplateResponse(request, "map.html", {})
+
+
 @browse_router.get("/browse/{fingerprint_hash}", response_class=HTMLResponse)
 @limiter.limit(settings.lookup_rate_limit)
 async def detail(

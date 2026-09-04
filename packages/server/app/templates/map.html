@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}Map · clapback{% endblock %}
+
+{% block body %}
+<a class="back-link" href="/">← clapback</a>
+
+<h1>🎵 The shape of the corpus</h1>
+<p class="tagline">
+    Every embedding in the commons, projected from 512 dimensions to two. Points that sit together
+    sounded alike to the model. Nothing here is a title or an artist — the corpus holds neither.
+</p>
+
+<div class="card">
+    <canvas id="map" width="1200" height="760"></canvas>
+    <p class="muted" id="map-caption">Loading…</p>
+</div>
+
+<div class="card">
+    <h2>What you are looking at</h2>
+    <p class="muted">
+        512 numbers per recording, reduced to two by UMAP so they fit on a screen. The reduction is
+        <strong>lossy and not unique</strong>: distances between distant clusters mean much less than
+        the fact that a cluster is a cluster, and a different random seed would rotate the whole
+        picture. What survives is the neighbourhood structure — which recordings the model considered
+        close to which.
+    </p>
+    <p class="muted">
+        There are no labels because there is nothing to label with. The corpus is keyed on the SHA256
+        of an AcoustID fingerprint and holds no titles, artists or filenames, so a point can be
+        <em>near</em> other points and still not be nameable. That is the privacy property working as
+        intended rather than a missing feature.
+    </p>
+</div>
+
+<div class="card">
+    <h2>Reproduce it</h2>
+    <p class="muted">
+        The projection is a committed artifact with a date on it, not something the server computes —
+        UMAP pulls in numba and llvmlite, and the instance is sized for a vector index rather than a
+        toolchain. <code>packages/server/scripts/build_map.py</code> regenerates it, and the seed is
+        pinned so the same corpus gives the same picture.
+    </p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(async () => {
+  const el = document.getElementById('map');
+  const cap = document.getElementById('map-caption');
+  const ctx = el.getContext('2d');
+  let data;
+  try {
+    data = await (await fetch('/static/map.json')).json();
+  } catch (e) {
+    cap.textContent = 'Could not load the projection.';
+    return;
+  }
+
+  const {xy, grid, count, generated, analysis_version} = data;
+  const pad = 24;
+  const W = el.width - pad * 2, H = el.height - pad * 2;
+
+  // Additive alpha rather than opaque dots: 21,802 points on 1200x760 overlap
+  // heavily, and a solid fill would show an outline where the interesting thing
+  // is the density.
+  ctx.fillStyle = '#12122a';
+  ctx.fillRect(0, 0, el.width, el.height);
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = 'rgba(124, 58, 237, 0.30)';
+
+  for (let i = 0; i < xy.length; i += 2) {
+    const x = pad + (xy[i] / grid) * W;
+    const y = pad + (1 - xy[i + 1] / grid) * H;
+    ctx.beginPath();
+    ctx.arc(x, y, 1.6, 0, 6.2832);
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+
+  cap.textContent =
+    `${count.toLocaleString()} embeddings · analysis_version ${analysis_version} · projected ${generated}`;
+})();
+</script>
+{% endblock %}
