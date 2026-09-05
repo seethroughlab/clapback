@@ -11,8 +11,20 @@ is rarely.
 So the output is a committed artifact with a date on it, regenerated
 deliberately — closer to a release than to a cache.
 
-    uv run --with umap-learn --with numpy --with psycopg2-binary \\
-        python scripts/build_map.py --dsn postgresql://... --out app/static/map.json
+**It reads an export, not the database.** `ADR-0005` point 12 gives the corpus no
+reachable database port — the API is the only way in — so there is no DSN to hand
+this, and UMAP cannot run on the instance because that is the entire reason this
+is offline. The workflow is two steps and both are honest about where they run:
+
+    # on the instance, where the database is
+    docker compose -f docker-compose.aws.yml exec -T postgres psql -U cache -c \\
+      "COPY (SELECT embedding::text FROM embeddings WHERE analysis_version = 7)
+       TO STDOUT WITH (FORMAT csv)" | gzip -9 > corpus.csv.gz
+
+    # anywhere with umap-learn
+    uv run --with umap-learn --with scikit-learn --with numpy \\
+        python scripts/build_map.py --from corpus.csv.gz --analysis-version 7 \\
+        --out app/static/map.json
 
 What it emits and what it leaves out:
 
@@ -34,28 +46,36 @@ which pipeline ran rather than what anything sounds like.
 from __future__ import annotations
 
 import argparse
+import csv
+import gzip
 import json
 import sys
 from datetime import UTC, datetime
 
 try:
     import numpy as np
-    import psycopg2
     import umap
 except ImportError as exc:  # pragma: no cover - offline tool
     sys.exit(f"{exc}. This is an offline tool — see the module docstring for how to run it.")
 
 
-def fetch(dsn: str, analysis_version: int) -> np.ndarray:
-    with psycopg2.connect(dsn) as conn, conn.cursor() as cur:
-        cur.execute(
-            "SELECT embedding::text FROM embeddings WHERE analysis_version = %s",
-            (analysis_version,),
-        )
-        rows = cur.fetchall()
+def fetch(path: str) -> np.ndarray:
+    """Read vectors from a `COPY ... TO STDOUT WITH (FORMAT csv)` export.
+
+    One column, each row a pgvector literal. `csv.field_size_limit` is raised
+    because a 512-float literal is around 6 KB and the default is 128 KB — fine
+    today, and a silent failure the first time a wider vector appears.
+    """
+    csv.field_size_limit(10**7)
+    opener = gzip.open if path.endswith(".gz") else open
+    rows = []
+    with opener(path, "rt") as fh:
+        for row in csv.reader(fh):
+            if row and row[0].startswith("["):
+                rows.append(np.fromstring(row[0].strip("[]"), sep=",", dtype=np.float32))
     if not rows:
-        sys.exit(f"no embeddings at analysis_version {analysis_version}")
-    return np.vstack([np.fromstring(r[0].strip("[]"), sep=",", dtype=np.float32) for r in rows])
+        sys.exit(f"no vectors found in {path}")
+    return np.vstack(rows)
 
 
 def project(X: np.ndarray, seed: int) -> np.ndarray:
@@ -82,14 +102,15 @@ def quantise(Y: np.ndarray, grid: int = 1000) -> list[int]:
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    p.add_argument("--dsn", required=True, help="postgresql://… connection string")
+    p.add_argument("--from", dest="source", required=True,
+                   help="a CSV (or .csv.gz) export of one column of pgvector literals")
     p.add_argument("--analysis-version", type=int, default=7,
-                   help="project one pipeline only — mixing them is meaningless")
+                   help="recorded in the output; the export is what actually selects a pipeline")
     p.add_argument("--out", required=True)
     p.add_argument("--seed", type=int, default=0, help="UMAP is stochastic; pin it so the map is reproducible")
     args = p.parse_args()
 
-    X = fetch(args.dsn, args.analysis_version)
+    X = fetch(args.source)
     print(f"projecting {X.shape[0]:,} vectors from analysis_version {args.analysis_version}")
     Y = project(X, args.seed)
     payload = {
