@@ -23,6 +23,7 @@ class Embedding(Base):
     __tablename__ = "embeddings"
     __table_args__ = (
         Index("ix_embeddings_created_at", "created_at"),
+        Index("ix_embeddings_pipeline_version", "pipeline_version"),
     )
 
     # Composite primary key
@@ -44,6 +45,27 @@ class Embedding(Base):
     #: contributed those, and `ADR-0004` point 3 already decided what that means:
     #: accepted, stored, never confirmable. It is not a gap to backfill.
     client_id: Mapped[str | None] = mapped_column(String(64))
+
+    #: The pipeline the contributor says produced this vector — `ADR-0006` point 1.
+    #:
+    #: **Neither key component means what the key needs to mean.**
+    #: `clap_model_version` is the checkpoint, and windowing or pooling can move
+    #: every vector without touching it; `analysis_version` is the client's own
+    #: counter, whose history includes a bump taken to stay in step with an
+    #: unrelated feature version. `PIPELINE_VERSION` is composed from all five
+    #: things that can change a vector, so two vectors are comparable exactly when
+    #: it matches.
+    #:
+    #: Nullable, and null on every row that exists today: nothing recorded the
+    #: pipeline for the 21,890 legacy rows, and the 25,596 v7 rows were sent by a
+    #: client that had no field to declare it in. `ADR-0006` point 5 is explicit
+    #: that those are recomputed rather than relabelled, so this is never
+    #: backfilled — a value here was asserted by whoever sent the vector.
+    #:
+    #: Phase 1 of point 6 stores it and keys on nothing new. Phase 4 makes
+    #: `(fingerprint_hash, pipeline_version)` the key and starts rejecting
+    #: submissions that decline to declare one.
+    pipeline_version: Mapped[str | None] = mapped_column(String(200))
 
     # Metadata
     contributor_count: Mapped[int] = mapped_column(Integer, default=1)
@@ -105,6 +127,17 @@ class SubmissionAgreement(Base):
     #: mistake `contributor_count` already makes — it counts POSTs, not contributors.
     #: Nullable because existing clients do not send it and must keep working.
     client_id: Mapped[str | None] = mapped_column(String(64))
+
+    #: The pipeline both sides declared. Both, singular — `ADR-0006` point 7 says a
+    #: submission whose pipeline differs from the stored row's must never reach this
+    #: table, so a row here is always an agreement between two vectors that claimed
+    #: the same provenance. Recording a mismatch would put version drift into the
+    #: measurement that exists to detect *contributor* drift, and nothing after the
+    #: fact could separate the two.
+    #:
+    #: Null means neither side declared one, which is every row until phase 2 of
+    #: point 6 lands in Familiar.
+    pipeline_version: Mapped[str | None] = mapped_column(String(200))
 
     recorded_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now()

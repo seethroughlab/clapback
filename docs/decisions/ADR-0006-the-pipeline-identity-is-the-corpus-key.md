@@ -11,11 +11,25 @@ point 10**, which kept the existing embeddings and marked them unconfirmed; poin
 them instead.
 
 Implementation:
-- Accepted 2026-09-04. Nothing is built; every phase in point 6 is outstanding.
-- Phase 1 is the smallest useful step and needs nothing from Familiar: the server accepting and
-  storing `pipeline_version` while the key is unchanged rejects nothing and breaks no client.
-- Point 6 phase 4 is blocked on `ADR-0004` point 7's delete path, which does not exist. That
-  dependency is a prerequisite rather than a parallel track.
+- Accepted 2026-09-04. **Point 6 phase 1 is built** (2026-09-05); phases 2 to 4 are outstanding.
+- Phase 1: `pipeline_version` is accepted on `POST /v1/embeddings`, stored on the row
+  (`packages/server/app/db/models.py`, migration `010_embeddings_pipeline_version`), returned by
+  the lookup and by `/v1/similar`, and offered there as a filter. The key is unchanged, the column
+  is nullable, and nothing is rejected — so no client in the field notices.
+- **Point 7's guard ships with phase 1 rather than with phase 4**, because it is needed most while
+  the key still excludes the pipeline: two incomparable vectors can land on one row today, and
+  their cosine similarity would be a real number measuring version drift inside the table that
+  exists to measure contributor drift. `contribute_embedding` records an agreement only when the
+  submitted and stored pipelines are equal, which includes both being absent — the legacy case,
+  unchanged.
+- **No stored row is relabelled**, not even a null one from a submission that declares a pipeline.
+  Point 5 says the existing rows are recomputed; writing a pipeline onto a vector nobody can vouch
+  for would assert exactly the provenance phase 4 is built to trust.
+- Every one of the 46,987 rows in the corpus is null here, and that is the honest state: nothing
+  recorded the pipeline for the 21,890 legacy rows, and the 25,596 v7 rows were contributed by a
+  client with no field to declare it in. Phase 2 is what starts populating it.
+- Point 6 phase 4 needed `ADR-0004` point 7's delete path, **which now exists** — that
+  prerequisite is met, and phase 4 is blocked only on phases 2 and 3 landing in Familiar.
 - Point 5 supersedes `ADR-0001` point 10, whose `Status:` line now records it.
 
 ## Context

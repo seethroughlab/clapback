@@ -96,11 +96,41 @@ query  = embed_text("dreamy ambient with piano")   # the same space</code></pre>
         <strong>3&nbsp;ms</strong> across the corpus.
     </p>
     <p class="muted">
+        <code>analysis_version</code> is a contributor's own counter and only approximates
+        comparability. <code>pipeline_version</code> is the real filter, and it is accepted here
+        now — but it matches nothing yet, because no stored row declares one. Leave it out until
+        the corpus reports otherwise.
+    </p>
+    <p class="muted">
         <strong>It returns fingerprint hashes, which is a real limit and not an oversight.</strong>
         If you do not already hold the audio, you cannot resolve what comes back. That makes this
         useful for "does the corpus already know this recording" and not yet for "what does this
         record I do not own sound like" — the second needs a recording id as a second key, which is
         decided and unbuilt.
+    </p>
+</div>
+
+<div class="card">
+    <h2>Contribute one</h2>
+    <pre><code>curl -X POST https://{{ host }}/v1/embeddings \
+  -H 'Content-Type: application/json' \
+  -d '{"fingerprint_hash": "...", "embedding": [ ...512 floats... ],
+       "analysis_version": 7, "clap_model_version": "laion/clap-htsat-unfused",
+       "client_id": "any-opaque-string-your-install-keeps",
+       "pipeline_version": "laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32"}'</code></pre>
+    <p class="muted">
+        First write wins. A submission for a recording the corpus already holds is not discarded —
+        it is compared against the stored vector and the similarity recorded, which is how this
+        finds out whether independent machines actually agree.
+    </p>
+    <p class="muted">
+        <strong>Send <code>pipeline_version</code>.</strong> It is
+        <code>clapback_embed.PIPELINE_VERSION</code>, and it is the only field that says whether
+        your vector can be compared with anyone else's: the checkpoint alone does not, since
+        windowing or pooling can move every vector without changing it. Optional today and
+        <a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0006-the-pipeline-identity-is-the-corpus-key.md">required once it becomes part of the key</a>.
+        The server believes what you send — it catches the forgotten bump and the stale build,
+        not a contributor who lies.
     </p>
 </div>
 

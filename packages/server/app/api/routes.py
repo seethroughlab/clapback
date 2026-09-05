@@ -56,6 +56,12 @@ class SimilarRequest(BaseModel):
     #: and is the default only because filtering to a version they guess wrong
     #: returns nothing at all, silently.
     analysis_version: int | None = Field(default=None, ge=1)
+    #: Only compare against vectors from this pipeline. This is the filter that
+    #: actually means "comparable" (`ADR-0006` point 1); `analysis_version` above
+    #: only approximates it. It matches nothing until phase 2 of point 6 lands,
+    #: because no stored row declares a pipeline yet — so it stays optional and
+    #: defaults to unfiltered rather than becoming a way to silently get nothing.
+    pipeline_version: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 class Neighbour(BaseModel):
@@ -65,6 +71,10 @@ class Neighbour(BaseModel):
     similarity: float
     analysis_version: int
     clap_model_version: str
+    #: Null until the corpus holds rows contributed with a declared pipeline. A
+    #: caller ranking these should know which results are comparable with its own
+    #: vector and which are merely nearby in a mixed space.
+    pipeline_version: str | None = None
 
 
 class SimilarResponse(BaseModel):
@@ -90,6 +100,16 @@ class EmbeddingRequest(BaseModel):
     #: POSTs rather than contributors. Not an identity: a random UUID generated once
     #: per install is exactly enough, and the server never needs to know more.
     client_id: str | None = Field(default=None, max_length=64)
+    #: What produced this vector — `ADR-0006` point 1. Optional in this phase and
+    #: required in phase 4, which is the whole shape of point 6: the server learns
+    #: to store it before any client is obliged to send it, so no contract breaks
+    #: at any point in the sequence (`ADR-0005` point 10).
+    #:
+    #: Asserted, not proven (point 8). A client sends a string and the server
+    #: believes it. That catches the forgotten bump and the stale build, which are
+    #: the realistic failures; it is not a defence against a contributor who lies,
+    #: and nothing here should be described as if it were.
+    pipeline_version: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 class EmbeddingResponse(BaseModel):
@@ -99,6 +119,10 @@ class EmbeddingResponse(BaseModel):
     embedding: list[float]
     analysis_version: int
     clap_model_version: str
+    #: Null for every row contributed before phase 2, which is all of them today.
+    #: A caller comparing two vectors should treat null as "unknown", not as
+    #: "same as mine".
+    pipeline_version: str | None = None
     contributor_count: int
 
 
@@ -163,6 +187,7 @@ async def lookup_embedding(
         embedding=list(emb.embedding),
         analysis_version=emb.analysis_version,
         clap_model_version=emb.clap_model_version,
+        pipeline_version=emb.pipeline_version,
         contributor_count=emb.contributor_count,
     )
 
@@ -197,18 +222,36 @@ async def contribute_embedding(
         #
         # Recording only. First-write-wins is unchanged, the stored vector is
         # untouched, and no client can observe any difference.
+        # **`ADR-0006` point 7: a mismatched submission is never recorded as
+        # disagreement.** Until phase 4 the key does not include the pipeline, so
+        # two genuinely incomparable vectors can land on the same row — and their
+        # cosine similarity would be a real number that means nothing. Writing it
+        # here would put version drift into the measurement that exists to detect
+        # contributor drift, and no later analysis could separate them.
+        #
+        # Equality rather than "both declared": both null is the legacy case and
+        # keeps recording exactly as before, while one side declaring and the
+        # other not is precisely the unknown this guard exists for.
+        comparable = req.pipeline_version == existing.pipeline_version
+
         similarity = _cosine_similarity(req.embedding, list(existing.embedding))
-        if similarity is not None:
+        if similarity is not None and comparable:
             db.add(
                 SubmissionAgreement(
                     fingerprint_hash=req.fingerprint_hash,
                     analysis_version=req.analysis_version,
                     clap_model_version=req.clap_model_version,
+                    pipeline_version=req.pipeline_version,
                     similarity=similarity,
                     client_id=req.client_id,
                 )
             )
 
+        # **The stored row is not relabelled with the submitted pipeline**, even
+        # when it has none and the submission declares one. `ADR-0006` point 5
+        # decided the existing rows are recomputed rather than relabelled: writing
+        # a pipeline here would assert, on a vector nobody can vouch for, exactly
+        # the provenance phase 4 is going to trust.
         existing.contributor_count += 1
         await db.commit()
         return ContributeResponse(
@@ -246,6 +289,10 @@ async def contribute_embedding(
         # cascade over. Absent for a client that sends none, which is every
         # client that predates the field.
         client_id=req.client_id,
+        # Stored, not keyed on — phase 1 of `ADR-0006` point 6. Phase 4 promotes it
+        # to the key, and it can only do that if the rows contributed between now
+        # and then already carry it.
+        pipeline_version=req.pipeline_version,
     )
     db.add(emb)
     await db.commit()
@@ -281,23 +328,29 @@ async def similar(
         Embedding.fingerprint_hash,
         Embedding.analysis_version,
         Embedding.clap_model_version,
+        Embedding.pipeline_version,
         # `<=>` is cosine *distance*; similarity is what every other number in
         # this project is quoted as, so it is converted here rather than leaving
         # a caller to notice the sign.
         (1 - Embedding.embedding.cosine_distance(req.embedding)).label("similarity"),
     )
+    # Built once and applied to both the ranking query and the `searched` count
+    # below. Spelling them out twice is how a count starts quietly disagreeing
+    # with its own result set the moment a filter is added.
+    filters = []
     if req.analysis_version is not None:
-        stmt = stmt.where(Embedding.analysis_version == req.analysis_version)
+        filters.append(Embedding.analysis_version == req.analysis_version)
+    if req.pipeline_version is not None:
+        filters.append(Embedding.pipeline_version == req.pipeline_version)
+    if filters:
+        stmt = stmt.where(*filters)
     stmt = stmt.order_by(Embedding.embedding.cosine_distance(req.embedding)).limit(req.limit)
 
     rows = (await db.execute(stmt)).all()
-    searched = await db.scalar(
-        select(func.count()).select_from(Embedding).where(
-            Embedding.analysis_version == req.analysis_version
-        )
-        if req.analysis_version is not None
-        else select(func.count()).select_from(Embedding)
-    )
+    count_stmt = select(func.count()).select_from(Embedding)
+    if filters:
+        count_stmt = count_stmt.where(*filters)
+    searched = await db.scalar(count_stmt)
     return SimilarResponse(
         neighbours=[
             Neighbour(
@@ -305,6 +358,7 @@ async def similar(
                 similarity=float(r.similarity),
                 analysis_version=r.analysis_version,
                 clap_model_version=r.clap_model_version,
+                pipeline_version=r.pipeline_version,
             )
             for r in rows
         ],
