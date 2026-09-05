@@ -101,6 +101,7 @@ Response 200:
   "embedding": [0.1, 0.2, ...],
   "analysis_version": 5,
   "clap_model_version": "laion/clap-htsat-unfused:v1",
+  "pipeline_version": null,
   "contributor_count": 3
 }
 ```
@@ -113,9 +114,26 @@ Request body:
   "fingerprint_hash": "abc123...",
   "embedding": [0.1, 0.2, ...],
   "analysis_version": 5,
-  "clap_model_version": "laion/clap-htsat-unfused:v1"
+  "clap_model_version": "laion/clap-htsat-unfused:v1",
+  "client_id": "any-opaque-string-your-install-keeps",
+  "pipeline_version": "laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32"
 }
 ```
+
+`client_id` and `pipeline_version` are both optional and both worth sending. Without a
+`client_id` a submission cannot count toward independent agreement
+([`ADR-0004`](docs/decisions/ADR-0004-contributors-are-identified-but-not-accounts.md)
+point 3). `pipeline_version` is `clapback_embed.PIPELINE_VERSION`, and it is the only
+field that says whether your vector is comparable with anyone else's — the checkpoint
+alone does not, since windowing or pooling can move every vector without changing it.
+[`ADR-0006`](docs/decisions/ADR-0006-the-pipeline-identity-is-the-corpus-key.md) makes
+it part of the key in a later phase, and it is optional until then. It is asserted
+rather than proven: the server believes what you send, which catches the forgotten
+bump and the stale build and is not a defence against a contributor who lies.
+
+Every row in the corpus reports `"pipeline_version": null` today. Nothing recorded it
+for the legacy rows, and no backfill would be honest — `ADR-0006` point 5 recomputes
+them instead.
 
 ### Features (legacy)
 

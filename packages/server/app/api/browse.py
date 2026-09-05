@@ -233,6 +233,11 @@ async def detail(
             vec = [float(x) for x in e.embedding] if e.embedding is not None else []
             emb_views.append({
                 "clap_model_version": e.clap_model_version,
+                # Null on every row contributed before `ADR-0006` phase 2, which
+                # is the whole corpus today. The template says so rather than
+                # omitting the line, because "not recorded" is the interesting
+                # fact about these rows.
+                "pipeline_version": e.pipeline_version,
                 "contributor_count": e.contributor_count,
                 "dims": len(vec),
                 "preview": fmt_vec_preview(vec),

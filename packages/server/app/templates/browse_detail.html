@@ -20,6 +20,10 @@
 <div class="vector-row">
     <div class="vector-meta">
         <span><strong>CLAP model:</strong> <code>{{ e.clap_model_version }}</code></span>
+        <span><strong>Pipeline:</strong>
+            {% if e.pipeline_version %}<code>{{ e.pipeline_version }}</code>
+            {% else %}<span class="muted">not recorded</span>{% endif %}
+        </span>
         <span><strong>Contributors:</strong> {{ "{:,}".format(e.contributor_count) }}</span>
         <span><strong>Dims:</strong> {{ e.dims }}</span>
         <span class="muted">Created {{ e.created_at | fmt_dt }} · Last accessed {{ e.last_accessed_at | fmt_dt }}</span>
