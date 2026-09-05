@@ -25,9 +25,12 @@ Implementation:
 - **No stored row is relabelled**, not even a null one from a submission that declares a pipeline.
   Point 5 says the existing rows are recomputed; writing a pipeline onto a vector nobody can vouch
   for would assert exactly the provenance phase 4 is built to trust.
-- Every one of the 46,987 rows in the corpus is null here, and that is the honest state: nothing
-  recorded the pipeline for the 21,890 legacy rows, and the 25,596 v7 rows were contributed by a
-  client with no field to declare it in. Phase 2 is what starts populating it.
+- **Deployed 2026-09-05**, migration `010` applied to the live corpus. Measured immediately after:
+  47,486 rows, 0 of them declaring a pipeline. That is the honest state rather than a gap — nothing
+  recorded the pipeline for the 21,890 legacy rows, and the v7 rows were contributed by a client
+  with no field to declare it in. Phase 2 is what starts populating it. `/v1/similar` accordingly
+  answers a `pipeline_version` filter with `{"neighbours": [], "searched": 0}`, which is the
+  correct answer and looks like a broken endpoint; the API page says so in as many words.
 - Point 6 phase 4 needed `ADR-0004` point 7's delete path, **which now exists** — that
   prerequisite is met, and phase 4 is blocked only on phases 2 and 3 landing in Familiar.
 - Point 5 supersedes `ADR-0001` point 10, whose `Status:` line now records it.

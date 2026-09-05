@@ -110,7 +110,7 @@ being where the agreement threshold sits and what the corpus does with it.
 | 4 | The recording-id key | `ADR-0002` point 4 makes it a prerequisite: similarity search over a hash-keyed corpus returns hashes nobody can resolve |
 | 6 | The rename, and what the domain serves | Cheap, and last on purpose — nothing above depends on it |
 
-### What is actually running, as of 2026-09-04
+### What is actually running, as of 2026-09-05
 
 The commons is public at **https://clapback.seethroughlab.com** — one AWS instance, TLS via Caddy,
 nightly `pg_dump` to `s3://clapback-backup`, and a corpus being replaced in place by a backfill from
@@ -119,15 +119,18 @@ deployed, and the tool in `packages/cli`.
 
 Shipped since the records were written: `ADR-0002`'s similarity endpoint (HNSW, ~3 ms),
 `ADR-0003`'s deployment and backups, `ADR-0004` point 7's delete path and point 9's row ceiling,
-`ADR-0005`'s restructure and PyPI release, and `ADR-0009`'s tool.
+`ADR-0005`'s restructure and PyPI release, `ADR-0006` phase 1 and point 7's guard, and
+`ADR-0009`'s tool.
 
 **Still unbuilt, and the first is the one with consequences:**
 
 - **`ADR-0004` point 9's disk alert.** "A full disk is an outage; 80% of one is a Tuesday
   afternoon." The row ceiling bounds growth; nothing watches the disk.
-- **`ADR-0006` entirely** — the pipeline identity as the corpus key, and the four-phase migration
-  that makes the corpus coherent. The corpus still holds 21,890 middle-10s vectors from the pipeline
-  `ADR-0104` rejected.
+- **`ADR-0006` phases 2 to 4.** Phase 1 shipped 2026-09-05: the server accepts, stores and reports
+  `pipeline_version`, and point 7's guard keeps a mismatched submission out of
+  `submission_agreement`. The key is unchanged and every one of the 47,486 rows declares nothing,
+  because the next step is Familiar's — phase 2 is the client sending the field. The corpus still
+  holds 21,890 middle-10s vectors from the pipeline `ADR-0104` rejected; they go in phase 4.
 - **`ADR-0007`**, deliberately, until a second contributor exists.
 - **`ADR-0008`** — the corpus cannot yet tell anyone how corroborated a vector is.
 - **`ADR-0009` point 6** — the tool does not contribute yet; only its local half is built.
@@ -166,10 +169,13 @@ one exposes no port.
 **The version that lives in two places.** `PIPELINE_VERSION` here and `EMBEDDING_VERSION` in
 Familiar's `backend/app/config.py` are the same fact — the identity of the embedding pipeline —
 maintained separately by hand. Moving one without the other contributes incomparable vectors under a
-key asserting they are comparable. `ADR-0006` (`proposed`) makes `PIPELINE_VERSION` the key itself so
-the case cannot arise, and phases the change so the endpoint contract never breaks. Until it lands,
-nothing detects the drift, and **any change that moves `PIPELINE_VERSION` requires a matching bump in
-Familiar in the same breath.**
+key asserting they are comparable. `ADR-0006` makes `PIPELINE_VERSION` the key itself so
+the case cannot arise, and phases the change so the endpoint contract never breaks. **Its phase 1 is
+deployed**: the server stores a declared `pipeline_version` and reports it, but nothing sends one
+yet, so nothing detects the drift and **any change that moves `PIPELINE_VERSION` still requires a
+matching bump in Familiar in the same breath.** Phase 2 — Familiar sending
+`pipeline_version=clapback_embed.PIPELINE_VERSION` on every contribution — is the next step, and it
+is the one that starts closing this.
 
 ## Development
 
