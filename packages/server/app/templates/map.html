@@ -38,6 +38,28 @@
 </div>
 
 <div class="card">
+    <h2>What changed when the pipeline did</h2>
+    <p class="muted">
+        This corpus was rebuilt on 2026-09-05. Until then it held vectors computed from the
+        <em>middle ten seconds</em> of each recording; it now holds whole-track means. The
+        difference is visible in the picture rather than only in a changelog — the same measurement
+        over both:
+    </p>
+    <table>
+        <tr><th></th><th>middle ten seconds</th><th>whole track</th></tr>
+        <tr><td>points</td><td>21,802</td><td>25,587</td></tr>
+        <tr><td>grid cells occupied</td><td>42%</td><td>36%</td></tr>
+        <tr><td>distinct dense regions</td><td>3</td><td>9</td></tr>
+    </table>
+    <p class="muted">
+        Fewer occupied cells holding more points means tighter clusters, and three regions became
+        nine. Under the old pipeline a 1.2-second difference in lead-in moved a recording as far as
+        a genuinely different piece of music would; the whole-track mean puts two rips of one
+        recording at 0.997 or better, so things that sound alike now land together.
+    </p>
+</div>
+
+<div class="card">
     <h2>Reproduce it</h2>
     <p class="muted">
         The projection is a committed artifact with a date on it, not something the server computes —
