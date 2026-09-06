@@ -112,12 +112,18 @@ def test_client_id_is_optional_so_existing_clients_keep_working():
 
     Making it required would reject all 44 contributing installations at once, and
     the whole point of Phase 0 is that it changes nothing observable.
+
+    `pipeline_version` beside it *is* required, since `ADR-0006` phase 4, and point 4
+    draws the contrast deliberately: an unattributed submission is still evidence,
+    whereas an unidentified pipeline is a vector that cannot be compared with
+    anything, including itself later.
     """
     req = EmbeddingRequest(
         fingerprint_hash="a" * 64,
         embedding=_vec(1.0),
         analysis_version=1,
         clap_model_version="laion/clap-htsat-unfused:v1",
+        pipeline_version="laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32",
     )
     assert req.client_id is None
 
@@ -128,21 +134,29 @@ def test_client_id_is_accepted_when_sent():
         embedding=_vec(1.0),
         analysis_version=1,
         clap_model_version="laion/clap-htsat-unfused:v1",
+        pipeline_version="laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32",
         client_id="0d1b2c3d-4e5f-6789-abcd-ef0123456789",
     )
     assert req.client_id == "0d1b2c3d-4e5f-6789-abcd-ef0123456789"
 
 
 def test_an_overlong_client_id_is_rejected():
-    """It is an opaque token, not a place to put arbitrary text."""
-    with pytest.raises(ValueError):
+    """It is an opaque token, not a place to put arbitrary text.
+
+    The `pipeline_version` here is not decoration: without it the request is invalid
+    anyway since `ADR-0006` phase 4, and this test would pass on the missing field
+    while claiming to prove something about `client_id`.
+    """
+    with pytest.raises(ValueError) as caught:
         EmbeddingRequest(
             fingerprint_hash="a" * 64,
             embedding=_vec(1.0),
             analysis_version=1,
             clap_model_version="v1",
+            pipeline_version="laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32",
             client_id="x" * 65,
         )
+    assert "client_id" in str(caught.value)
 
 
 def test_the_storage_precision_floor_is_documented_not_assumed():

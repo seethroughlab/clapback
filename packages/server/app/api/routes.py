@@ -15,6 +15,29 @@ from app.limiter import limiter
 router = APIRouter(prefix="/v1")
 
 
+def _decode_pipeline(value: str) -> str:
+    """Undo the one encoding mistake every caller of this endpoint will make.
+
+    A pipeline identity is `+`-joined — `laion/clap-htsat-unfused+frontend1+
+    artifact1+pool1+fp32` — and in a query string `+` is the legacy encoding of a
+    space. So a caller who interpolates the identity into a URL without escaping it
+    sends five spaces, matches nothing, and gets a 404 that reads as *the corpus
+    does not have this recording* rather than *you encoded it wrong*. Silent, and
+    indistinguishable from an empty corpus, which is the failure mode `ADR-0006`
+    exists to remove rather than relocate.
+
+    A space cannot occur in a pipeline identity: it is a checkpoint name joined to
+    component tags, and nothing in `clapback-embed` can put one there. So mapping it
+    back is unambiguous rather than a guess, and a correctly escaped `%2B` still
+    arrives as `+` and is untouched.
+
+    This is a decoding tolerance on one query parameter and not a general rule —
+    `/v1/similar` takes the same field in a JSON body, where the problem does not
+    arise and no leniency is applied.
+    """
+    return value.replace(" ", "+")
+
+
 def _cosine_similarity(a: list[float], b: list[float]) -> float | None:
     """Cosine similarity, or `None` when the comparison is meaningless.
 
@@ -100,16 +123,19 @@ class EmbeddingRequest(BaseModel):
     #: POSTs rather than contributors. Not an identity: a random UUID generated once
     #: per install is exactly enough, and the server never needs to know more.
     client_id: str | None = Field(default=None, max_length=64)
-    #: What produced this vector — `ADR-0006` point 1. Optional in this phase and
-    #: required in phase 4, which is the whole shape of point 6: the server learns
-    #: to store it before any client is obliged to send it, so no contract breaks
-    #: at any point in the sequence (`ADR-0005` point 10).
+    #: What produced this vector — `ADR-0006` point 1, and **half the corpus key
+    #: since phase 4**.
+    #:
+    #: Required, which point 4 draws as a deliberate contrast with `client_id`
+    #: above: an unattributed submission is still evidence, whereas an unidentified
+    #: pipeline is a vector that cannot be compared with anything, including itself
+    #: later. There is no sensible key for it.
     #:
     #: Asserted, not proven (point 8). A client sends a string and the server
     #: believes it. That catches the forgotten bump and the stale build, which are
     #: the realistic failures; it is not a defence against a contributor who lies,
     #: and nothing here should be described as if it were.
-    pipeline_version: str | None = Field(default=None, min_length=1, max_length=200)
+    pipeline_version: str = Field(..., min_length=1, max_length=200)
 
 
 class EmbeddingResponse(BaseModel):
@@ -119,10 +145,10 @@ class EmbeddingResponse(BaseModel):
     embedding: list[float]
     analysis_version: int
     clap_model_version: str
-    #: Null for every row contributed before phase 2, which is all of them today.
-    #: A caller comparing two vectors should treat null as "unknown", not as
-    #: "same as mine".
-    pipeline_version: str | None = None
+    #: What produced this vector. Every stored row has one since phase 4 — the
+    #: rows that could not say were removed by migration `011` rather than
+    #: relabelled (`ADR-0006` point 5).
+    pipeline_version: str
     contributor_count: int
 
 
@@ -158,20 +184,60 @@ class FeaturesResponse(BaseModel):
 async def lookup_embedding(
     request: Request,
     fingerprint_hash: str,
-    analysis_version: int,
-    clap_model_version: str,
     db: DbSession,
+    analysis_version: int | None = None,
+    clap_model_version: str | None = None,
+    pipeline_version: str | None = None,
 ) -> EmbeddingResponse:
     """Look up an embedding by fingerprint hash.
 
     Returns the embedding if found, 404 otherwise.
+
+    **Send `pipeline_version` if you intend to use the vector.** It is half the key
+    since `ADR-0006` phase 4, so it is the only parameter that selects exactly one
+    row, and it is the only one that says whether what comes back is comparable
+    with vectors you computed yourself. `analysis_version` and `clap_model_version`
+    remain accepted, and remain filters on metadata rather than on identity — a
+    caller that sends only those can be handed a vector from a pipeline it cannot
+    use, which is the mistake this whole record exists to design out.
+
+    All three became optional here at phase 4. They were required, and a client
+    predating the key change sends the two that no longer identify anything; making
+    them optional keeps that client working while letting a newer one ask the
+    question that has an exact answer (`ADR-0005` point 10 — the contract widens,
+    it does not move).
     """
+    filters = [Embedding.fingerprint_hash == fingerprint_hash]
+    if pipeline_version is not None:
+        filters.append(Embedding.pipeline_version == _decode_pipeline(pipeline_version))
+    if analysis_version is not None:
+        filters.append(Embedding.analysis_version == analysis_version)
+    if clap_model_version is not None:
+        filters.append(Embedding.clap_model_version == clap_model_version)
+
+    # **Ordering, because the filters above no longer guarantee one row.** Under the
+    # old key they did. Now a recording can hold a vector per pipeline, and a caller
+    # who did not name one gets the most-confirmed, earliest first. It is a
+    # defensible choice among rows the caller failed to distinguish, not a claim
+    # that this row is right for them — which is why the response says which
+    # pipeline it came from.
+    #
+    # `pipeline_version` last, and it is not decoration: the first two columns tie
+    # readily — two pipelines contributed in one batch have the same count and, to
+    # the resolution of a `timestamp`, the same `created_at`. A partial order lets
+    # Postgres return either row, so the same request answers differently between
+    # calls, which is worse than an arbitrary answer because it looks like the
+    # corpus changed. The key's second column is unique among these candidates, so
+    # appending it makes the order total.
     result = await db.execute(
-        select(Embedding).where(
-            Embedding.fingerprint_hash == fingerprint_hash,
-            Embedding.analysis_version == analysis_version,
-            Embedding.clap_model_version == clap_model_version,
+        select(Embedding)
+        .where(*filters)
+        .order_by(
+            Embedding.contributor_count.desc(),
+            Embedding.created_at,
+            Embedding.pipeline_version,
         )
+        .limit(1)
     )
     emb = result.scalar_one_or_none()
 
@@ -203,12 +269,19 @@ async def contribute_embedding(
 
     If the embedding already exists, increments the contributor count.
     """
-    # Check if embedding already exists
+    # **The key, since `ADR-0006` phase 4.** A submission confirms an existing row
+    # exactly when it is for the same recording from the same pipeline, which is
+    # exactly when the two vectors are comparable. Under the old key this test could
+    # match a row from a different pipeline, and miss a row from the same one.
+    #
+    # `pipeline_version` is required on the request, so point 4's rejection of an
+    # undeclared contribution is Pydantic's 422 rather than a branch here. That is
+    # the right place for it: the field is not optional-and-then-checked, it is
+    # part of what a contribution is.
     result = await db.execute(
         select(Embedding).where(
             Embedding.fingerprint_hash == req.fingerprint_hash,
-            Embedding.analysis_version == req.analysis_version,
-            Embedding.clap_model_version == req.clap_model_version,
+            Embedding.pipeline_version == req.pipeline_version,
         )
     )
     existing = result.scalar_one_or_none()
@@ -223,15 +296,13 @@ async def contribute_embedding(
         # Recording only. First-write-wins is unchanged, the stored vector is
         # untouched, and no client can observe any difference.
         # **`ADR-0006` point 7: a mismatched submission is never recorded as
-        # disagreement.** Until phase 4 the key does not include the pipeline, so
-        # two genuinely incomparable vectors can land on the same row — and their
-        # cosine similarity would be a real number that means nothing. Writing it
-        # here would put version drift into the measurement that exists to detect
-        # contributor drift, and no later analysis could separate them.
-        #
-        # Equality rather than "both declared": both null is the legacy case and
-        # keeps recording exactly as before, while one side declaring and the
-        # other not is precisely the unknown this guard exists for.
+        # disagreement.** Since phase 4 the key makes this structurally true —
+        # `existing` was selected *by* the submitted pipeline, so the two always
+        # match. It is kept as an explicit test rather than deleted because the
+        # guarantee now lives in the shape of a query several lines above, and a
+        # future change to that query would silently take the guarantee with it.
+        # What it costs is one comparison; what it protects is the only measurement
+        # the corpus makes.
         comparable = req.pipeline_version == existing.pipeline_version
 
         similarity = _cosine_similarity(req.embedding, list(existing.embedding))
@@ -247,11 +318,9 @@ async def contribute_embedding(
                 )
             )
 
-        # **The stored row is not relabelled with the submitted pipeline**, even
-        # when it has none and the submission declares one. `ADR-0006` point 5
-        # decided the existing rows are recomputed rather than relabelled: writing
-        # a pipeline here would assert, on a vector nobody can vouch for, exactly
-        # the provenance phase 4 is going to trust.
+        # No relabelling to guard against any more: migration `011` removed every
+        # row that could not say what produced it, so there is no null left to fill
+        # in. `ADR-0006` point 5 is discharged rather than ongoing.
         existing.contributor_count += 1
         await db.commit()
         return ContributeResponse(
@@ -289,9 +358,8 @@ async def contribute_embedding(
         # cascade over. Absent for a client that sends none, which is every
         # client that predates the field.
         client_id=req.client_id,
-        # Stored, not keyed on — phase 1 of `ADR-0006` point 6. Phase 4 promotes it
-        # to the key, and it can only do that if the rows contributed between now
-        # and then already carry it.
+        # Half the key since phase 4 of `ADR-0006` point 6, and required on the
+        # request, so a row cannot exist without saying what produced it.
         pipeline_version=req.pipeline_version,
     )
     db.add(emb)

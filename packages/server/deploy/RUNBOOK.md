@@ -232,6 +232,59 @@ confirmations both need a second party that the architecture would now forbid.
 The pause is the honest state: the corpus stops growing for as long as it takes
 to build a `DELETE` route, and then grows from anyone.
 
+## 8. The one migration that removes data
+
+`011_pipeline_version_is_the_key` is `ADR-0006` phase 4. It removes every embedding
+that cannot say what produced it, and on a corpus that has not been repopulated first
+that is **all of it**.
+
+**Do not run it until all of the following are true**, in order:
+
+1. Familiar is deployed with `EMBEDDING_VERSION = 8` (phases 2 and 3).
+2. Its background re-analysis has run, and the corpus holds rows that declare a
+   pipeline. Check before you migrate, not after:
+
+   ```bash
+   docker compose -f docker-compose.aws.yml exec -T postgres \
+     psql -U cache -d cache -tAc \
+     "SELECT count(*) total, count(pipeline_version) declared FROM embeddings"
+   ```
+
+   `declared` must be a number you recognise as most of the corpus. If it is 0, stop.
+
+3. Take a dump first and confirm it landed. `## 6` set the nightly timer up; this is
+   the one occasion to not wait for it.
+
+   ```bash
+   sudo systemctl start clapback-backup.service
+   aws s3 ls s3://clapback-backup/postgres/ | tail -2
+   ```
+
+Then, and only then:
+
+```bash
+docker compose -f docker-compose.aws.yml exec -T api uv run alembic upgrade head
+```
+
+The migration refuses to run when the corpus has rows and none declare a pipeline,
+and names the ADR in the message. `CLAPBACK_ALLOW_EMPTYING_THE_CORPUS=1` overrides
+it, and the only honest reason to set it is a database with nothing in it yet.
+
+**The application image must be rebuilt in the same maintenance window.** The code
+and the schema move together: the new code selects existing rows by
+`(fingerprint_hash, pipeline_version)` and requires the field on contributions, so
+running it against the old key would key on a column that is not yet unique, and
+running the old code against the new schema would insert rows without a
+`pipeline_version` and fail at the constraint rather than with a clean `422`. Build
+before migrating — the migration lives in the image, so a rebuild is a prerequisite
+rather than a follow-up:
+
+```bash
+docker compose -f docker-compose.aws.yml build api
+docker compose -f docker-compose.aws.yml up -d api
+docker compose -f docker-compose.aws.yml exec -T api uv run alembic upgrade head
+```
+
 ## If something hangs
 
 **Measure the remote end before diagnosing the local one.** Everything slow here
