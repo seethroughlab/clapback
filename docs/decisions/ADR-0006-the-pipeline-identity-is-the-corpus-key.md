@@ -38,9 +38,29 @@ Implementation:
   it — so Familiar's analysis pipeline declares one, having just computed the vector, and its
   backfill script deliberately declares none. It reaches the corpus at Familiar's normal release
   cadence rather than immediately.
-- Point 6 phase 4 needed `ADR-0004` point 7's delete path, **which now exists** — that
-  prerequisite is met, and phase 4 is blocked only on phase 3, the `EMBEDDING_VERSION` bump and
-  the re-analysis that recomputes the library under declared provenance.
+- **Phase 3 is built** (2026-09-06, Familiar `#291`). `EMBEDDING_VERSION` is 8, which makes
+  Familiar's existing re-analysis path recompute all 26,471 tracks and contribute each one with a
+  declared pipeline. The bump is an exception to that constant's own rule — it moves when vectors
+  move, and these do not — taken because it is the only lever that drives the existing path;
+  Familiar's `ADR-0104` point 6 records the exception rather than leaving it to look like a
+  mistake.
+- **Point 5's premise was tested rather than assumed, and it held.** Fifty tracks drawn at random
+  from the 26,471 were recomputed and compared with what Familiar had stored: 43 reproduced exactly
+  (≤ 6.7e-16) and 7 to between 1.3e-12 and 5.5e-11. So the recompute this record pays CPU for is
+  nearly a no-op on the numbers — it buys the *declaration*, not different vectors — and the
+  existing v7 rows were in fact produced by the current pipeline, which nobody could have asserted
+  before the measurement. Point 5 is still right to recompute rather than relabel: what makes the
+  declaration true is that it was earned, and this measurement is only evidence about a sample.
+- **The measurement found a hole in `PIPELINE_VERSION`'s claim.** All seven inexact tracks hit
+  librosa's `audioread` fallback; embedding one twice in one process returns 0.0, so the fallback is
+  deterministic within a run and the difference is against whichever decoder read the file when it
+  was first stored. Which decoder handles a file depends on the installed `libsndfile`, and none of
+  that is in `PIPELINE_VERSION`, which claims to pin everything that can move a vector. 5.5e-11 is
+  four orders inside the 1e-6 "identical" band, so nothing here is unsafe — but the claim is
+  overstated, and that belongs to `packages/embed` rather than to this record.
+- Point 6 phase 4 needed `ADR-0004` point 7's delete path, **which now exists**. With phase 3 built,
+  **phase 4 is unblocked** — it waits only on Familiar's re-analysis actually running, which is
+  days of background work on the deployed instance rather than a code change.
 - Point 5 supersedes `ADR-0001` point 10, whose `Status:` line now records it.
 
 ## Context
