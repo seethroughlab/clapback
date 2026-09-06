@@ -31,8 +31,16 @@ Implementation:
   with no field to declare it in. Phase 2 is what starts populating it. `/v1/similar` accordingly
   answers a `pipeline_version` filter with `{"neighbours": [], "searched": 0}`, which is the
   correct answer and looks like a broken endpoint; the API page says so in as many words.
+- **Phase 2 is built** (2026-09-05, Familiar `#290`). `pipeline_version` is read from the installed
+  `clapback-embed` rather than written down as a constant, because a hand-maintained copy is what
+  `EMBEDDING_VERSION` already is and what this record exists to fix. It is passed explicitly and
+  never inferred inside the cache client, which is handed a vector and cannot know what produced
+  it — so Familiar's analysis pipeline declares one, having just computed the vector, and its
+  backfill script deliberately declares none. It reaches the corpus at Familiar's normal release
+  cadence rather than immediately.
 - Point 6 phase 4 needed `ADR-0004` point 7's delete path, **which now exists** — that
-  prerequisite is met, and phase 4 is blocked only on phases 2 and 3 landing in Familiar.
+  prerequisite is met, and phase 4 is blocked only on phase 3, the `EMBEDDING_VERSION` bump and
+  the re-analysis that recomputes the library under declared provenance.
 - Point 5 supersedes `ADR-0001` point 10, whose `Status:` line now records it.
 
 ## Context

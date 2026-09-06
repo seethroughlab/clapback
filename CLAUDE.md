@@ -126,11 +126,13 @@ Shipped since the records were written: `ADR-0002`'s similarity endpoint (HNSW, 
 
 - **`ADR-0004` point 9's disk alert.** "A full disk is an outage; 80% of one is a Tuesday
   afternoon." The row ceiling bounds growth; nothing watches the disk.
-- **`ADR-0006` phases 2 to 4.** Phase 1 shipped 2026-09-05: the server accepts, stores and reports
-  `pipeline_version`, and point 7's guard keeps a mismatched submission out of
-  `submission_agreement`. The key is unchanged and every one of the 47,486 rows declares nothing,
-  because the next step is Familiar's — phase 2 is the client sending the field. The corpus still
-  holds 21,890 middle-10s vectors from the pipeline `ADR-0104` rejected; they go in phase 4.
+- **`ADR-0006` phases 3 and 4.** Phases 1 and 2 shipped 2026-09-05: the server accepts, stores and
+  reports `pipeline_version` (with point 7's guard keeping a mismatched submission out of
+  `submission_agreement`), and Familiar's analysis pipeline sends it. All 47,486 stored rows still
+  declare nothing — they predate the field, and phase 2 only labels vectors computed after it
+  ships, at Familiar's normal release cadence. Phase 3 is Familiar's `EMBEDDING_VERSION` bump and
+  the re-analysis that recomputes the library with provenance; phase 4 is the key change here and
+  the 21,890 middle-10s vectors from the pipeline `ADR-0104` rejected.
 - **`ADR-0007`**, deliberately, until a second contributor exists.
 - **`ADR-0008`** — the corpus cannot yet tell anyone how corroborated a vector is.
 - **`ADR-0009` point 6** — the tool does not contribute yet; only its local half is built.
@@ -170,12 +172,12 @@ one exposes no port.
 Familiar's `backend/app/config.py` are the same fact — the identity of the embedding pipeline —
 maintained separately by hand. Moving one without the other contributes incomparable vectors under a
 key asserting they are comparable. `ADR-0006` makes `PIPELINE_VERSION` the key itself so
-the case cannot arise, and phases the change so the endpoint contract never breaks. **Its phase 1 is
-deployed**: the server stores a declared `pipeline_version` and reports it, but nothing sends one
-yet, so nothing detects the drift and **any change that moves `PIPELINE_VERSION` still requires a
-matching bump in Familiar in the same breath.** Phase 2 — Familiar sending
-`pipeline_version=clapback_embed.PIPELINE_VERSION` on every contribution — is the next step, and it
-is the one that starts closing this.
+the case cannot arise, and phases the change so the endpoint contract never breaks. **Phases 1 and 2 are built**: the
+server stores a declared `pipeline_version` and reports it, and Familiar reads it from the installed
+embedder and sends it on every locally computed contribution. Nothing yet *detects* the drift,
+though — the server believes what it is told (point 8) and the key is unchanged — so **any change
+that moves `PIPELINE_VERSION` still requires a matching bump in Familiar in the same breath.** Phase
+4 is what makes the case impossible.
 
 ## Development
 
