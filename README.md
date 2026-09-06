@@ -90,18 +90,30 @@ contribute.
 
 #### GET `/v1/embeddings/{fingerprint_hash}`
 
-Query params:
-- `analysis_version` (int): Analysis pipeline version
-- `clap_model_version` (string): CLAP model identifier
+Query params, all optional:
+- `pipeline_version` (string): **what you should ask by.** Half the corpus key, so it
+  selects exactly one row and it is the only parameter that says the answer is
+  comparable with vectors you computed yourself. **Escape the `+` as `%2B`** — in a
+  query string `+` means a space, so an unescaped identity matches nothing and 404s
+  as though the recording were missing.
+- `analysis_version` (int): the contributing client's own counter. A filter on
+  metadata, not on identity.
+- `clap_model_version` (string): the checkpoint. Also a filter, and it does not
+  establish comparability — windowing or pooling can move every vector without
+  changing it.
+
+Ask by the last two alone and you can be handed a perfectly valid vector from a
+pipeline you cannot use. If more than one row matches, the most-confirmed is
+returned and the response says which pipeline it came from.
 
 Response 200:
 ```json
 {
   "fingerprint_hash": "abc123...",
   "embedding": [0.1, 0.2, ...],
-  "analysis_version": 5,
+  "analysis_version": 8,
   "clap_model_version": "laion/clap-htsat-unfused:v1",
-  "pipeline_version": null,
+  "pipeline_version": "laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32",
   "contributor_count": 3
 }
 ```
@@ -120,20 +132,24 @@ Request body:
 }
 ```
 
-`client_id` and `pipeline_version` are both optional and both worth sending. Without a
-`client_id` a submission cannot count toward independent agreement
+**`pipeline_version` is required; `client_id` is not.** The contrast is deliberate
+([`ADR-0006`](docs/decisions/ADR-0006-the-pipeline-identity-is-the-corpus-key.md)
+point 4): an unattributed submission is still evidence, whereas an unidentified
+pipeline is a vector that cannot be compared with anything, including itself later —
+so there is no sensible key to store it under. Without a `client_id` a submission is
+accepted and stored but can never count toward independent agreement
 ([`ADR-0004`](docs/decisions/ADR-0004-contributors-are-identified-but-not-accounts.md)
-point 3). `pipeline_version` is `clapback_embed.PIPELINE_VERSION`, and it is the only
-field that says whether your vector is comparable with anyone else's — the checkpoint
-alone does not, since windowing or pooling can move every vector without changing it.
-[`ADR-0006`](docs/decisions/ADR-0006-the-pipeline-identity-is-the-corpus-key.md) makes
-it part of the key in a later phase, and it is optional until then. It is asserted
-rather than proven: the server believes what you send, which catches the forgotten
-bump and the stale build and is not a defence against a contributor who lies.
+point 3).
 
-Every row in the corpus reports `"pipeline_version": null` today. Nothing recorded it
-for the legacy rows, and no backfill would be honest — `ADR-0006` point 5 recomputes
-them instead.
+`pipeline_version` is `clapback_embed.PIPELINE_VERSION`, composed from every component
+that can move a vector. It is **half the corpus key**, so two rows are comparable
+exactly when they share one. It is asserted rather than proven: the server believes
+what you send, which catches the forgotten bump and the stale build and is not a
+defence against a contributor who lies.
+
+The same recording contributed from two pipelines is two rows, not a disagreement —
+which is the point. A confirmation only happens between vectors that claim the same
+provenance.
 
 ### Features (legacy)
 

@@ -51,16 +51,44 @@ Implementation:
   existing v7 rows were in fact produced by the current pipeline, which nobody could have asserted
   before the measurement. Point 5 is still right to recompute rather than relabel: what makes the
   declaration true is that it was earned, and this measurement is only evidence about a sample.
-- **The measurement found a hole in `PIPELINE_VERSION`'s claim.** All seven inexact tracks hit
-  librosa's `audioread` fallback; embedding one twice in one process returns 0.0, so the fallback is
-  deterministic within a run and the difference is against whichever decoder read the file when it
-  was first stored. Which decoder handles a file depends on the installed `libsndfile`, and none of
-  that is in `PIPELINE_VERSION`, which claims to pin everything that can move a vector. 5.5e-11 is
-  four orders inside the 1e-6 "identical" band, so nothing here is unsafe — but the claim is
-  overstated, and that belongs to `packages/embed` rather than to this record.
-- Point 6 phase 4 needed `ADR-0004` point 7's delete path, **which now exists**. With phase 3 built,
-  **phase 4 is unblocked** — it waits only on Familiar's re-analysis actually running, which is
-  days of background work on the deployed instance rather than a code change.
+- **The measurement put a number on something this record already knew.** The Consequences
+  follow-up below has said since the proposal that the decoder is not covered by
+  `PIPELINE_VERSION`; what was missing was its size. All seven inexact tracks hit librosa's
+  `audioread` fallback, and embedding one twice in one process returns 0.0 — so the fallback is
+  deterministic *within* a run, and the difference is against whichever decoder read the file when
+  it was first stored. Which decoder handles a file depends on the installed `libsndfile`. At
+  5.5e-11 it is four orders inside the 1e-6 "identical" band, so nothing here is unsafe, and the
+  attestation follow-up's instinct to keep the decoder out of the check is now backed by a
+  measurement rather than a suspicion.
+- **Phase 4 is built and deliberately not deployed** (2026-09-06). Migration `011` removes every
+  row that cannot say what produced it, collapses rows the new key cannot keep apart, and makes
+  `(fingerprint_hash, pipeline_version)` the primary key; `pipeline_version` is required on
+  `POST /v1/embeddings`, so point 4's rejection is the request schema rather than a branch that
+  could be reordered behind a write.
+- **The migration refuses to run when it would empty the corpus.** Nothing in Alembic knows about
+  this record, so nothing otherwise stops `alembic upgrade head` on a deployment phases 2 and 3
+  have not reached — where it does exactly what it says and takes the whole commons, because every
+  row predating the declaration is a row that cannot say. It aborts when there are rows and none
+  declare a pipeline, names this ADR in the message, and can be overridden with
+  `CLAPBACK_ALLOW_EMPTYING_THE_CORPUS=1` for the one honest case, a fresh database.
+- **The key change reopens on the read path what it closes on the write path.** Under the old key,
+  `(hash, analysis_version, clap_model_version)` selected at most one row; under the new one it
+  selects any number, so a client asking the old question can be handed a vector from a pipeline it
+  cannot use. The lookup therefore accepts `pipeline_version` and makes all three optional — the
+  contract widens rather than moves (`ADR-0005` point 10) — and an unspecific lookup returns the
+  most-confirmed row under a **total** ordering. That last word is load-bearing: count and
+  timestamp tie whenever two pipelines are contributed in one batch, and a partial order let
+  Postgres answer the same request differently between calls, which reads as the corpus having
+  changed. Caught by the end-to-end check, not by review.
+- **A pipeline identity does not survive a query string unescaped.** It is `+`-joined and `+` means
+  a space there, so an unescaped identity matches nothing and 404s as though the recording were
+  absent — a silent failure of exactly the kind this record exists to remove rather than relocate.
+  The lookup maps spaces back, which is unambiguous because a space cannot occur in an identity,
+  and the leniency is confined to that one query parameter.
+- Point 6 phase 4 needed `ADR-0004` point 7's delete path, **which exists**. What phase 4 now waits
+  on is Familiar's re-analysis actually running on the deployed instance and repopulating the
+  corpus — days of background work, not a code change. Deploying this before then is what the
+  guard above exists to catch.
 - Point 5 supersedes `ADR-0001` point 10, whose `Status:` line now records it.
 
 ## Context

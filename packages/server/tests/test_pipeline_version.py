@@ -54,16 +54,26 @@ def _req(**kw) -> EmbeddingRequest:
 
 
 class TestNothingIsRejected:
-    """Phase 1's own words. Familiar has not been changed yet — phase 2 is that —
-    so every contribution arriving today declares nothing, and every one of them
-    must still be accepted."""
+    """Phase 1's own words, and **phase 4 deliberately ended them.**
 
-    def test_a_contribution_without_a_pipeline_is_still_valid(self):
-        assert _req().pipeline_version is None
+    Kept rather than deleted because the sequence is the point of `ADR-0006` point 6:
+    the server had to learn to store the field before any client was obliged to send
+    it, so that no contract broke at any step. These tests record what that
+    intermediate state guaranteed and where it stopped.
+    """
+
+    def test_a_contribution_without_a_pipeline_is_now_rejected(self):
+        """Point 4, and the one hard wall this record puts up. It is a harder
+        requirement than anything `ADR-0004` asked of a contributor, and the
+        justification is that an unidentified vector is *unusable* rather than
+        merely unattributed."""
+        with pytest.raises(ValidationError) as caught:
+            _req()
+        assert "pipeline_version" in str(caught.value)
 
     def test_the_field_is_absent_rather_than_empty(self):
         """Not `""`. An empty string would be a client declaring a pipeline named
-        nothing, which phase 4 would have to key on. Null is the absence."""
+        nothing, and the key would then have to carry it."""
         with pytest.raises(ValidationError):
             _req(pipeline_version="")
 
@@ -83,22 +93,35 @@ class TestNothingIsRejected:
 # ---------------------------------------------------------------------------
 
 
-class TestTheKeyIsUnchanged:
-    """Phase 4 changes the key. Phase 1 must not, or the phases collapse into one
-    and Familiar's contributions start failing against a server it did not expect
-    to change."""
+class TestTheKeyIsWhatProducedTheVector:
+    """Phase 4, `ADR-0006` point 1: `(fingerprint_hash, pipeline_version)`.
 
-    def test_the_primary_key_is_still_the_three_original_columns(self):
+    Two rows share a key exactly when the vectors are comparable, which is the
+    property the key existed to have and did not have until migration `011`."""
+
+    def test_the_primary_key_is_the_recording_and_the_pipeline(self):
         key = {c.name for c in Embedding.__table__.primary_key}
-        assert key == {"fingerprint_hash", "analysis_version", "clap_model_version"}
+        assert key == {"fingerprint_hash", "pipeline_version"}
 
-    def test_the_new_column_is_nullable(self):
-        """Every row that exists is null, and `ADR-0006` point 5 says they are
-        recomputed rather than relabelled — so there is no backfill that would
-        make this NOT NULL honest."""
-        assert Embedding.__table__.columns["pipeline_version"].nullable is True
+    def test_the_checkpoint_and_the_counter_are_no_longer_in_it(self):
+        """Points 2 and 3. `clap_model_version` is already the first component of
+        the identity string, so keying on it separately let two fields disagree
+        about one fact; `analysis_version` is the client's own counter, which
+        Familiar moved from 7 to 8 while the vectors stayed identical."""
+        key = {c.name for c in Embedding.__table__.primary_key}
+        assert "clap_model_version" not in key
+        assert "analysis_version" not in key
+        # Retained as recorded columns, not dropped.
+        assert "clap_model_version" in Embedding.__table__.columns
+        assert "analysis_version" in Embedding.__table__.columns
 
-    def test_it_is_indexed_because_phase_4_will_key_on_it(self):
+    def test_the_column_cannot_be_null(self):
+        """It is half the key, and a null in a key is not a thing Postgres will
+        hold. Migration `011` removed the rows that could not say rather than
+        filling them in — point 5, recomputed and not relabelled."""
+        assert Embedding.__table__.columns["pipeline_version"].nullable is False
+
+    def test_it_is_indexed_on_its_own_as_well_as_leading_the_key(self):
         indexed = {
             tuple(c.name for c in ix.columns) for ix in Embedding.__table__.indexes
         }
@@ -184,10 +207,10 @@ class TestItIsStoredAndReported:
         body = inspect.getsource(routes.lookup_embedding)
         assert "pipeline_version=emb.pipeline_version" in body
 
-    def test_the_response_defaults_to_null_for_the_whole_existing_corpus(self):
-        """Additive, per `ADR-0005` point 10 — an existing client parsing this
-        response must not break because a field appeared."""
-        assert EmbeddingResponse.model_fields["pipeline_version"].default is None
+    def test_the_response_always_says_which_pipeline_produced_it(self):
+        """No longer optional: every stored row has one since migration `011`, so a
+        caller never has to treat the answer as unknown."""
+        assert EmbeddingResponse.model_fields["pipeline_version"].is_required()
 
     def test_search_can_filter_to_a_comparable_set(self):
         """`analysis_version` only approximates comparability, which is the whole

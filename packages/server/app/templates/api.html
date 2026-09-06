@@ -40,10 +40,25 @@
 
 <div class="card">
     <h2>Get an embedding</h2>
-    <pre><code>curl "https://{{ host }}/v1/embeddings/{fingerprint_hash}?analysis_version=5&clap_model_version=laion/clap-htsat-unfused:v1"</code></pre>
+    <pre><code>curl "https://{{ host }}/v1/embeddings/{fingerprint_hash}?pipeline_version=laion%2Fclap-htsat-unfused%2Bfrontend1%2Bartifact1%2Bpool1%2Bfp32"</code></pre>
     <p class="muted">
-        Returns the vector, the pipeline versions it was computed under, and how many submissions
-        it has had. <code>404</code> if the corpus has not seen that recording.
+        Returns the vector, what produced it, and how many submissions it has had.
+        <code>404</code> if the corpus has not seen that recording from that pipeline.
+    </p>
+    <p class="muted">
+        <strong>Ask by <code>pipeline_version</code> if you intend to use the vector.</strong> It is
+        half the corpus key, so it is the only parameter that selects exactly one row and the only
+        one that tells you the answer is comparable with vectors you computed yourself.
+        <code>analysis_version</code> and <code>clap_model_version</code> are still accepted and are
+        filters on metadata — ask by those alone and you can be handed a perfectly valid vector from
+        a pipeline you cannot use.
+    </p>
+    <p class="muted">
+        <strong>Escape the <code>+</code>.</strong> A pipeline identity is <code>+</code>-joined, and
+        <code>+</code> in a query string means a space — so an unescaped identity matches nothing and
+        404s as though the recording were missing. Use <code>%2B</code>. The server maps spaces back
+        for you, since a space cannot occur in an identity, but do not rely on that in code you
+        expect other people to read.
     </p>
 </div>
 
@@ -97,9 +112,9 @@ query  = embed_text("dreamy ambient with piano")   # the same space</code></pre>
     </p>
     <p class="muted">
         <code>analysis_version</code> is a contributor's own counter and only approximates
-        comparability. <code>pipeline_version</code> is the real filter, and it is accepted here
-        now — but it matches nothing yet, because no stored row declares one. Leave it out until
-        the corpus reports otherwise.
+        comparability. <code>pipeline_version</code> is the real filter — every stored row has one,
+        and results from two pipelines are not comparable with each other however close their
+        cosine similarity looks.
     </p>
     <p class="muted">
         <strong>It returns fingerprint hashes, which is a real limit and not an oversight.</strong>
@@ -124,13 +139,19 @@ query  = embed_text("dreamy ambient with piano")   # the same space</code></pre>
         finds out whether independent machines actually agree.
     </p>
     <p class="muted">
-        <strong>Send <code>pipeline_version</code>.</strong> It is
+        <strong><code>pipeline_version</code> is required.</strong> It is
         <code>clapback_embed.PIPELINE_VERSION</code>, and it is the only field that says whether
         your vector can be compared with anyone else's: the checkpoint alone does not, since
-        windowing or pooling can move every vector without changing it. Optional today and
-        <a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0006-the-pipeline-identity-is-the-corpus-key.md">required once it becomes part of the key</a>.
-        The server believes what you send — it catches the forgotten bump and the stale build,
-        not a contributor who lies.
+        windowing or pooling can move every vector without changing it. It is
+        <a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0006-the-pipeline-identity-is-the-corpus-key.md">half the corpus key</a>,
+        so a submission without one has no key to be stored under. <code>client_id</code> beside it
+        stays optional, and the contrast is deliberate: an unattributed vector is still evidence,
+        an unidentified one cannot be compared with anything.
+    </p>
+    <p class="muted">
+        The server believes what you send. That catches the forgotten bump and the stale build,
+        which are the realistic failures; it is not a defence against a contributor who lies, and
+        nothing here should be read as if it were.
     </p>
 </div>
 

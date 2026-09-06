@@ -126,14 +126,14 @@ Shipped since the records were written: `ADR-0002`'s similarity endpoint (HNSW, 
 
 - **`ADR-0004` point 9's disk alert.** "A full disk is an outage; 80% of one is a Tuesday
   afternoon." The row ceiling bounds growth; nothing watches the disk.
-- **`ADR-0006` phase 4**, and the re-analysis phase 3 sets off. Phases 1 to 3 are built
-  (2026-09-05/06): the server accepts, stores and reports `pipeline_version` with point 7's guard
-  keeping a mismatched submission out of `submission_agreement`; Familiar's analysis pipeline
-  declares it; and `EMBEDDING_VERSION` is 8, which makes Familiar recompute all 26,471 tracks and
-  contribute them with provenance. **All 47,486 stored rows still declare nothing** and will until
-  that re-analysis runs on the deployed instance — days of background work, at Familiar's normal
-  release cadence, not a code change. Phase 4 is the key change here, and the deletion of the
-  21,890 middle-10s vectors from the pipeline `ADR-0104` rejected.
+- **`ADR-0006` is built in full and phase 4 is deliberately undeployed.** Phases 1 to 3 are live in
+  code (2026-09-05/06); phase 4 — migration `011`, `(fingerprint_hash, pipeline_version)` as the
+  key, `pipeline_version` required — is merged and **must not be migrated until Familiar's
+  re-analysis has repopulated the corpus**. All 47,486 stored rows declare nothing today, so
+  running it now would remove every one of them. The migration refuses to do that on its own
+  (`CLAPBACK_ALLOW_EMPTYING_THE_CORPUS` overrides it, for a fresh database), but the ordering is
+  the real protection: deploy Familiar, let the background re-analysis run, confirm declared rows
+  are arriving, then migrate.
 - **`ADR-0007`**, deliberately, until a second contributor exists.
 - **`ADR-0008`** — the corpus cannot yet tell anyone how corroborated a vector is.
 - **`ADR-0009` point 6** — the tool does not contribute yet; only its local half is built.

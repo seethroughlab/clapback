@@ -16,20 +16,42 @@ class Base(DeclarativeBase):
 class Embedding(Base):
     """CLAP embedding cache entry.
 
-    Keyed by (fingerprint_hash, analysis_version, clap_model_version)
-    to ensure we don't mix incompatible embeddings.
+    Keyed by `(fingerprint_hash, pipeline_version)` — `ADR-0006` point 1. Two rows
+    share a key exactly when the vectors are comparable, which is the property the
+    key existed to have and did not have until migration `011`.
+
+    It was `(fingerprint_hash, analysis_version, clap_model_version)`, and the
+    comment here said that was "to ensure we don't mix incompatible embeddings". It
+    could not: `clap_model_version` is the checkpoint, which windowing or pooling
+    moves every vector without touching, and `analysis_version` is a client's own
+    counter. Both remain as recorded columns (points 2 and 3) and neither identifies
+    a vector.
     """
 
     __tablename__ = "embeddings"
     __table_args__ = (
         Index("ix_embeddings_created_at", "created_at"),
+        # Still worth its own index despite leading the key's second position:
+        # "how much of this corpus came from pipeline X" is a question about the
+        # column alone.
         Index("ix_embeddings_pipeline_version", "pipeline_version"),
+        # A filter on the read path now rather than a key component.
+        Index("ix_embeddings_analysis_version", "analysis_version"),
     )
 
-    # Composite primary key
+    # The key: a recording, and what produced the vector for it.
     fingerprint_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
-    analysis_version: Mapped[int] = mapped_column(Integer, primary_key=True)
-    clap_model_version: Mapped[str] = mapped_column(String(100), primary_key=True)
+
+    #: The contributing client's own counter, and useful provenance. **Not part of
+    #: the key** since `ADR-0006` point 3: it is not a statement about
+    #: comparability, as its own history shows — Familiar moved it from 7 to 8
+    #: while the vectors stayed identical, purely to drive a recompute.
+    analysis_version: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    #: The checkpoint. **Not part of the key** since `ADR-0006` point 2: it is
+    #: already the first component of the identity string, so keying on it
+    #: separately let two fields disagree about one fact.
+    clap_model_version: Mapped[str] = mapped_column(String(100), nullable=False)
 
     # The embedding vector (512 dimensions for CLAP)
     embedding = mapped_column(Vector(512), nullable=False)
@@ -62,10 +84,13 @@ class Embedding(Base):
     #: that those are recomputed rather than relabelled, so this is never
     #: backfilled — a value here was asserted by whoever sent the vector.
     #:
-    #: Phase 1 of point 6 stores it and keys on nothing new. Phase 4 makes
-    #: `(fingerprint_hash, pipeline_version)` the key and starts rejecting
-    #: submissions that decline to declare one.
-    pipeline_version: Mapped[str | None] = mapped_column(String(200))
+    #: Phase 1 of point 6 stored it and keyed on nothing new. **Phase 4, migration
+    #: `011`, made it half the key** and started rejecting submissions that decline
+    #: to declare one — point 4: there is no sensible key for a vector that will not
+    #: say what produced it, and unlike an unattributed submission, which is still
+    #: evidence, an unidentified pipeline is a vector that cannot be compared with
+    #: anything, including itself later.
+    pipeline_version: Mapped[str] = mapped_column(String(200), primary_key=True)
 
     # Metadata
     contributor_count: Mapped[int] = mapped_column(Integer, default=1)
@@ -108,6 +133,13 @@ class SubmissionAgreement(Base):
             "fingerprint_hash",
             "analysis_version",
             "clap_model_version",
+        ),
+        # The identity the corpus keys on. Point 7 guarantees a row here compares
+        # two vectors claiming one pipeline, so this is how they are found.
+        Index(
+            "ix_submission_agreement_pipeline",
+            "fingerprint_hash",
+            "pipeline_version",
         ),
     )
 
