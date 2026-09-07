@@ -85,6 +85,24 @@ Implementation:
   absent — a silent failure of exactly the kind this record exists to remove rather than relocate.
   The lookup maps spaces back, which is unambiguous because a space cannot occur in an identity,
   and the leniency is confined to that one query parameter.
+- **Phase 3's re-analysis completed 2026-09-07, and lost 8,772 of its declarations to an operator
+  error.** Familiar recomputed all 26,428 tracks, but a settings write on 2026-09-06 reset
+  `community_cache_contribute` to false partway through — the running process kept its cached value
+  until a restart, so the restart is what activated the reset, and every track computed between
+  then and the repair contributed nothing. Measured by set difference rather than estimated: 25,555
+  distinct fingerprints in the library at the current version, 16,784 declared in the corpus, 8,772
+  in the first and not the second. A track is offered to the corpus only in the branch that runs
+  after computing it, so those were unreachable by waiting.
+- **Point 5 is bent for those rows, deliberately and once.** The alternative was bumping
+  `EMBEDDING_VERSION` a second time to re-derive vectors this record already measured identical to
+  5e-16, which spends a day of CPU to buy nothing but the form of the rule. Familiar's backfill
+  gains an opt-in `--declare-pipeline`, and the claim it makes is narrower than relabelling: it
+  selects only rows at the *current* `EMBEDDING_VERSION`, and a row at the current counter was
+  written by the code carrying that counter, which delegates to the embedder installed now. **This
+  is an inference from a version counter, not the "I just computed this" that point 5 asks for**,
+  and its weak point is an embedder upgraded between the recompute and the run, which nothing
+  records and nothing can check. It is a flag rather than a default so the assertion is visible in
+  the command somebody typed. Familiar's `ADR-0108` carries the same note.
 - Point 6 phase 4 needed `ADR-0004` point 7's delete path, **which exists**. What phase 4 now waits
   on is Familiar's re-analysis actually running on the deployed instance and repopulating the
   corpus — days of background work, not a code change. Deploying this before then is what the
