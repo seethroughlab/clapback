@@ -56,6 +56,69 @@
     <span class="muted">· {{ "{:,}".format(velocity.last_24h) }} in the past 24 hours</span>
 </div>
 
+<h2>How it works</h2>
+<div class="how-grid">
+    <div class="card">
+        <h2>A fingerprint, never a filename</h2>
+        <p class="muted">
+            A client fingerprints the audio itself — an acoustic summary, not a tag — hashes that
+            with SHA256, and sends the hash. The corpus never receives a title, an artist, a
+            filename or a path, and cannot recover one.
+        </p>
+        <p class="muted">
+            That is a real limit as much as a privacy property: you can ask about a recording
+            <em>you already have</em>, because you can compute its hash. You cannot yet ask "what
+            does this record I do not own sound like".
+        </p>
+    </div>
+    <div class="card">
+        <h2>One implementation, deliberately</h2>
+        <p class="muted">
+            Everyone runs the same code — <code>clapback-embed</code>, published and pinned. The
+            checkpoint alone is not enough: the mel front-end, the windowing rule, the pooling and
+            the precision all move a vector, so all five are composed into one identity string that
+            travels with every contribution.
+        </p>
+        <p class="muted">
+            Two vectors are comparable when that string matches, and not otherwise. Without it,
+            <strong>two contributors running different code looks exactly like two contributors
+            disagreeing about the audio</strong>, and nothing afterwards can tell them apart.
+        </p>
+    </div>
+    <div class="card">
+        <h2>The first vector wins, the rest are measured</h2>
+        <p class="muted">
+            A contribution for a recording already in the corpus does not overwrite it and is not
+            thrown away. It is compared against what is stored and the similarity recorded.
+        </p>
+        <p class="muted">
+            That is how the commons will find out whether independent contributors actually agree.
+            It has not found out yet: almost every vector here came from one library, and a count of
+            submissions is not a count of contributors. The mechanism is in place ahead of the
+            evidence, on purpose.
+        </p>
+        <p class="muted">
+            What <em>is</em> measured is the implementation. The same audio through two CPU
+            architectures agrees to <code>6.6e-11</code> — some seven orders of magnitude tighter
+            than two rips of one recording differ from each other. That gap is the room a consensus
+            scheme has to work in.
+        </p>
+    </div>
+    <div class="card">
+        <h2>What it does not claim</h2>
+        <p class="muted">
+            The pipeline a contributor declares is <em>asserted, not proven</em>. The server
+            believes it. That catches the forgotten version bump and the stale build, which are the
+            realistic failures; it is not a defence against someone who lies.
+        </p>
+        <p class="muted">
+            Agreement is reported rather than ruled on. No threshold here declares a vector
+            trustworthy — the corpus tells you how many independent submissions matched and how
+            closely, and leaves the judgement to you.
+        </p>
+    </div>
+</div>
+
 <div class="card">
     <h2>Cache growth (last 90 days)</h2>
     {% if growth %}
@@ -99,11 +162,12 @@
 
 <p class="muted footnote">
     Looking up a specific fingerprint? Paste it as <code>/browse/{your-hash}</code> in the
-    URL bar, or use <code>GET /v1/embeddings/{hash}</code>. <strong>Reads are open to
-    everyone.</strong> Contribution is not yet: it opens once there is a way to retract a
-    recording, which
+    URL bar, or use <code>GET /v1/embeddings/{hash}</code>. <strong>Reads and contributions
+    are both open</strong> — no key, no account. Contribution was held back until the corpus
+    had a way to retract a recording, which
     <a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0004-contributors-are-identified-but-not-accounts.md">ADR-0004</a>
-    makes a precondition of a public corpus rather than a follow-up.
+    made a precondition rather than a follow-up; that path exists, so it is open. See the
+    <a href="/api">API</a> page for what to send.
 </p>
 {% endblock %}
 
