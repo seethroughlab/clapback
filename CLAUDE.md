@@ -126,14 +126,15 @@ Shipped since the records were written: `ADR-0002`'s similarity endpoint (HNSW, 
 
 - **`ADR-0004` point 9's disk alert.** "A full disk is an outage; 80% of one is a Tuesday
   afternoon." The row ceiling bounds growth; nothing watches the disk.
-- **`ADR-0006` is built in full and phase 4 is deliberately undeployed.** Phases 1 to 3 are live in
-  code (2026-09-05/06); phase 4 — migration `011`, `(fingerprint_hash, pipeline_version)` as the
-  key, `pipeline_version` required — is merged and **must not be migrated until Familiar's
-  re-analysis has repopulated the corpus**. All 47,486 stored rows declare nothing today, so
-  running it now would remove every one of them. The migration refuses to do that on its own
-  (`CLAPBACK_ALLOW_EMPTYING_THE_CORPUS` overrides it, for a fresh database), but the ordering is
-  the real protection: deploy Familiar, let the background re-analysis run, confirm declared rows
-  are arriving, then migrate.
+- **`ADR-0006` phase 4 — merged, and not yet migrated.** Phases 1 to 3 are deployed and Familiar's
+  re-analysis finished 2026-09-07: the corpus holds 64,270 rows, of which 16,784 declare a
+  pipeline. The remaining 8,772 of Familiar's library lost their declaration to an operator error
+  mid-run and are being swept in with `--declare-pipeline` (see `ADR-0006`'s Implementation block —
+  point 5 is bent for those rows, deliberately and once). **Migrate only once `declared` accounts
+  for the corpus you intend to keep**: migration `011` removes every row that cannot say what
+  produced it, which is still 47,486 of them. It refuses to run when nothing declares
+  (`CLAPBACK_ALLOW_EMPTYING_THE_CORPUS` overrides, for a fresh database), but that guard only
+  catches the total case — the ordering is the real protection.
 - **`ADR-0007`**, deliberately, until a second contributor exists.
 - **`ADR-0008`** — the corpus cannot yet tell anyone how corroborated a vector is.
 - **`ADR-0009` point 6** — the tool does not contribute yet; only its local half is built.
