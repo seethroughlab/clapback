@@ -240,6 +240,15 @@ that is **all of it**.
 
 **Do not run it until all of the following are true**, in order:
 
+0. **The deployment actually has the migration.** A revision that is absent reads exactly like a
+   revision that is applied — `alembic current` reported `010 (head)` on an instance five commits
+   behind that had never seen `011`. Check the checkout against `main` before you believe any
+   Alembic output, and pull first:
+
+   ```bash
+   cd ~/clapback && git log --oneline -1 && git pull --ff-only
+   ```
+
 1. Familiar is deployed with `EMBEDDING_VERSION = 8` (phases 2 and 3).
 2. Its background re-analysis has run, and the corpus holds rows that declare a
    pipeline. Check before you migrate, not after:
@@ -251,6 +260,19 @@ that is **all of it**.
    ```
 
    `declared` must be a number you recognise as most of the corpus. If it is 0, stop.
+
+   Measure the collapse too, because it should be boring and you want to know beforehand if it
+   is not. This counts the rows the new key cannot keep apart:
+
+   ```bash
+   docker compose -f docker-compose.aws.yml exec -T postgres \
+     psql -U cache -d cache -tAc \
+     "SELECT count(*) FROM (SELECT 1 FROM embeddings WHERE pipeline_version IS NOT NULL
+        GROUP BY fingerprint_hash, pipeline_version HAVING count(*) > 1) g"
+   ```
+
+   On 2026-09-08 that was 0, so the final row count equalled `declared` exactly. Predicting the
+   count and then matching it is what tells you the migration did only what it said.
 
 3. Take a dump first and confirm it landed. `## 6` set the nightly timer up; this is
    the one occasion to not wait for it.
@@ -268,7 +290,9 @@ docker compose -f docker-compose.aws.yml exec -T api uv run alembic upgrade head
 
 The migration refuses to run when the corpus has rows and none declare a pipeline,
 and names the ADR in the message. `CLAPBACK_ALLOW_EMPTYING_THE_CORPUS=1` overrides
-it, and the only honest reason to set it is a database with nothing in it yet.
+it, and the only honest reason to set it is a database with nothing in it yet. Note what the guard
+does **not** cover: it fires only when *nothing* declares. A corpus that is half declared passes it
+and loses the other half. The ordering above is the real protection.
 
 **The application image must be rebuilt in the same maintenance window.** The code
 and the schema move together: the new code selects existing rows by
