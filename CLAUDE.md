@@ -85,8 +85,8 @@ decisions in an order that differs from their numbering.
 `ADR-0005`–`ADR-0008` were accepted 2026-09-04. `ADR-0005` answers no deferred item but blocks the
 one that matters most: it makes the embedder a published peer of the server rather than a
 subdirectory of it, which is what `ADR-0001` point 3's "published for others to depend on" requires
-and what deferred item 5's tool will need a home beside. **Only `ADR-0005` is built** — the other
-three are decided and outstanding, and each says so in its `Implementation:` block.
+and what deferred item 5's tool will need a home beside. **`ADR-0005` and `ADR-0006` are built** (the latter fully deployed 2026-09-08); `ADR-0007` and
+`ADR-0008` are decided and outstanding, and each says so in its `Implementation:` block.
 
 | # | ADR | Answers |
 |---|---|---|
@@ -110,34 +110,36 @@ being where the agreement threshold sits and what the corpus does with it.
 | 4 | The recording-id key | `ADR-0002` point 4 makes it a prerequisite: similarity search over a hash-keyed corpus returns hashes nobody can resolve |
 | 6 | The rename, and what the domain serves | Cheap, and last on purpose — nothing above depends on it |
 
-### What is actually running, as of 2026-09-05
+### What is actually running, as of 2026-09-08
 
 The commons is public at **https://clapback.seethroughlab.com** — one AWS instance, TLS via Caddy,
-nightly `pg_dump` to `s3://clapback-backup`, and a corpus being replaced in place by a backfill from
-Familiar. All three members of `ADR-0001` point 3 now exist: `clapback-embed` on PyPI, the server
-deployed, and the tool in `packages/cli`.
+nightly `pg_dump` to `s3://clapback-backup`, and a corpus of **25,558 rows, every one of which
+declares the pipeline that produced it**. All three members of `ADR-0001` point 3 now exist:
+`clapback-embed` on PyPI, the server deployed, and the tool in `packages/cli`.
+
+**`ADR-0006` is fully deployed as of 2026-09-08.** The key is `(fingerprint_hash,
+pipeline_version)`, `pipeline_version` is `NOT NULL`, and a contribution that does not declare one
+is refused with a `422`. Migration `011` removed the 47,486 rows that could not say what produced
+them. The corpus is therefore smaller than it has ever been and is the first version of it where
+the README's premise — that a disagreement is about the audio rather than about whose code ran —
+is actually true.
 
 Shipped since the records were written: `ADR-0002`'s similarity endpoint (HNSW, ~3 ms),
 `ADR-0003`'s deployment and backups, `ADR-0004` point 7's delete path and point 9's row ceiling,
-`ADR-0005`'s restructure and PyPI release, `ADR-0006` phase 1 and point 7's guard, and
-`ADR-0009`'s tool.
+`ADR-0005`'s restructure and PyPI release, **all four phases of `ADR-0006`** and point 7's guard,
+and `ADR-0009`'s tool.
 
 **Still unbuilt, and the first is the one with consequences:**
 
 - **`ADR-0004` point 9's disk alert.** "A full disk is an outage; 80% of one is a Tuesday
   afternoon." The row ceiling bounds growth; nothing watches the disk.
-- **`ADR-0006` phase 4 — merged, and not yet migrated.** Phases 1 to 3 are deployed and Familiar's
-  re-analysis finished 2026-09-07: the corpus holds 64,270 rows, of which 16,784 declare a
-  pipeline. The remaining 8,772 of Familiar's library lost their declaration to an operator error
-  mid-run and are being swept in with `--declare-pipeline` (see `ADR-0006`'s Implementation block —
-  point 5 is bent for those rows, deliberately and once). **Migrate only once `declared` accounts
-  for the corpus you intend to keep**: migration `011` removes every row that cannot say what
-  produced it, which is still 47,486 of them. It refuses to run when nothing declares
-  (`CLAPBACK_ALLOW_EMPTYING_THE_CORPUS` overrides, for a fresh database), but that guard only
-  catches the total case — the ordering is the real protection.
 - **`ADR-0007`**, deliberately, until a second contributor exists.
 - **`ADR-0008`** — the corpus cannot yet tell anyone how corroborated a vector is.
 - **`ADR-0009` point 6** — the tool does not contribute yet; only its local half is built.
+
+**The bottleneck is now a second contributor, not a decision.** With the key change deployed, the
+three records above are all blocked on the same thing, and `ADR-0009` point 6 is the only queued
+work that produces one. That is where effort buys the most.
 
 **The pattern worth keeping.** For most of this project's life the decisions ran far ahead of the
 code, and the `Implementation:` block is the only thing that kept that legible. Write one the day
@@ -173,13 +175,20 @@ one exposes no port.
 **The version that lives in two places.** `PIPELINE_VERSION` here and `EMBEDDING_VERSION` in
 Familiar's `backend/app/config.py` are the same fact — the identity of the embedding pipeline —
 maintained separately by hand. Moving one without the other contributes incomparable vectors under a
-key asserting they are comparable. `ADR-0006` makes `PIPELINE_VERSION` the key itself so
-the case cannot arise, and phases the change so the endpoint contract never breaks. **Phases 1 and 2 are built**: the
-server stores a declared `pipeline_version` and reports it, and Familiar reads it from the installed
-embedder and sends it on every locally computed contribution. Nothing yet *detects* the drift,
-though — the server believes what it is told (point 8) and the key is unchanged — so **any change
-that moves `PIPELINE_VERSION` still requires a matching bump in Familiar in the same breath.** Phase
-4 is what makes the case impossible.
+key asserting they are comparable. `ADR-0006` made `PIPELINE_VERSION` the key itself so
+the case cannot arise, and **all four phases are deployed as of 2026-09-08**: the server stores the
+declared `pipeline_version`, keys on it, reports it, and refuses a contribution without one;
+Familiar reads it from the installed embedder rather than from a constant, so its copy cannot drift
+from the embedder that actually ran.
+
+**What this does and does not fix.** Two vectors can no longer collide under a key that asserts
+they are comparable — that case is now structurally impossible rather than merely unlikely. But the
+server still believes what it is told (point 8): a client that declares a pipeline it did not run
+is accepted, and `ADR-0007`'s attestation is what would catch that, deliberately unbuilt until a
+second contributor exists. `EMBEDDING_VERSION` also still exists in Familiar as its own counter for
+driving re-analysis; it is no longer a claim about comparability, so it no longer has to move in
+lockstep with `PIPELINE_VERSION` — but moving `PIPELINE_VERSION` still means Familiar must
+recompute, because its old vectors will no longer match the key it now sends.
 
 ## Development
 

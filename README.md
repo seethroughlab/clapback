@@ -51,8 +51,14 @@ for the cross-machine check.
 
 Early, and worth being plain about:
 
-- **21,890 embeddings**, contributed by **9 addresses**, of which one accounts for
-  **99.85%**. It is not yet a commons; it is one library and a handful of visitors.
+- **25,558 embeddings, all from a single contributor.** Before 2026-09-08 it was 9
+  addresses with one accounting for 99.85%; migration `011` then removed every row
+  that could not say which pipeline produced it, and those 8 other addresses had
+  contributed before there was a field to say it in. So the concentration went from
+  nearly total to total, and the honest description is that this is one library with
+  a public API in front of it. Getting a second contributor is the single most
+  valuable thing that could happen to this project — four accepted decisions are
+  waiting on one.
 - The corpus is keyed on the SHA256 of an AcoustID fingerprint, so it can answer
   "here is the embedding for a track you have" and *not* "what does this record I do
   not own sound like". Fixing that needs a recording id as a second key — decided

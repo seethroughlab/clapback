@@ -11,7 +11,8 @@ point 10**, which kept the existing embeddings and marked them unconfirmed; poin
 them instead.
 
 Implementation:
-- Accepted 2026-09-04. **Point 6 phase 1 is built** (2026-09-05); phases 2 to 4 are outstanding.
+- Accepted 2026-09-04. **All four phases of point 6 are built and deployed**; the key changed on
+  the live corpus 2026-09-08. The bullets below are in the order the work happened.
 - Phase 1: `pipeline_version` is accepted on `POST /v1/embeddings`, stored on the row
   (`packages/server/app/db/models.py`, migration `010_embeddings_pipeline_version`), returned by
   the lookup and by `/v1/similar`, and offered there as a filter. The key is unchanged, the column
@@ -107,6 +108,58 @@ Implementation:
   on is Familiar's re-analysis actually running on the deployed instance and repopulating the
   corpus — days of background work, not a code change. Deploying this before then is what the
   guard above exists to catch.
+- **The declaration gap closed 2026-09-08, and the sweep reported what it could not reach.** The
+  `--declare-pipeline` backfill finished 07:33 UTC: 26,431 considered, 19,439 already in the
+  corpus, 6,168 contributed, 0 refused, 0 errors — and **824 with no AcoustID fingerprint at all**.
+  Those are not a failure to retry; a recording the fingerprinter cannot key is a recording this
+  corpus has no way to hold, and they are the reason the declared count settles near 25,558 rather
+  than the 26,431 the library contains. The remaining ~49 between the sweep's per-track tally and
+  the row count are tracks sharing a fingerprint, which the corpus is supposed to collapse.
+- **An earlier run of the same sweep died silently at 16,500 of 26,428** (2026-09-07 18:13 UTC): no
+  traceback, no summary, no errors logged, process gone, cause never determined. It went unnoticed
+  through two status checks because a stale progress line is indistinguishable from a live one. The
+  second run appended an exit code for that reason. Recorded because the failure mode — a long
+  backfill that stops without saying so — is the one this project keeps meeting, and the fix is
+  always to make the finish observable rather than to infer it from the last line.
+- **Phase 4 deployed 2026-09-08**, migration `011` applied to the live corpus. It removed 47,486
+  rows that could not say what produced them, leaving **25,558, every one declaring
+  `laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32`** — one distinct pipeline where there
+  had been two, counting null as one. `pipeline_version` is `NOT NULL` and
+  `(fingerprint_hash, pipeline_version)` is the primary key. A `pg_dump` taken immediately before
+  (361,326,838 bytes, 23:08:48 UTC) is the only route back to the removed rows, and it is
+  post-sweep rather than the morning's nightly, which predated the 6,168.
+- **The collapse this migration was written to perform turned out to be a no-op, and that was
+  measured before it ran rather than discovered after.** Zero `(fingerprint_hash, pipeline_version)`
+  groups held more than one row, so the `contributor_count` summing touched nothing and the final
+  count equalled the declared count exactly. The prediction matching the outcome is what confirms
+  nothing unexpected happened; a discrepancy there would have meant something this record did not
+  know about. The collapse logic is still right to exist — it is the case Familiar's v7-to-v8 bump
+  would have produced had those rows still been present.
+- **The guard was never exercised, because the ordering held.** `declared` was 25,558 when the
+  migration ran, so the refusal never fired. It remains the backstop for the total case; what
+  actually protected the corpus was checking the count first, which is the discipline the guard
+  cannot enforce.
+- **`alembic current` said `010 (head)` because the deployment was five commits behind, not because
+  it was up to date.** The box did not have `011` on disk at all, and a revision that is absent
+  reads exactly like a revision that is applied. The runbook's build-then-migrate sequence assumes
+  a pull that it does not mention. `deploy/RUNBOOK.md` section 8 now opens with it; the general
+  form is that `git log -1` on the deployment is a precondition for believing any Alembic output.
+- **Verified against the running commons rather than the test suite**: the lookup returns a vector,
+  `/v1/similar` returns neighbours reporting their `pipeline_version` with a self-match of 1.0 (the
+  HNSW index survived the primary-key change), and a `POST /v1/embeddings` without a
+  `pipeline_version` is refused with a clean `422`. That last one is point 4, live: the corpus can
+  no longer accept a vector that will not say what produced it.
+- **The migration cost the corpus every contributor but one, and that was foreseeable rather than
+  foreseen.** Before it ran, 9 client identifiers had contributed, one of them 99.85% of the rows;
+  after it, exactly one remains, holding all 25,558. The other 8 contributed before there was a
+  field to declare a pipeline in, so every one of their rows was undeclared by construction and
+  point 5 removed them all. Nothing here is wrong — a vector nobody can attribute to a pipeline is
+  exactly what this record decided not to keep — but the cost is worth stating plainly: the
+  concentration went from nearly total to total, and the commons is now literally one library.
+  This sharpens rather than changes the priority `ADR-0009` already identified. It is also an
+  argument for `ADR-0007` sooner rather than later: attestation is what would let a returning
+  contributor's rows be trusted without waiting for them to recompute a library.
+
 - Point 5 supersedes `ADR-0001` point 10, whose `Status:` line now records it.
 
 ## Context
