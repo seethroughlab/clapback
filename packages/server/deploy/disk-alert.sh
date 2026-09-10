@@ -18,8 +18,22 @@
 #   sudo systemctl enable --now clapback-disk-alert.timer
 set -euo pipefail
 
+# Remember operator overrides before `.env` gets a chance to clobber them.
+# Sourcing under `set -a` makes the file win over the environment, which is the
+# wrong way round for a script whose whole value is in branches you cannot reach
+# on a box that is at 14%. Testing it used to mean editing the deployed `.env`.
+_pre_percent="${DISK_ALERT_PERCENT-}"
+_pre_state="${DISK_ALERT_STATE-}"
+_pre_ntfy="${DISK_ALERT_NTFY_URL-}"
+_pre_email="${DISK_ALERT_EMAIL-}"
+
 cd "$(dirname "$0")/.."
 [ -f .env ] && set -a && . ./.env && set +a
+
+[ -n "$_pre_percent" ] && DISK_ALERT_PERCENT="$_pre_percent"
+[ -n "$_pre_state" ] && DISK_ALERT_STATE="$_pre_state"
+[ -n "$_pre_ntfy" ] && DISK_ALERT_NTFY_URL="$_pre_ntfy"
+[ -n "$_pre_email" ] && DISK_ALERT_EMAIL="$_pre_email"
 
 THRESHOLD="${DISK_ALERT_PERCENT:-80}"
 STATE="${DISK_ALERT_STATE:-/tmp/clapback-disk-alert.state}"
@@ -42,8 +56,6 @@ fi
 if [ -f "$STATE" ] && [ "$(cat "$STATE")" = "$USED" ]; then
 	exit 0
 fi
-echo "$USED" > "$STATE"
-
 MESSAGE="clapback: disk at ${USED}% (${AVAIL} free) on $(hostname), threshold ${THRESHOLD}%.
 Postgres holds the corpus on this volume. What usually grows: docker images
 (docker system prune), the local backup dump in /tmp, and journald.
@@ -54,9 +66,45 @@ Postgres holds the corpus on this volume. What usually grows: docker images
 echo "$MESSAGE" >&2
 logger -t clapback-disk-alert "disk at ${USED}% (${AVAIL} free), threshold ${THRESHOLD}%"
 
-# Mail if the box can. A missing MTA is not a failure worth exiting non-zero for:
-# the journal entry above is the durable record, and systemd surfaces a failed
-# unit, which is one more thing to look at rather than one more thing that works.
-if command -v mail >/dev/null && [ -n "${DISK_ALERT_EMAIL:-}" ]; then
-	echo "$MESSAGE" | mail -s "clapback: disk ${USED}% on $(hostname)" "$DISK_ALERT_EMAIL" || true
+# **Deliver before latching.** The latch records "this crossing was announced",
+# so writing it before the send turns a failed delivery into an alert nobody
+# receives and nothing retries — the precise failure this script exists to avoid,
+# reproduced one layer up. Sending first means a network blip costs fifteen
+# minutes rather than the outage.
+ATTEMPTED=0
+DELIVERED=0
+
+if [ -n "${DISK_ALERT_NTFY_URL:-}" ]; then
+	ATTEMPTED=1
+	if curl -fsS --max-time 10 \
+		-H "Title: clapback disk ${USED}%" \
+		-H "Priority: high" \
+		-H "Tags: warning,floppy_disk" \
+		-d "$MESSAGE" "$DISK_ALERT_NTFY_URL" >/dev/null 2>&1; then
+		DELIVERED=1
+	else
+		logger -t clapback-disk-alert "ntfy delivery failed for ${DISK_ALERT_NTFY_URL}"
+	fi
 fi
+
+# Mail if the box can. A missing MTA is not a failure worth exiting non-zero for:
+# the journal entry above is the durable record.
+if command -v mail >/dev/null && [ -n "${DISK_ALERT_EMAIL:-}" ]; then
+	ATTEMPTED=1
+	if echo "$MESSAGE" | mail -s "clapback: disk ${USED}% on $(hostname)" "$DISK_ALERT_EMAIL"; then
+		DELIVERED=1
+	else
+		logger -t clapback-disk-alert "mail delivery failed for ${DISK_ALERT_EMAIL}"
+	fi
+fi
+
+# No channel configured is journal-only mode, which is a deliberate choice rather
+# than a fault: latch and exit clean. A channel that was tried and failed is a
+# fault, so leave the latch off and fail the unit — an undeliverable alert should
+# be visible as a broken thing, not as silence.
+if [ "$ATTEMPTED" = 1 ] && [ "$DELIVERED" = 0 ]; then
+	echo "clapback: alert could not be delivered on any configured channel" >&2
+	exit 1
+fi
+
+echo "$USED" > "$STATE"
