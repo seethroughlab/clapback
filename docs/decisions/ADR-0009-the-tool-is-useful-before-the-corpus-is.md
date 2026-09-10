@@ -18,6 +18,14 @@ Implementation:
   after both halves of that had stopped being true. Corrected rather than quietly overwritten: a
   status line that goes stale in a living record is exactly the failure these blocks exist to
   catch, and it is worth knowing this one did.
+- **Point 6 is blocked by [ADR-0010](ADR-0010-the-corpus-key-is-a-function-of-the-audio.md)**
+  (proposed 2026-09-10), and the blocker was found by starting to build it. `fingerprint_hash` is
+  SHA256 of whatever string the client stored, and Familiar stores AcoustID fingerprints in two
+  encodings — 14,284 hex-escaped against 11,364 raw, both already live keys in the corpus. A tool
+  that fingerprints audio gets the raw form, so it would match ~44% of recordings and open new rows
+  for the rest: two clients that never confirm and never contradict each other, which is precisely
+  the evidence `ADR-0008` is built to report honestly. Point 5's chromaprint caution was pointing at
+  this the whole time without naming it.
 - The four records waiting on this are unchanged: `ADR-0004` point 4 cannot count independence,
   `ADR-0007` cannot reach a quorum of two, `ADR-0008` reports zero confirmations, and `ADR-0002`
   justifies an endpoint nobody outside this project yet has reason to query. Point 3's search now
