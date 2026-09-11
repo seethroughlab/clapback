@@ -35,6 +35,30 @@ Implementation:
   the disk alert (`deploy/disk-alert.sh`, a 15-minute timer at 80%) landed 2026-09-04. They are not
   the same guard and the second is not implied by the first: the ceiling bounds embeddings, and
   nothing bounds docker images, journald, or the dump written locally before it is uploaded.
+- **The disk alert existed for six days without a way to reach anybody, and passed every check
+  that was made of it.** Audited 2026-09-10: the timer was enabled, active, running every fifteen
+  minutes and exiting 0, and all three of its branches — fire, latch, clear — worked correctly when
+  exercised. What it did not have was a delivery channel. `DISK_ALERT_EMAIL` was unset, there was no
+  `mail` binary and no MTA, so the alert resolved to a journald line on a box nobody reads the
+  journal of. Point 9 asks for "disk alerting before Postgres dies"; what shipped was disk
+  *detection*, and the difference is invisible from every angle except actually crossing the
+  threshold. **A green timer is evidence the check ran, not evidence anyone would hear it.**
+- **Fixed 2026-09-10 by adding a webhook channel** (`DISK_ALERT_NTFY_URL`, ntfy), chosen over an
+  SMTP relay because storing mail credentials on a public-facing box to warn about disk space is a
+  poor trade, and over AWS SNS because it would have widened an IAM policy deliberately scoped to
+  the backup bucket. The tradeoff taken instead: an ntfy topic name is its own credential, so the
+  topic is a long random string and the alert body — hostname and disk figures — is what leaves the
+  machine. This is a new external dependency for *operational awareness only*; nothing on the write
+  path or in the corpus touches it, which is why it is recorded here rather than raising its own
+  ADR.
+- **Two fixes came out of testing it rather than reading it.** Delivery now happens *before* the
+  latch is written: latching first would have recorded "this crossing was announced" for a send that
+  failed, which is the same silent-failure shape the alert exists to prevent, one layer up. And a
+  channel that was tried and failed now exits non-zero without latching, so the unit shows as failed
+  and the next run retries. Separately, `.env` was sourced under `set -a` and therefore beat the
+  environment, so the threshold could not be overridden for a test without editing the deployed
+  config — the script's own comment says it chose POSIX `df` to stay testable, and this quietly
+  undid that. Environment now wins.
 - Point 9's third bound, per-client quotas, is still owed and needs point 1's identifier to be
   arriving, which it now is.
 

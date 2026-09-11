@@ -338,10 +338,48 @@ reaching this host is asked to use IPv6.
 string carrying it, so the shell kills itself and everything after it silently
 does not run.
 
+## 9. The disk alert, and how to prove it still works
+
+`ADR-0004` point 9's second bound. `deploy/disk-alert.sh` on a 15-minute timer;
+it fires once on crossing `DISK_ALERT_PERCENT` (80), latches so it does not repeat
+every fifteen minutes, and clears the latch when usage drops back under.
+
+**A configured channel is what makes it an alert.** With `DISK_ALERT_NTFY_URL` and
+`DISK_ALERT_EMAIL` both blank it logs to journald and exits 0 — indistinguishable
+from a healthy check unless somebody is reading the journal, which is how it sat
+from 2026-09-04 to 2026-09-10. Delivery now happens *before* the latch is written,
+and a channel that was tried and failed exits non-zero without latching, so the
+next run retries and `systemctl` shows a failed unit.
+
+**Test it without waiting for a full disk.** Environment variables now beat `.env`
+(they did not before, which is why this was awkward), so the branches are reachable:
+
+```bash
+cd ~/clapback/packages/server
+# fires for real — sends to whatever channel .env configures
+DISK_ALERT_PERCENT=1 DISK_ALERT_STATE=/tmp/probe.state bash deploy/disk-alert.sh; echo "exit=$?"
+# latched: silent, exit 0
+DISK_ALERT_PERCENT=1 DISK_ALERT_STATE=/tmp/probe.state bash deploy/disk-alert.sh; echo "exit=$?"
+# delivery failure: exit 1 and no latch written
+DISK_ALERT_PERCENT=1 DISK_ALERT_STATE=/tmp/probe2.state \
+  DISK_ALERT_NTFY_URL=http://127.0.0.1:9/nope bash deploy/disk-alert.sh; echo "exit=$?"
+rm -f /tmp/probe.state /tmp/probe2.state
+```
+
+Check it is actually scheduled, which is a different question from whether it works:
+
+```bash
+systemctl list-timers clapback-disk-alert --all
+journalctl -t clapback-disk-alert -n 20
+```
+
+**On ntfy specifically:** any topic name is a valid topic, so the topic name is the
+only credential. Anyone who guesses it reads the alerts and can publish fakes to
+them. Use a long random suffix. The alert body carries the hostname and disk
+figures, which is what leaves the machine.
+
 ## What is still not done after all of this
 
-- **`ADR-0004` point 9's disk alert.** "A full disk is an outage; 80% of one is a
-  Tuesday afternoon." The row ceiling bounds growth; nothing yet watches the disk.
 - **Anonymous writes**, which stay refused until `ADR-0004` is built.
 - **Similarity search** (`ADR-0002`), which needs `ADR-0001` deferred item 4's
   recording id before it returns anything a stranger can use.

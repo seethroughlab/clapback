@@ -129,10 +129,16 @@ Shipped since the records were written: `ADR-0002`'s similarity endpoint (HNSW, 
 `ADR-0005`'s restructure and PyPI release, **all four phases of `ADR-0006`** and point 7's guard,
 and `ADR-0009`'s tool.
 
-**Still unbuilt, and the first is the one with consequences:**
+**`ADR-0004` point 9's disk alert is built and now actually delivers** (2026-09-10). Worth knowing
+why that is two claims: the timer had been enabled and exiting 0 every fifteen minutes since
+2026-09-04 with no delivery channel configured, so it was disk *detection* and a journald line on a
+box nobody reads. A webhook (`DISK_ALERT_NTFY_URL`) now carries it, delivery happens before the
+latch is written, and a failed send fails the unit instead of latching silently. `deploy/RUNBOOK.md`
+section 9 has the commands that exercise all three branches without waiting for a full disk — **a
+green timer is evidence the check ran, not evidence anyone would hear it.**
 
-- **`ADR-0004` point 9's disk alert.** "A full disk is an outage; 80% of one is a Tuesday
-  afternoon." The row ceiling bounds growth; nothing watches the disk.
+**Still unbuilt:**
+
 - **`ADR-0007`**, deliberately, until a second contributor exists.
 - **`ADR-0008`** — the corpus cannot yet tell anyone how corroborated a vector is.
 - **`ADR-0009` point 6** — the tool does not contribute yet; only its local half is built.

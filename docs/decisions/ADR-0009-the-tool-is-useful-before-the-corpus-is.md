@@ -9,8 +9,15 @@ the directory [ADR-0005](ADR-0005-the-repository-is-a-workspace-of-peers.md) poi
 deciding anything about it.
 
 Implementation:
-- Accepted 2026-09-04. **Nothing is built**, and `packages/cli/` does not exist — `ADR-0005` point 8
-  reserved the name and deliberately created no directory, which is still the honest state.
+- Accepted 2026-09-04. **The local half is built** — `packages/cli/` holds `clapback` 0.1.0 with
+  `index`, `search` and `duplicates` over a local store, which is points 1 to 5 and 7 to 9. **Point
+  6, contribution, is not built**, so the record's whole purpose — producing a second contributor —
+  is still unmet. The tool is currently useful and silent, which is the right order (point 4) but
+  only half the argument.
+- **This block said "nothing is built, and `packages/cli/` does not exist" until 2026-09-10**, well
+  after both halves of that had stopped being true. Corrected rather than quietly overwritten: a
+  status line that goes stale in a living record is exactly the failure these blocks exist to
+  catch, and it is worth knowing this one did.
 - The four records waiting on this are unchanged: `ADR-0004` point 4 cannot count independence,
   `ADR-0007` cannot reach a quorum of two, `ADR-0008` reports zero confirmations, and `ADR-0002`
   justifies an endpoint nobody outside this project yet has reason to query. Point 3's search now
