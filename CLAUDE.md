@@ -136,7 +136,8 @@ is actually true.
 Shipped since the records were written: `ADR-0002`'s similarity endpoint (HNSW, ~3 ms),
 `ADR-0003`'s deployment and backups, `ADR-0004` point 7's delete path and point 9's row ceiling,
 `ADR-0005`'s restructure and PyPI release, **all four phases of `ADR-0006`** and point 7's guard,
-and `ADR-0009`'s tool.
+and `ADR-0009`'s tool — including **point 6, contribution** (2026-09-10), which makes the tool the
+first client to key on the audio rather than on what it stored.
 
 **`ADR-0004` point 9's disk alert is built and now actually delivers** (2026-09-10). Worth knowing
 why that is two claims: the timer had been enabled and exiting 0 every fifteen minutes since
@@ -150,12 +151,10 @@ green timer is evidence the check ran, not evidence anyone would hear it.**
 
 - **`ADR-0007`**, deliberately, until a second contributor exists.
 - **`ADR-0008`** — the corpus cannot yet tell anyone how corroborated a vector is.
-- **`ADR-0009` point 6** — the tool does not contribute yet; only its local half is built. It is
-  unblocked now that `ADR-0010` is accepted, but only if it hashes canonically from its first
-  contribution: a tool that hashes what it stored rather than what it computed reintroduces the
-  split it was waiting on.
-- **`ADR-0010` in full** — the hashing rule, Familiar's re-contribution of ~14,284 rows, and the
-  deletion of the keys that strands.
+- **`ADR-0010` in Familiar** — the CLI follows the canonical hashing rule; Familiar still hashes as
+  stored, so the split is live and the two clients disagree about the key for any recording Familiar
+  stored escaped. Still owed after that: the re-contribution of ~14,284 rows and the deletion of the
+  keys it strands.
 
 **The bottleneck is now a second contributor, not a decision.** With the key change deployed, the
 three records above are all blocked on the same thing, and `ADR-0009` point 6 is the only queued

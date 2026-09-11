@@ -12,6 +12,18 @@ Implementation:
   that leaves stranded. `ADR-0009` point 6 is unblocked by the first of those alone.
 - Nothing here is a server change. The server's request schema, storage and key are already correct
   and stay untouched — which is the unusual property of this record and the reason point 4 exists.
+- **Points 1 and 2 are built in the CLI** (2026-09-10), which is the first client to follow the rule
+  and the only one that gets it for free: it fingerprints audio and hashes the result, so the value
+  never passes through storage and there is no encoding to undo. `packages/cli/src/clapback_cli/
+  fingerprint.py` carries `canonical()` anyway, for fingerprints that *have* been through something,
+  with the decode deliberately narrow — `\x`, even length, and a decode to printable ASCII, none of
+  which a base64 fingerprint can satisfy. `packages/cli/tests/test_fingerprint.py` pins the two
+  encodings to one hash and pins that hash against `hashlib` directly, so a change to the canonical
+  form fails a test rather than silently re-keying the corpus.
+- **Familiar still hashes as stored**, so the rule is half-adopted and the split is still live. Until
+  its `hash_fingerprint` changes, the CLI and Familiar will disagree about the key for any recording
+  Familiar stored escaped — which is the state this record describes, now with one client on the
+  correct side of it rather than none.
 
 Extends [ADR-0006](ADR-0006-the-pipeline-identity-is-the-corpus-key.md), which made
 `(fingerprint_hash, pipeline_version)` the key and fixed the half of it that describes the pipeline.

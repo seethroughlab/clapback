@@ -28,6 +28,20 @@ Implementation:
   this the whole time without naming it. `ADR-0010` point 6 unblocks this work on the hashing rule
   alone, so point 6 can be built before the legacy rows are corrected — but it must hash canonically
   from its first contribution, or it recreates the split it was waiting on.
+- **Point 6 is built** (2026-09-10): `clapback contribute`, opt-in, with `--dry-run` and `--limit`.
+  It declares a `pipeline_version` and a `client_id` as the point requires, takes the checkpoint from
+  the pipeline identity rather than writing it down twice, and refuses outright to contribute a store
+  indexed by a different pipeline — sending those would assert that a pipeline produced vectors it
+  did not, which is the thing `ADR-0006` spent a migration making impossible server-side.
+- **It looks every track up before offering it, and that is correctness rather than courtesy.** A
+  repeat POST increments `contributor_count` and writes a `submission_agreement` row, so a client
+  that re-sent its library would manufacture evidence of one install independently agreeing with
+  itself — the exact measurement `ADR-0008` rests on. Familiar's backfill learned this first; this
+  is the second client to need the lesson, which suggests it belongs in the record rather than in
+  two implementations.
+- **The `client_id` is minted on first contribution and not at index time.** `ADR-0009` point 4 says
+  nothing leaves the machine by default, and that covers the fact that an install exists: somebody
+  who only ever searched their own files has no identifier, and a `--dry-run` does not create one.
 - The four records waiting on this are unchanged: `ADR-0004` point 4 cannot count independence,
   `ADR-0007` cannot reach a quorum of two, `ADR-0008` reports zero confirmations, and `ADR-0002`
   justifies an endpoint nobody outside this project yet has reason to query. Point 3's search now

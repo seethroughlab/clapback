@@ -24,6 +24,32 @@ master are obvious, and so is the same recording on two different releases.
 Both run against your own files, offline. There is no account, no key, and
 nothing is sent anywhere.
 
+**Contribute, if you want to.** Opt-in and off unless you type it:
+
+```bash
+clapback contribute --dry-run   # say what would be sent, send nothing
+clapback contribute
+```
+
+This sends the vectors — never your audio, never filenames, never your library's
+contents. A recording is identified by the SHA256 of its AcoustID fingerprint,
+which is one-way: the corpus learns that somebody has a recording without learning
+which recording it is.
+
+Every track is looked up before it is offered, so re-running contributes only
+what is new. That is not politeness about bandwidth — a repeat submission is
+recorded as agreement, and one install agreeing with itself would corrupt the one
+measurement the commons exists to make.
+
+Contributing needs `chromaprint`, and only contributing does:
+
+```bash
+brew install chromaprint     # or: apt install libchromaprint-tools
+pip install pyacoustid
+```
+
+Without it, indexing, search and duplicates work exactly as well.
+
 ## What it needs
 
 `clapback-embed`, which arrives with it, and the ONNX encoders it runs on. Those
@@ -41,6 +67,11 @@ Or point `CLAPBACK_MODEL_DIR` at them if you already have them.
 
 `~/.clapback/` — a `vectors.npy` and an `index.json`, both yours. Deleting the
 directory loses nothing but the time to rebuild it.
+
+If you contribute, `index.json` also holds a `client_id`: a random UUID minted the
+first time you contribute and never before, derived from nothing about you or your
+machine. It exists so the corpus can tell two contributions apart from one client
+retrying. Delete it and you are a new contributor; nothing else changes.
 
 ## What it is not
 
