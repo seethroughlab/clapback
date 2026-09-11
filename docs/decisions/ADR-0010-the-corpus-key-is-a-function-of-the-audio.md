@@ -1,8 +1,17 @@
 # ADR-0010: The Corpus Key Is a Function of the Audio
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-10
+
+Implementation:
+- **Accepted 2026-09-10**, the same day it was proposed and the same day the defect was found.
+  Nothing is built.
+- The order point 6 sets is the order to work in: the rule first, in every client that hashes; then
+  Familiar's re-contribution of the rows it keyed on the escaped form; then deletion of the keys
+  that leaves stranded. `ADR-0009` point 6 is unblocked by the first of those alone.
+- Nothing here is a server change. The server's request schema, storage and key are already correct
+  and stay untouched — which is the unusual property of this record and the reason point 4 exists.
 
 Extends [ADR-0006](ADR-0006-the-pipeline-identity-is-the-corpus-key.md), which made
 `(fingerprint_hash, pipeline_version)` the key and fixed the half of it that describes the pipeline.

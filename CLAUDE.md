@@ -100,12 +100,14 @@ and what deferred item 5's tool will need a home beside. **`ADR-0005` and `ADR-0
 `ADR-0004` point 4, `ADR-0007`, `ADR-0008` and `ADR-0002` — are each waiting on a second contributor,
 and the tool is the only queued work that produces one.
 
-**`ADR-0010` is proposed, not accepted** (2026-09-10). It says the corpus key must be a function of
+**`ADR-0010` was accepted 2026-09-10** and nothing is built. The corpus key must be a function of
 the audio: `fingerprint_hash` is SHA256 of whatever string a client stored, and Familiar stores the
-same AcoustID fingerprint in two encodings — 14,284 hex-escaped, 11,364 raw — both of which are
-already live keys in the corpus. Until it is decided, `ADR-0009` point 6 cannot be built correctly.
-Note that no server migration can fix this: the server holds a one-way digest and never sees a
-fingerprint, so only a client can re-key.
+same AcoustID fingerprint in two encodings — 14,284 hex-escaped, 11,364 raw — both already live keys
+in the corpus. **No server migration can fix this**: the server holds a one-way digest and never
+sees a fingerprint, so only a client can re-key, and the server's schema and key are already correct
+and stay untouched. Work in the order its point 6 sets — the hashing rule in every client first,
+then Familiar's re-contribution, then deletion of the stranded keys. `ADR-0009` point 6 is unblocked
+by the first of those alone.
 
 `ADR-0008` closes `ADR-0001` deferred item 2 — the part the cross-machine measurement did not answer,
 being where the agreement threshold sits and what the corpus does with it.
@@ -148,10 +150,12 @@ green timer is evidence the check ran, not evidence anyone would hear it.**
 
 - **`ADR-0007`**, deliberately, until a second contributor exists.
 - **`ADR-0008`** — the corpus cannot yet tell anyone how corroborated a vector is.
-- **`ADR-0009` point 6** — the tool does not contribute yet; only its local half is built. **It is
-  now blocked on `ADR-0010`**, which is proposed and not yet accepted: the corpus key turns out not
-  to be a function of the audio, so a second client would systematically fail to confirm the
-  majority of existing rows. Do not build contribution until that is decided.
+- **`ADR-0009` point 6** — the tool does not contribute yet; only its local half is built. It is
+  unblocked now that `ADR-0010` is accepted, but only if it hashes canonically from its first
+  contribution: a tool that hashes what it stored rather than what it computed reintroduces the
+  split it was waiting on.
+- **`ADR-0010` in full** — the hashing rule, Familiar's re-contribution of ~14,284 rows, and the
+  deletion of the keys that strands.
 
 **The bottleneck is now a second contributor, not a decision.** With the key change deployed, the
 three records above are all blocked on the same thing, and `ADR-0009` point 6 is the only queued
