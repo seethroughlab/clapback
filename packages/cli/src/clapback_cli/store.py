@@ -13,7 +13,9 @@ different reasons. `vectors.npy` is 2 KB per track and rewritten whole;
 
 from __future__ import annotations
 
+import dataclasses
 import json
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -27,6 +29,14 @@ class Entry:
     path: str
     mtime: float
     size: int
+    #: The corpus key for this recording, cached after the first time chromaprint
+    #: is asked. `None` means "not fingerprinted", which is the normal state: the
+    #: local half of this tool never needs one (`ADR-0009` point 5), so the cost
+    #: is only paid by somebody who contributes.
+    #:
+    #: Cached rather than recomputed because fingerprinting spawns a process per
+    #: file, and a contribute run that is interrupted should not start over.
+    fingerprint_hash: str | None = None
 
 
 class Store:
@@ -39,12 +49,24 @@ class Store:
         self.vectors: np.ndarray = np.zeros((0, 512), dtype=np.float32)
         self.entries: list[Entry] = []
         self.pipeline_version: str | None = None
+        #: `ADR-0004` point 1: an opaque per-install identifier, generated once and
+        #: never derived from anything about the machine or its owner. It exists so
+        #: the corpus can tell two submissions from one client retrying, which is
+        #: the distinction `contributor_count` cannot make.
+        self.client_id: str | None = None
 
     def load(self) -> Store:
         if self.index_path.exists():
             data = json.loads(self.index_path.read_text())
-            self.entries = [Entry(**e) for e in data.get("entries", [])]
+            # Tolerate keys this version does not know: a store written by a
+            # newer clapback must not make an older one delete the library.
+            fields = {f.name for f in dataclasses.fields(Entry)}
+            self.entries = [
+                Entry(**{k: v for k, v in e.items() if k in fields})
+                for e in data.get("entries", [])
+            ]
             self.pipeline_version = data.get("pipeline_version")
+            self.client_id = data.get("client_id")
         if self.vectors_path.exists():
             self.vectors = np.load(self.vectors_path)
         # A store whose two halves disagree is worse than an empty one: every
@@ -61,11 +83,24 @@ class Store:
             json.dumps(
                 {
                     "pipeline_version": self.pipeline_version,
+                    "client_id": self.client_id,
                     "entries": [e.__dict__ for e in self.entries],
                 },
                 indent=1,
             )
         )
+
+    def ensure_client_id(self) -> str:
+        """The identifier this install contributes under, minted on first use.
+
+        Deliberately not minted at `index` time. A store that has only ever been
+        searched locally has no reason to carry an identifier, and `ADR-0009`
+        point 4 is that nothing leaves the machine by default — including the fact
+        that this install exists.
+        """
+        if not self.client_id:
+            self.client_id = str(uuid.uuid4())
+        return self.client_id
 
     def known(self) -> dict[str, Entry]:
         return {e.path: e for e in self.entries}

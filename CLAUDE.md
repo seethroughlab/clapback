@@ -100,6 +100,15 @@ and what deferred item 5's tool will need a home beside. **`ADR-0005` and `ADR-0
 `ADR-0004` point 4, `ADR-0007`, `ADR-0008` and `ADR-0002` — are each waiting on a second contributor,
 and the tool is the only queued work that produces one.
 
+**`ADR-0010` was accepted 2026-09-10** and nothing is built. The corpus key must be a function of
+the audio: `fingerprint_hash` is SHA256 of whatever string a client stored, and Familiar stores the
+same AcoustID fingerprint in two encodings — 14,284 hex-escaped, 11,364 raw — both already live keys
+in the corpus. **No server migration can fix this**: the server holds a one-way digest and never
+sees a fingerprint, so only a client can re-key, and the server's schema and key are already correct
+and stay untouched. Work in the order its point 6 sets — the hashing rule in every client first,
+then Familiar's re-contribution, then deletion of the stranded keys. `ADR-0009` point 6 is unblocked
+by the first of those alone.
+
 `ADR-0008` closes `ADR-0001` deferred item 2 — the part the cross-machine measurement did not answer,
 being where the agreement threshold sits and what the corpus does with it.
 
@@ -127,7 +136,8 @@ is actually true.
 Shipped since the records were written: `ADR-0002`'s similarity endpoint (HNSW, ~3 ms),
 `ADR-0003`'s deployment and backups, `ADR-0004` point 7's delete path and point 9's row ceiling,
 `ADR-0005`'s restructure and PyPI release, **all four phases of `ADR-0006`** and point 7's guard,
-and `ADR-0009`'s tool.
+and `ADR-0009`'s tool — including **point 6, contribution** (2026-09-10), which makes the tool the
+first client to key on the audio rather than on what it stored.
 
 **`ADR-0004` point 9's disk alert is built and now actually delivers** (2026-09-10). Worth knowing
 why that is two claims: the timer had been enabled and exiting 0 every fifteen minutes since
@@ -141,7 +151,10 @@ green timer is evidence the check ran, not evidence anyone would hear it.**
 
 - **`ADR-0007`**, deliberately, until a second contributor exists.
 - **`ADR-0008`** — the corpus cannot yet tell anyone how corroborated a vector is.
-- **`ADR-0009` point 6** — the tool does not contribute yet; only its local half is built.
+- **`ADR-0010` in Familiar** — the CLI follows the canonical hashing rule; Familiar still hashes as
+  stored, so the split is live and the two clients disagree about the key for any recording Familiar
+  stored escaped. Still owed after that: the re-contribution of ~14,284 rows and the deletion of the
+  keys it strands.
 
 **The bottleneck is now a second contributor, not a decision.** With the key change deployed, the
 three records above are all blocked on the same thing, and `ADR-0009` point 6 is the only queued
