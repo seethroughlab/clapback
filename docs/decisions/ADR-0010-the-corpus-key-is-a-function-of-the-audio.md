@@ -20,10 +20,34 @@ Implementation:
   which a base64 fingerprint can satisfy. `packages/cli/tests/test_fingerprint.py` pins the two
   encodings to one hash and pins that hash against `hashlib` directly, so a change to the canonical
   form fails a test rather than silently re-keying the corpus.
-- **Familiar still hashes as stored**, so the rule is half-adopted and the split is still live. Until
-  its `hash_fingerprint` changes, the CLI and Familiar will disagree about the key for any recording
-  Familiar stored escaped — which is the state this record describes, now with one client on the
-  correct side of it rather than none.
+- **Familiar adopted the rule 2026-09-11** (its `ADR-0114`, `#300`). Its `hash_fingerprint`
+  canonicalises the same narrow way, and its tests reimplement this project's CLI rule independently
+  and assert the two agree — because the property is that two implementations of one written rule
+  produce one key, not that they share an import. Both clients now key on the audio.
+- **Point 4's re-contribution ran 2026-09-11**, 84 minutes, `EXIT=0`: 26,431 considered, 11,415
+  already present (the rows stored raw, whose keys never moved), **14,192 contributed** under
+  canonical keys, 824 with no fingerprint, 0 refused, 0 errors. A re-send of vectors Familiar already
+  held, not a recompute — no embedding changed. `--declare-pipeline` turned out to be mandatory
+  rather than optional: since `ADR-0006` phase 4 the server requires `pipeline_version`, and the
+  backfill declares none by default, so without the flag every POST is a 422.
+- **Point 5's deletion ran 2026-09-13**: 14,260 old keys derived from Familiar's escaped rows (14,284
+  rows; 24 share a fingerprint), 14,246 found present, **14,246 removed** — 5 in a trial, 14,241 in
+  the run — 0 failures, `EXIT=0`, through `DELETE /admin/corpus/recordings/{hash}` and never
+  through `psql`. Proved safe before running rather than after: 0 recordings would be orphaned
+  (every old row had a canonical row waiting), 0 old keys collided with any new key, and 0 rows in
+  `features`, `analysis_details` or `submission_agreement` were keyed on them, so the takedown
+  endpoint's wider reach touched nothing else. A `pg_dump` (286 MB, 17:29 UTC) preceded it.
+- **The corpus after this record: 25,515 rows, one pipeline, one contributor, zero rows under a key
+  no client can reproduce.** It went 25,558 → 39,761 → 25,515 across the week, and the net change of
+  −43 is the duplicate collapse the split had been hiding — recordings this library holds in both
+  encodings are now one row. Every count in that sequence was predicted before it was measured.
+- **Two things the operation taught that the design did not.** The admin cookie is set
+  `secure=True`, which is right for a login form on a public host and is exactly what makes the
+  cookie unusable over `http://localhost` — the only route to the admin surface, since Caddy 404s
+  `/admin` from outside. Python's cookie jar silently dropped it and every DELETE returned 401 with
+  a valid session; the fix is to send the cookie as a header. And a 14,000-request loop must run
+  detached: the first attempt hung on the SSH hop before reaching the server, which looked identical
+  to a slow deletion. Both are recorded in the script that ran it.
 
 Extends [ADR-0006](ADR-0006-the-pipeline-identity-is-the-corpus-key.md), which made
 `(fingerprint_hash, pipeline_version)` the key and fixed the half of it that describes the pipeline.

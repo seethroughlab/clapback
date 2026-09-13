@@ -100,14 +100,14 @@ and what deferred item 5's tool will need a home beside. **`ADR-0005` and `ADR-0
 `ADR-0004` point 4, `ADR-0007`, `ADR-0008` and `ADR-0002` — are each waiting on a second contributor,
 and the tool is the only queued work that produces one.
 
-**`ADR-0010` was accepted 2026-09-10** and nothing is built. The corpus key must be a function of
-the audio: `fingerprint_hash` is SHA256 of whatever string a client stored, and Familiar stores the
-same AcoustID fingerprint in two encodings — 14,284 hex-escaped, 11,364 raw — both already live keys
-in the corpus. **No server migration can fix this**: the server holds a one-way digest and never
-sees a fingerprint, so only a client can re-key, and the server's schema and key are already correct
-and stay untouched. Work in the order its point 6 sets — the hashing rule in every client first,
-then Familiar's re-contribution, then deletion of the stranded keys. `ADR-0009` point 6 is unblocked
-by the first of those alone.
+**`ADR-0010` was accepted 2026-09-10 and is fully done as of 2026-09-13.** The corpus key must be a
+function of the audio: `fingerprint_hash` was SHA256 of whatever string a client stored, and
+Familiar stored the same AcoustID fingerprint in two encodings — 14,284 hex-escaped, 11,364 raw —
+both live keys in the corpus. **No server migration could fix it**: the server holds a one-way
+digest and never sees a fingerprint, so only a client could re-key, and the server's schema and key
+were never touched. Both clients now hash canonically (Familiar's `ADR-0114`), Familiar re-contributed
+14,192 rows under canonical keys, and the 14,246 stranded old keys were deleted through the admin
+API. Every count was predicted before it was measured; the Implementation block has them.
 
 `ADR-0008` closes `ADR-0001` deferred item 2 — the part the cross-machine measurement did not answer,
 being where the agreement threshold sits and what the corpus does with it.
@@ -119,12 +119,17 @@ being where the agreement threshold sits and what the corpus does with it.
 | 4 | The recording-id key | `ADR-0002` point 4 makes it a prerequisite: similarity search over a hash-keyed corpus returns hashes nobody can resolve |
 | 6 | The rename, and what the domain serves | Cheap, and last on purpose — nothing above depends on it |
 
-### What is actually running, as of 2026-09-08
+### What is actually running, as of 2026-09-13
 
 The commons is public at **https://clapback.seethroughlab.com** — one AWS instance, TLS via Caddy,
-nightly `pg_dump` to `s3://clapback-backup`, and a corpus of **25,558 rows, every one of which
-declares the pipeline that produced it**. All three members of `ADR-0001` point 3 now exist:
-`clapback-embed` on PyPI, the server deployed, and the tool in `packages/cli`.
+nightly `pg_dump` to `s3://clapback-backup`, and a corpus of **25,515 rows, every one of which
+declares the pipeline that produced it and is keyed on a hash any client can reproduce from the
+audio**. `clapback-embed` is on PyPI and the server is deployed. **The tool is not yet on PyPI** —
+`pip install clapback`, which the README said for a week, installs an unrelated 2018 clap-emoji
+package; it publishes as `clapback-cli` once PR #43 merges and a pending publisher is registered.
+
+The corpus went 25,558 → 39,761 → 25,515 across 2026-09-08 to 09-13. The middle number is
+`ADR-0010`'s re-contribution; the net −43 is the duplicate collapse the encoding split had hidden.
 
 **`ADR-0006` is fully deployed as of 2026-09-08.** The key is `(fingerprint_hash,
 pipeline_version)`, `pipeline_version` is `NOT NULL`, and a contribution that does not declare one
@@ -151,10 +156,9 @@ green timer is evidence the check ran, not evidence anyone would hear it.**
 
 - **`ADR-0007`**, deliberately, until a second contributor exists.
 - **`ADR-0008`** — the corpus cannot yet tell anyone how corroborated a vector is.
-- **`ADR-0010` in Familiar** — the CLI follows the canonical hashing rule; Familiar still hashes as
-  stored, so the split is live and the two clients disagree about the key for any recording Familiar
-  stored escaped. Still owed after that: the re-contribution of ~14,284 rows and the deletion of the
-  keys it strands.
+- **The tool on PyPI** — built, verified cold, and blocked on one PyPI-side step: registering a
+  pending publisher for `clapback-cli` before the first `cli-v*` tag. Until it ships, nobody who is
+  not already here can contribute.
 
 **The bottleneck is now a second contributor, not a decision.** With the key change deployed, the
 three records above are all blocked on the same thing, and `ADR-0009` point 6 is the only queued
