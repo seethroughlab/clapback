@@ -1,6 +1,6 @@
 # ADR-0009: The Tool Is Useful Before the Corpus Is
 
-Status: accepted
+Status: accepted — point 1 narrowed by [ADR-0011](ADR-0011-the-commons-is-what-other-tools-plug-into.md) to the reference client; the Context's account of how a contributor arrives is superseded there; points 2 to 9 stand
 
 Date: 2026-09-04
 

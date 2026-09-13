@@ -1,8 +1,12 @@
 # ADR-0011: The Commons Is What Other Tools Plug Into
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-13
+
+Implementation:
+- **Accepted 2026-09-13**, the day it was proposed. `ADR-0009`'s `Status:` line records the partial
+  supersession. Nothing is built; point 2's package is first.
 
 Extends [ADR-0001](ADR-0001-clapback-is-a-public-clap-embedding-commons.md) points 3 and 8, and
 [ADR-0005](ADR-0005-the-repository-is-a-workspace-of-peers.md), whose "published for others to
