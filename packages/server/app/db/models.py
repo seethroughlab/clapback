@@ -280,3 +280,41 @@ class AnalysisDetail(Base):
     last_accessed_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )
+
+
+class RecordingClaim(Base):
+    """One client's assertion that a fingerprint is a particular MusicBrainz recording.
+
+    `ADR-0012` point 1: a recording id is a claim, not a column. The server holds
+    a hash, cannot ask AcoustID, and does not call MusicBrainz, so it cannot check
+    what it is told — and `ADR-0008` decided that what the corpus cannot verify it
+    counts rather than trusts. A row's recording is therefore derived from these
+    rows — the MBID the most *distinct clients* have claimed — and is null when
+    nobody has.
+
+    Keyed per client so that two clients can disagree without one overwriting the
+    other (mis-tags exist; MusicBrainz merges recordings), and so that `ADR-0004`
+    point 7's deletion by client removes that client's claims and nothing else.
+
+    `embeddings` is untouched. Many hashes to one recording is the normal case —
+    every rip and every master is a distinct fingerprint — so the id is not a key
+    to a row; it is a name several rows share.
+    """
+
+    __tablename__ = "recording_claims"
+    __table_args__ = (
+        # "What does recording X sound like" — `ADR-0012` point 5's third read.
+        Index("ix_recording_claims_mbid", "recording_mbid"),
+    )
+
+    fingerprint_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    #: The MusicBrainz *recording* MBID, canonical lowercase UUID text. Not a
+    #: track id, not a release id — beets calls the recording id `mb_trackid`,
+    #: which is the trap `ADR-0012` names.
+    recording_mbid: Mapped[str] = mapped_column(String(36), primary_key=True)
+    #: Required here, unlike on `embeddings`: a claim that cannot be attributed
+    #: cannot be revoked, and cannot count toward agreement either.
+    client_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

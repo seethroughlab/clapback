@@ -18,6 +18,7 @@ from app.db.models import (
     Embedding,
     Features,
     IPStats,
+    RecordingClaim,
     SubmissionAgreement,
 )
 from app.templates import templates
@@ -230,6 +231,10 @@ class DeletionResult(BaseModel):
     features: int
     analysis_details: int
     submission_agreements: int
+    #: `ADR-0012` point 9: a claim that outlived its row would be an identity for
+    #: a vector the corpus no longer holds, and a client's claims go with the
+    #: client. Defaults so every existing caller of this shape keeps working.
+    recording_claims: int = 0
 
 
 @admin_router.delete("/corpus/recordings/{fingerprint_hash}", response_model=DeletionResult)
@@ -258,6 +263,7 @@ async def delete_recording(
         ("features", Features),
         ("analysis_details", AnalysisDetail),
         ("submission_agreements", SubmissionAgreement),
+        ("recording_claims", RecordingClaim),
     ):
         result = await db.execute(
             delete(model).where(model.fingerprint_hash == fingerprint_hash)
@@ -304,6 +310,11 @@ async def delete_client_submissions(
     agreements = await db.execute(
         delete(SubmissionAgreement).where(SubmissionAgreement.client_id == client_id)
     )
+    # `ADR-0012` point 9: this client's claims and nothing else. Another client's
+    # claim on the same hash is that client's to keep.
+    claims = await db.execute(
+        delete(RecordingClaim).where(RecordingClaim.client_id == client_id)
+    )
     await db.commit()
 
     counts = DeletionResult(
@@ -311,6 +322,7 @@ async def delete_client_submissions(
         features=0,
         analysis_details=0,
         submission_agreements=agreements.rowcount or 0,
+        recording_claims=claims.rowcount or 0,
     )
     logger.warning("retraction: removed %s for client %s", counts, client_id)
     return counts

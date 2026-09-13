@@ -84,8 +84,17 @@ class TestWhatEachOneIsScopedTo:
 
 class TestTheResultSaysWhatHappened:
     def test_it_reports_per_table_counts(self):
+        """One count per table a takedown touches. `recording_claims` joined the
+        list with `ADR-0012`: a claim that outlived its row would be an identity
+        for a vector the corpus no longer holds."""
         fields = set(admin.DeletionResult.model_fields)
-        assert fields == {"embeddings", "features", "analysis_details", "submission_agreements"}
+        assert fields == {
+            "embeddings",
+            "features",
+            "analysis_details",
+            "submission_agreements",
+            "recording_claims",
+        }
 
     def test_counts_are_integers_so_zero_is_distinguishable_from_absent(self):
         r = admin.DeletionResult(embeddings=0, features=0, analysis_details=0, submission_agreements=0)
