@@ -25,6 +25,7 @@ from clapback_client.corpus import Corpus, CorpusError
 PIPELINE = "laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32"
 HASH = "d1" * 32
 VECTOR = [0.0] * 511 + [1.0]
+MBID = "1c6da765-da50-476b-a000-61e7cf45ded8"
 
 
 class FakeResponse(io.BytesIO):
@@ -195,3 +196,70 @@ class TestTheContractIsOnlyHTTP:
         src = inspect.getsource(corpus_mod)
         for forbidden in ("psycopg", "asyncpg", "sqlalchemy", "postgresql://"):
             assert forbidden not in src
+
+
+class TestNamingARecording:
+    """`ADR-0012`: a recording id is a claim, sent with the vector or afterwards."""
+
+    def _sent(self, wire):
+        return json.loads(wire.requests[-1].data)
+
+    def test_contribute_sends_the_id_only_when_given(self, wire):
+        wire.answer(201, {})
+        Corpus("https://x.invalid").contribute(
+            fingerprint_hash=HASH, embedding=VECTOR, pipeline_version=PIPELINE, client_id="c"
+        )
+        assert "recording_mbid" not in self._sent(wire)
+        wire.answer(201, {})
+        Corpus("https://x.invalid").contribute(
+            fingerprint_hash=HASH, embedding=VECTOR, pipeline_version=PIPELINE, client_id="c",
+            recording_mbid=MBID,
+        )
+        assert self._sent(wire)["recording_mbid"] == MBID
+
+    def test_claim_goes_to_its_own_path_with_no_vector(self, wire):
+        """The endpoint exists so nobody re-sends a vector to name it."""
+        wire.answer(201, {"status": "claimed", "recording_mbid": MBID, "recording_claims": 1})
+        out = Corpus("https://x.invalid").claim(
+            fingerprint_hash=HASH, recording_mbid=MBID, client_id="c"
+        )
+        req = wire.requests[-1]
+        assert req.full_url.endswith("/v1/recordings/claims")
+        assert "embedding" not in json.loads(req.data)
+        assert out["recording_claims"] == 1
+
+    def test_claiming_an_absent_row_says_to_contribute_first(self, wire):
+        wire.answer(404, {"detail": "no row"})
+        with pytest.raises(CorpusError, match="contribute it first"):
+            Corpus("https://x.invalid").claim(
+                fingerprint_hash=HASH, recording_mbid=MBID, client_id="c"
+            )
+
+    def test_the_method_says_never_to_resend_the_vector(self):
+        import inspect
+
+        doc = " ".join((inspect.getdoc(Corpus.claim) or "").split()).lower()
+        assert "never re-send the vector" in doc
+
+
+class TestSimilarAndRecording:
+    def test_similar_returns_neighbours_with_their_recordings(self, wire):
+        wire.answer(200, {"neighbours": [
+            {"fingerprint_hash": HASH, "similarity": 1.0, "pipeline_version": PIPELINE,
+             "recording_mbid": MBID, "recording_claims": 1},
+            {"fingerprint_hash": "e2" * 32, "similarity": 0.9, "pipeline_version": PIPELINE,
+             "recording_mbid": None, "recording_claims": 0},
+        ], "searched": 2})
+        n = Corpus("https://x.invalid").similar(VECTOR, limit=2, pipeline_version=PIPELINE)
+        assert [x["recording_mbid"] for x in n] == [MBID, None]
+        assert json.loads(wire.requests[-1].data)["pipeline_version"] == PIPELINE
+
+    def test_recording_returns_rows_and_empty_when_unclaimed(self, wire):
+        wire.answer(200, {"recording_mbid": MBID, "embeddings": [
+            {"fingerprint_hash": HASH, "pipeline_version": PIPELINE, "embedding": VECTOR,
+             "contributor_count": 1, "recording_claims": 1}]})
+        rows = Corpus("https://x.invalid").recording(MBID, pipeline_version=PIPELINE)
+        assert rows[0]["fingerprint_hash"] == HASH
+        assert "+" not in urlsplit(wire.requests[-1].full_url).query
+        wire.answer(404)
+        assert Corpus("https://x.invalid").recording(MBID) == []

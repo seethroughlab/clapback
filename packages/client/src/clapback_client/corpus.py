@@ -125,6 +125,7 @@ class Corpus:
         client_id: str,
         clap_model_version: str | None = None,
         analysis_version: int = 1,
+        recording_mbid: str | None = None,
     ) -> str:
         """POST one embedding. Returns a short word describing what happened.
 
@@ -134,6 +135,13 @@ class Corpus:
         `clap_model_version` defaults to the first component of the pipeline
         identity, which is the checkpoint, so the two cannot disagree about one
         fact; `analysis_version` is the caller's own counter and starts at 1.
+
+        `recording_mbid` — `ADR-0012` — is the MusicBrainz *recording* id, if the
+        caller holds one, and is recorded as this client's claim alongside the
+        vector. It is what turns this row from a hash into a title in somebody
+        else's similarity results. Sending it tells the corpus operator which
+        recording this client holds, so a tool should send it under the same
+        setting that sends the vector, and say so where the user will read it.
         """
         body = {
             "fingerprint_hash": fingerprint_hash,
@@ -143,6 +151,8 @@ class Corpus:
             "analysis_version": analysis_version,
             "client_id": client_id,
         }
+        if recording_mbid:
+            body["recording_mbid"] = recording_mbid
         for attempt, delay in enumerate((*_RETRY_DELAYS, None)):
             status, payload = self._request("POST", "/v1/embeddings", body)
             if status in (200, 201):
@@ -161,3 +171,70 @@ class Corpus:
                 raise CorpusError("the corpus is full and is refusing writes (ADR-0004 point 9)")
             raise CorpusError(f"contribute returned {status}: {payload}")
         raise CorpusError("rate limited repeatedly; try again later")
+
+    def claim(self, *, fingerprint_hash: str, recording_mbid: str, client_id: str) -> dict:
+        """Name a recording the corpus already holds — without re-sending its vector.
+
+        `ADR-0012` point 4's second write path, and the one a tool uses to add ids
+        to tracks it contributed earlier. **Never re-send the vector to do this**:
+        a repeat `contribute` is recorded as agreement, and a tool tagging its
+        library must not read as that library agreeing with itself.
+
+        Returns the corpus's answer — what the hash now resolves to, and how many
+        distinct clients say so. Raises `CorpusError` on a 404, which means the
+        corpus does not hold the row yet: contribute the vector first.
+        """
+        status, payload = self._request(
+            "POST",
+            "/v1/recordings/claims",
+            {
+                "fingerprint_hash": fingerprint_hash,
+                "recording_mbid": recording_mbid,
+                "client_id": client_id,
+            },
+        )
+        if status == 201:
+            return payload or {}
+        if status == 404:
+            raise CorpusError("the corpus holds no row for that hash; contribute it first")
+        if status == 422:
+            raise CorpusError(f"the corpus refused the claim: {(payload or {}).get('detail')}")
+        raise CorpusError(f"claim returned {status}: {payload}")
+
+    def similar(
+        self, embedding: list[float], *, limit: int = 10, pipeline_version: str | None = None
+    ) -> list[dict]:
+        """What sounds like this — across every library the corpus holds.
+
+        Each neighbour carries `fingerprint_hash`, `similarity`, `pipeline_version`,
+        and — since `ADR-0012` — `recording_mbid` and `recording_claims`. A
+        neighbour with an id is a recording a person can look up; one without is
+        still a hash, and the fields say which. Pass `pipeline_version` to get
+        only vectors comparable with the one you sent.
+        """
+        body: dict = {"embedding": embedding, "limit": limit}
+        if pipeline_version:
+            body["pipeline_version"] = pipeline_version
+        status, payload = self._request("POST", "/v1/similar", body)
+        if status != 200:
+            raise CorpusError(f"similar returned {status}: {payload}")
+        return list((payload or {}).get("neighbours", []))
+
+    def recording(self, recording_mbid: str, *, pipeline_version: str | None = None) -> list[dict]:
+        """What does recording X sound like — without holding X.
+
+        `ADR-0012` point 5's third read. Every row any client has claimed under
+        this id, one per pipeline, each with its vector. Empty when nobody has
+        claimed it.
+        """
+        from urllib.parse import quote
+
+        path = f"/v1/recordings/{recording_mbid}"
+        if pipeline_version:
+            path += f"?pipeline_version={quote(pipeline_version, safe='')}"
+        status, payload = self._request("GET", path)
+        if status == 200:
+            return list((payload or {}).get("embeddings", []))
+        if status == 404:
+            return []
+        raise CorpusError(f"recording lookup returned {status}: {payload}")

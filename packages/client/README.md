@@ -52,10 +52,23 @@ is those decisions as code so a tool does not have to reimplement them.
 
 - **Skip the recompute.** `lookup` returns the stored vector for a recording the commons already
   holds under your pipeline.
-- **Similarity across libraries you do not own** — `/v1/similar`, once the corpus's recording-id
-  key lands.
+- **Similarity across libraries you do not own.** `similar(vector)` returns the nearest recordings
+  the commons holds, each with a `recording_mbid` when anyone has claimed one — a MusicBrainz
+  recording a person can look up — and a bare hash when nobody has. `recording(mbid)` goes the
+  other way: what does recording X sound like, without holding X.
 - **Confirmation** — whether your vector for a recording agrees with others' independently
   computed one.
+
+## Naming what you contribute
+
+If your tool knows the MusicBrainz **recording** id — beets' `mb_trackid`, Picard's recording id,
+an AcoustID lookup's result — pass it as `recording_mbid=` on `contribute`, or attach it later with
+`claim()` to a row you already sent. Never re-send the vector to add an id: a repeat contribution
+is recorded as agreement, and your library must not read as agreeing with itself.
+
+An id is a *claim*: the commons counts how many distinct clients assert it and never verifies it
+against MusicBrainz. Sending one tells the operator which recording you hold — so send it under
+the same setting that sends the vector, and say so in your own "what leaves the machine".
 
 The commons is worth exactly its coverage of the library asking. Early on, expect misses.
 
@@ -73,7 +86,7 @@ fingerprints — beets' `chroma` plugin stores them, Picard computes them native
 
 ## Opt-in, off by default
 
-Nothing in this package sends anything until you call `contribute`. A tool that embeds this should
-keep contribution a separate, explicit setting from lookup, and should tell the user what leaves
-the machine — a 512-float vector and a one-way hash, never audio, filenames, or metadata — before
-the first time it does.
+Nothing in this package sends anything until you call `contribute` or `claim`. A tool that embeds
+this should keep contribution a separate, explicit setting from lookup, and should tell the user
+what leaves the machine — a 512-float vector, a one-way hash, and a MusicBrainz recording id if
+you pass one; never audio, filenames, or other tags — before the first time it does.
