@@ -1,8 +1,17 @@
 # ADR-0012: A Contribution Can Name Its Recording
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-13
+
+Implementation:
+- **Accepted 2026-09-13**, the day it was proposed, with one clarification worth keeping: the
+  Familiar backfill in point 10 — resolving its fingerprints to MBIDs through AcoustID and claiming
+  them for the 25,515 rows it already contributed — matters more than the record's tone suggests,
+  because until it runs the corpus is one library with no ids and similarity returns hashes for
+  everything regardless of what the plug-ins send. It comes fourth in the order, after the claims
+  endpoint exists to receive it, and it is owed on Familiar's side as its `ADR-0102` point 5.
+- Nothing is built. Point 11's order begins with the server.
 
 Answers [ADR-0001](ADR-0001-clapback-is-a-public-clap-embedding-commons.md) deferred item 4 — "the
 recording-id key, `ADR-0102`'s substance, and the reason other applications would query this at
