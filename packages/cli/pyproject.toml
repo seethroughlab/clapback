@@ -1,5 +1,5 @@
 [project]
-name = "clapback"
+name = "clapback-cli"
 version = "0.1.0"
 description = "Search your own music by description, and find duplicates across formats and masters"
 readme = "README.md"

@@ -10,7 +10,7 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "clapback",
+    "clapback-cli",
     "clapback-embed",
     "clapback-server",
 ]
@@ -372,7 +372,7 @@ wheels = [
 ]
 
 [[package]]
-name = "clapback"
+name = "clapback-cli"
 version = "0.1.0"
 source = { editable = "packages/cli" }
 dependencies = [
