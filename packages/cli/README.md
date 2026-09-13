@@ -3,7 +3,7 @@
 Search your own music by description, and find duplicates across formats and masters.
 
 ```bash
-pip install clapback
+pip install clapback-cli
 
 clapback index ~/Music
 clapback search "dreamy ambient with piano"
@@ -49,6 +49,12 @@ pip install pyacoustid
 ```
 
 Without it, indexing, search and duplicates work exactly as well.
+
+## Why `clapback-cli` and not `clapback`
+
+The bare name on PyPI belongs to an unrelated package from 2018 that adds clap
+emojis to sentences. The distribution is therefore `clapback-cli`, matching
+`clapback-embed`; the command you type is still `clapback`.
 
 ## What it needs
 

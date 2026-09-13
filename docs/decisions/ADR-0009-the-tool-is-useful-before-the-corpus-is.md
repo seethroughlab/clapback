@@ -42,6 +42,21 @@ Implementation:
 - **The `client_id` is minted on first contribution and not at index time.** `ADR-0009` point 4 says
   nothing leaves the machine by default, and that covers the fact that an install exists: somebody
   who only ever searched their own files has no identifier, and a `--dry-run` does not create one.
+- **The tool was never on PyPI, and `pip install clapback` installs somebody else's package.**
+  Found 2026-09-13 while preparing the first release: the name `clapback` on PyPI belongs to an
+  unrelated 2018 project ("a command-line tool to add clap emojis to your sentences", 0.0.1, no
+  updates since). The README had said `pip install clapback` since this record was accepted, and
+  `ADR-0005` point 8 reserved a directory name without checking the index. So the tool this record
+  exists to put in strangers' hands was not installable by any stranger, which is worth stating
+  plainly: everything above about a second contributor was, until now, blocked on a `pip` line that
+  did not work.
+- **Published as `clapback-cli`**, matching `clapback-embed`; the console script is still `clapback`,
+  so nothing a user types changes except the install line. Chosen over a PEP 541 reclaim of the bare
+  name because that takes weeks to months with no guarantee, and every record waiting on a second
+  contributor would wait with it. A reclaim can be pursued in parallel and switched to later without
+  breaking anyone. `.github/workflows/cli-release.yml` mirrors the embed release — a `cli-v*` tag
+  publishes, per `ADR-0005` point 5 — and verified cold: the wheel installs `clapback-embed` from the
+  index rather than the workspace, and `clapback --help` lists all four commands.
 - The four records waiting on this are unchanged: `ADR-0004` point 4 cannot count independence,
   `ADR-0007` cannot reach a quorum of two, `ADR-0008` reports zero confirmations, and `ADR-0002`
   justifies an endpoint nobody outside this project yet has reason to query. Point 3's search now
