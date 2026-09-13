@@ -1,0 +1,45 @@
+name: beets-clapback
+
+# `ADR-0005` point 6 gave the server the gate the embedder already had; the third
+# member arrives with one rather than acquiring it later.
+
+on:
+  push:
+    branches: [main]
+    paths: ["packages/beets-clapback/**", "packages/beets-clapbackent/**", ".github/workflows/beets-ci.yml"]
+  pull_request:
+    paths: ["packages/beets-clapback/**", "packages/beets-clapbackent/**", ".github/workflows/beets-ci.yml"]
+
+jobs:
+  test:
+    name: Lint and test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/beets-clapback
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      # `.venv/bin/...` rather than `uv run`, for the reason `embed-ci.yml`
+      # records: in a uv workspace, `uv run` inside a member resolves the
+      # workspace root environment rather than this venv.
+      # `clapback-client` is a workspace member the CLI depends on. Install it
+      # from the checkout first so a change to the contract is tested here before
+      # it is released — and so this job works before the client is on PyPI.
+      - name: Install
+        run: |
+          uv venv --python 3.11
+          uv pip install -e ../client -e ../embed -e ".[dev]"
+
+      - name: Lint
+        run: .venv/bin/ruff check .
+
+      # No ONNX encoders here — they are 614 MB. These cover the store, the
+      # command surface and the decisions ADR-0009 made; embedding itself is
+      # tested in packages/embed against the reference implementation.
+      - name: Test
+        run: .venv/bin/pytest -q

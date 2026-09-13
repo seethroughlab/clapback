@@ -27,7 +27,41 @@ Implementation:
 - **Release order is constrained, and the constraint is recorded in `ADR-0005`**: `clapback-client`
   goes to PyPI before the next `clapback-cli` tag. The `pypi` environment's deployment policy now
   admits `client-v*`, added by the same one-line call the CLI release needed and did not have.
-- Point 5's beets plugin is next.
+- **Point 5's beets plugin is built** (2026-09-13): `packages/beets-clapback/`, distribution
+  `beets-clapback`, shipping `beetsplug/clapback.py` and nothing else — no `__init__.py`, so the
+  namespace stays open to every other plugin. `beet clapback [query]` looks up, else embeds, and
+  contributes only under `contribute: yes`; `beet clapback-search` answers a description offline
+  from a sidecar store. Two flexible attributes, `clapback_hash` and `clapback_status`, make the
+  result queryable with `beet ls` like anything else. Tested through beets' own
+  `PluginTestHelper` — the plugin loaded and the commands run as `beet` would — with only the
+  corpus and the embedder stubbed: 12 tests, ruff clean.
+- **The follow-up measurement came back clean, and the opposite of Familiar's.** A 99-track
+  library was imported into beets 2.14.0, fingerprinted through `chroma`, and every stored
+  `acoustid_fingerprint` compared with a fresh chromaprint run: **99 of 99 byte-identical, 0 in the
+  escaped form, 0 hash mismatches.** beets stores the string chromaprint returned. The plugin hashes
+  it through `canonical()` regardless — a test asserts the escaped and raw forms of one fingerprint
+  yield one `clapback_hash` — because a column is where the last defect hid.
+- **It never re-embeds what it already has.** A user who indexes with `contribute: no` and turns
+  it on later gets every stored vector sent without the model running again; a test asserts the
+  embed call count stays at one across the two runs. That is the "skip the recompute" exchange
+  applied to the user's own past work, and on a laptop it is the difference between minutes and
+  an afternoon.
+- **What was and was not exercised live.** Against the deployed commons and the real library:
+  the plugin loads, both commands register, `-p` enumerates correctly, and a real run stops at the
+  first corpus miss with the plain "encoders are missing" message rather than a traceback. The
+  `found` path could not be shown live because the corpus holds 0 of those 99 recordings, and the
+  `contributed` path was not run live because contributing a test library under a fresh
+  `client_id` would put a second "contributor" in the corpus that is not one — the thing
+  `ADR-0004` point 4 is careful about. Both paths are covered by the harness tests, which is the
+  same standard the reference client shipped under.
+- **beets' `chroma` did the hard part for free, as predicted.** Every one of the 99 items carried
+  `acoustid_fingerprint` before the plugin ran, so the plugin's fingerprinting fallback was never
+  needed. `pyacoustid` is a dev dependency only.
+- **Release order lengthens by one**: `clapback-client` and `clapback-embed` before
+  `beets-clapback`, since the wheel depends on both from the index. The `pypi` environment admits
+  `beets-v*`. Not yet published; needs a pending publisher for `beets-clapback` and a
+  `beets-v0.1.0` tag.
+- Point 4, the recording-id key, is next.
 
 Extends [ADR-0001](ADR-0001-clapback-is-a-public-clap-embedding-commons.md) points 3 and 8, and
 [ADR-0005](ADR-0005-the-repository-is-a-workspace-of-peers.md), whose "published for others to

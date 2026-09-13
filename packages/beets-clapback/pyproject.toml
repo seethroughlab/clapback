@@ -1,0 +1,56 @@
+[project]
+name = "beets-clapback"
+version = "0.1.0"
+description = "beets plugin: look up, embed, and contribute CLAP embeddings to the clapback commons — absubmit reborn"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+authors = [{ name = "Jeff Crouse", email = "jeff@seethroughlab.com" }]
+keywords = ["beets", "clap", "audio", "embeddings", "music", "acoustid"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio :: Analysis",
+]
+
+# `clapback-client` is the contract; `clapback-embed` is the reference pipeline
+# this plugin embeds through, and where `PIPELINE_VERSION` comes from. beets users
+# have a library to embed, not their own embedder, so unlike the client the
+# embedder is not optional here — only its 614 MB of encoders are, at runtime.
+dependencies = [
+    "beets>=2.0",
+    "clapback-client>=0.1.0,<0.2",
+    "clapback-embed>=0.1.0,<0.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4.0", "ruff>=0.1.0", "pyacoustid>=1.3"]
+
+[project.urls]
+Homepage = "https://clapback.seethroughlab.com"
+Repository = "https://github.com/seethroughlab/clapback"
+Decisions = "https://github.com/seethroughlab/clapback/tree/main/docs/decisions"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# `beetsplug` is a PEP 420 namespace package shared by every beets plugin, so
+# this wheel ships `beetsplug/clapback.py` and no `__init__.py`.
+[tool.hatch.build.targets.wheel]
+packages = ["beetsplug"]
+
+[tool.uv.sources]
+clapback-client = { workspace = true }
+clapback-embed = { workspace = true }
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

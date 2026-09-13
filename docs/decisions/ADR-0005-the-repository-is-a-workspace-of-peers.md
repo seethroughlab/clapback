@@ -54,6 +54,12 @@ Implementation:
   the CLI, which also means a change to the contract is tested against the CLI before it is
   released. The consequence for release order is that `clapback-client` must be on PyPI before the
   next `clapback-cli` tag, or the CLI wheel's `Requires-Dist` names a package nobody can install.
+- **A fifth peer, `packages/beets-clapback/`, joined 2026-09-13** under `ADR-0011` point 5. It is
+  the first member that is a plugin to somebody else's program rather than a thing of this
+  project's own, and the first whose install target is a `beetsplug` namespace package it shares
+  with every other beets plugin — so its wheel must never ship a `beetsplug/__init__.py`, and does
+  not. It depends on both `clapback-client` and `clapback-embed` from the index, which puts it last
+  in release order after them.
 
 ## Context
 
