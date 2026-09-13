@@ -25,6 +25,7 @@ import beetsplug.clapback as plug
 
 PIPELINE = "laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32"
 RAW_FP = "AQADtJESbVkUhYL84z4CnwZ4HsdxHD6P4_hx_EAO_cjx"
+MBID = "1c6da765-da50-476b-a000-61e7cf45ded8"
 
 
 def _unit(i: int) -> list[float]:
@@ -61,6 +62,7 @@ class FakeCorpus:
     # fixture resets them before every test.
     holds: dict[tuple[str, str], list[float]] = {}  # noqa: RUF012
     log: list[tuple] = []  # noqa: RUF012
+    neighbours: list[dict] = []  # noqa: RUF012
     unreachable = False
 
     def lookup(self, h, pv):
@@ -74,8 +76,18 @@ class FakeCorpus:
         FakeCorpus.last_kw = kw
         return "contributed"
 
+    def claim(self, **kw):
+        FakeCorpus.log.append(("claim", kw["fingerprint_hash"], kw["recording_mbid"]))
+        return {"status": "claimed", "recording_mbid": kw["recording_mbid"], "recording_claims": 1}
 
-class TestClapbackPlugin(PluginTestHelper):
+    def similar(self, vector, *, limit=10, pipeline_version=None):
+        FakeCorpus.log.append(("similar", limit, pipeline_version))
+        return list(FakeCorpus.neighbours)[:limit]
+
+
+class ClapbackHarness(PluginTestHelper):
+    """beets up, plugin loadable, corpus and embedder stubbed. Not collected."""
+
     plugin = "clapback"
     preload_plugin = False
 
@@ -85,6 +97,7 @@ class TestClapbackPlugin(PluginTestHelper):
         # one after beets is up and before it is torn down.
         self.embed = FakeEmbed()
         FakeCorpus.holds, FakeCorpus.log, FakeCorpus.unreachable = {}, [], False
+        FakeCorpus.neighbours = []
         monkeypatch.setattr(plug, "_embedder", lambda: self.embed)
         monkeypatch.setattr(plug, "Corpus", FakeCorpus)
 
@@ -103,6 +116,9 @@ class TestClapbackPlugin(PluginTestHelper):
     def _store(self):
         return json.loads((plug.Path(self.config.config_dir()) / "clapback" / "index.json").read_text())
 
+
+
+class TestClapbackPlugin(ClapbackHarness):
     # --- the four obligations ------------------------------------------
 
     def test_a_hit_in_the_corpus_means_the_model_does_not_run(self):
@@ -234,3 +250,118 @@ class TestClapbackPlugin(PluginTestHelper):
         assert "alpha" in out[0]
         assert self._store()["pipeline_version"] == PIPELINE
         assert sorted(self._store()["ids"]) == sorted([a.id, b.id])
+
+
+class TestNamingTheRecording(ClapbackHarness):
+    """`ADR-0012`: the id goes out under the contribute switch, never silently,
+    and never by re-sending a vector."""
+
+    def test_a_contribution_carries_the_recording_id_when_the_track_has_one(self):
+        self._track("named", mb_trackid=MBID)
+        self._run(contribute=True)
+        assert FakeCorpus.last_kw["recording_mbid"] == MBID
+
+    def test_a_track_without_an_id_sends_none(self):
+        self._track("unnamed")
+        self._run(contribute=True)
+        assert FakeCorpus.last_kw.get("recording_mbid") is None
+
+    def test_a_corpus_hit_is_named_by_a_claim_not_a_resend(self):
+        """Somebody else's row, our id. The vector stays theirs."""
+        t = self._track("theirs", mb_trackid=MBID)
+        FakeCorpus.holds[(plug.hash_fingerprint(RAW_FP), PIPELINE)] = _unit(3)
+        self._run(contribute=True)
+        t.load()
+        assert self._kinds() == ["lookup", "claim"]
+        assert "contribute" not in self._kinds()
+        assert t.clapback_named == MBID
+        assert self.embed.calls == []
+
+    def test_nothing_is_named_while_contribution_is_off(self):
+        """The id discloses which recording you hold; that is the contribute
+        switch's consent, not lookup's."""
+        t = self._track("quiet", mb_trackid=MBID)
+        FakeCorpus.holds[(plug.hash_fingerprint(RAW_FP), PIPELINE)] = _unit(3)
+        self._run()
+        t.load()
+        assert "claim" not in self._kinds()
+        assert t.get("clapback_named") is None
+
+    def test_turning_contribution_on_later_names_what_was_found_before(self):
+        t = self._track("later", mb_trackid=MBID)
+        FakeCorpus.holds[(plug.hash_fingerprint(RAW_FP), PIPELINE)] = _unit(3)
+        self._run()
+        FakeCorpus.log.clear()
+        self._run(contribute=True)
+        t.load()
+        assert "claim" in self._kinds()
+        assert t.clapback_named == MBID
+        FakeCorpus.log.clear()
+        self._run(contribute=True)
+        assert FakeCorpus.log == [], "named once; a second run has nothing to say"
+
+
+
+class TestWhatSoundsLikeThis(ClapbackHarness):
+    """The reason to install this that is not altruism."""
+
+    def _seed(self):
+        t = self._track("seed", fp=RAW_FP)
+        self._run()
+        return t
+
+    def test_it_shows_a_named_neighbour_as_a_recording_a_person_can_open(self, capsys):
+        self._seed()
+        FakeCorpus.neighbours = [
+            {"fingerprint_hash": "ee" * 32, "similarity": 0.97, "recording_mbid": MBID,
+             "recording_claims": 2},
+        ]
+        capsys.readouterr()
+        with self.configure_plugin({}):
+            self.run_command("clapback-similar", "title:seed")
+        out = capsys.readouterr().out
+        assert f"https://musicbrainz.org/recording/{MBID}" in out
+        assert "2 claims" in out
+
+    def test_an_unnamed_neighbour_is_honestly_a_hash(self, capsys):
+        self._seed()
+        FakeCorpus.neighbours = [
+            {"fingerprint_hash": "ee" * 32, "similarity": 0.9, "recording_mbid": None,
+             "recording_claims": 0},
+        ]
+        capsys.readouterr()
+        with self.configure_plugin({}):
+            self.run_command("clapback-similar", "title:seed")
+        out = capsys.readouterr().out
+        assert "not yet named by anyone" in out
+        assert "musicbrainz.org" not in out
+
+    def test_a_neighbour_you_own_is_shown_as_your_track(self, capsys):
+        self._seed()
+        other = self._track("mine", fp=RAW_FP[::-1])
+        self._run()
+        other.load()
+        FakeCorpus.neighbours = [
+            {"fingerprint_hash": other.clapback_hash, "similarity": 0.95,
+             "recording_mbid": None, "recording_claims": 0},
+        ]
+        capsys.readouterr()
+        with self.configure_plugin({}):
+            self.run_command("clapback-similar", "title:seed")
+        out = capsys.readouterr().out
+        assert "mine" in out and "in your library" in out
+
+    def test_the_seed_itself_is_not_listed_and_the_pipeline_is_sent(self, capsys):
+        seed = self._seed()
+        seed.load()
+        FakeCorpus.neighbours = [
+            {"fingerprint_hash": seed.clapback_hash, "similarity": 1.0, "recording_mbid": None,
+             "recording_claims": 0},
+        ]
+        capsys.readouterr()
+        with self.configure_plugin({}):
+            self.run_command("clapback-similar", "title:seed")
+        out = capsys.readouterr().out
+        assert out.count("1.0000") == 0
+        assert ("similar", 11, PIPELINE) in FakeCorpus.log
+

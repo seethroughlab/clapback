@@ -9,19 +9,26 @@ locally and keep the results. This is the other half back.
     beet clapback -p             # say what would happen, touch nothing
     beet clapback artist:Autechre
     beet clapback-search "dreamy ambient with piano"
+    beet clapback-similar title:"Gantz Graf"     # what sounds like this — including music you don't own
 
 What it stores on each item, as flexible attributes you can query and see:
 
     clapback_hash      the corpus key — SHA256 of the AcoustID fingerprint
     clapback_status    found | contributed | local | unfingerprinted | unembedded
+    clapback_named     the MusicBrainz recording id this install has claimed for it
 
 The embeddings themselves live in a sidecar store under your beets config
 directory, keyed by item id, so `clapback-search` works offline over what has
 been embedded or fetched.
 
-What leaves the machine, and only when `contribute: yes`: a 512-float vector and
-a one-way hash. Never audio, never paths, never tags. The hash cannot be reversed
-into the fingerprint, and the fingerprint is not the audio.
+What leaves the machine, and only when `contribute: yes`: a 512-float vector, a
+one-way hash, and — when the track has one — its MusicBrainz recording id
+(`mb_trackid`, which despite the name is the recording). Never audio, never
+paths, never other tags. The hash cannot be reversed into the fingerprint, and
+the fingerprint is not the audio. The recording id is what lets the corpus tell
+*somebody else* what their nearest neighbour is called; it also tells the corpus
+operator which recording you hold, which is why it goes out under the same
+switch and not silently (`ADR-0012` point 6).
 """
 
 from __future__ import annotations
@@ -45,6 +52,7 @@ from clapback_client import (
 #: The flexible attributes this plugin writes. Named so they group in `beet ls`.
 HASH_FIELD = "clapback_hash"
 STATUS_FIELD = "clapback_status"
+NAMED_FIELD = "clapback_named"
 
 
 def _embedder():
@@ -176,7 +184,13 @@ class ClapbackPlugin(plugins.BeetsPlugin):
         )
         search.parser.add_option("-n", "--limit", type="int", default=10)
         search.func = self._cmd_search
-        return [run, search]
+
+        similar = ui.Subcommand(
+            "clapback-similar", help="what sounds like this track, across every library the commons holds"
+        )
+        similar.parser.add_option("-n", "--limit", type="int", default=10)
+        similar.func = self._cmd_similar
+        return [run, search, similar]
 
     def _cmd_run(self, lib, opts, args) -> None:
         items = list(lib.items(args))
@@ -197,6 +211,51 @@ class ClapbackPlugin(plugins.BeetsPlugin):
             item = lib.get_item(item_id)
             if item is not None:
                 ui.print_(f"{score:.4f}  {item}")
+
+    def _cmd_similar(self, lib, opts, args) -> None:
+        """The reason to install this that is not altruism.
+
+        Takes the first matching track's vector and asks the commons what sounds
+        like it. A neighbour you own is shown as your track; one you do not is
+        shown as a MusicBrainz recording you can open — `ADR-0012` — or, when
+        nobody has named it yet, as the bare hash it still is.
+        """
+        items = list(lib.items(args))
+        if not items:
+            raise UserError("no tracks match")
+        seed = items[0]
+        store = _Store(self._home()).load()
+        vector = store.get(seed.id)
+        if vector is None:
+            raise UserError(f"not embedded yet — run: beet clapback {' '.join(args)}")
+        corpus = Corpus(self.config["url"].as_str())
+        try:
+            neighbours = corpus.similar(
+                vector, limit=opts.limit + 1, pipeline_version=store.pipeline_version
+            )
+        except CorpusError as exc:
+            raise UserError(f"corpus unreachable: {exc}") from exc
+
+        by_hash = {i.get(HASH_FIELD): i for i in lib.items(f"{HASH_FIELD}::.") if i.get(HASH_FIELD)}
+        ui.print_(f"sounds like: {seed}")
+        shown = 0
+        for n in neighbours:
+            if n["fingerprint_hash"] == seed.get(HASH_FIELD):
+                continue
+            mine = by_hash.get(n["fingerprint_hash"])
+            if mine is not None:
+                what = f"{mine}  (in your library)"
+            elif n.get("recording_mbid"):
+                what = (
+                    f"https://musicbrainz.org/recording/{n['recording_mbid']}"
+                    f"  ({n.get('recording_claims', 0)} claim{'s' if n.get('recording_claims', 0) != 1 else ''})"
+                )
+            else:
+                what = f"{n['fingerprint_hash'][:16]}…  (not yet named by anyone)"
+            ui.print_(f"{n['similarity']:.4f}  {what}")
+            shown += 1
+            if shown >= opts.limit:
+                break
 
     # --- import hooks -------------------------------------------------------
 
@@ -235,7 +294,15 @@ class ClapbackPlugin(plugins.BeetsPlugin):
         found = contributed = local = unfingerprinted = unembedded = skipped = 0
         try:
             for n, item in enumerate(items, start=1):
-                if not force and item.get(STATUS_FIELD) in ("found", "contributed") and item.id in store:
+                done = item.get(STATUS_FIELD) in ("found", "contributed") and item.id in store
+                # A done track still has work if contribution is on and it carries
+                # a recording id the corpus has not been told about yet.
+                unnamed = (
+                    contribute
+                    and item.get("mb_trackid")
+                    and item.get(NAMED_FIELD) != item.get("mb_trackid")
+                )
+                if not force and done and not unnamed:
                     skipped += 1
                     continue
 
@@ -275,7 +342,24 @@ class ClapbackPlugin(plugins.BeetsPlugin):
                 if row is not None:
                     store.put(item.id, row["embedding"])
                     item[HASH_FIELD] = key
-                    item[STATUS_FIELD] = "found"
+                    # A track this install contributed earlier keeps saying so;
+                    # "found" is for rows somebody else put there.
+                    if item.get(STATUS_FIELD) != "contributed":
+                        item[STATUS_FIELD] = "found"
+                    # The corpus had the vector; it may not have the name. A claim
+                    # attaches the id to somebody else's row without touching
+                    # their vector — `ADR-0012` point 4 — and only under the
+                    # same switch that would have sent ours.
+                    mbid = item.get("mb_trackid")
+                    if contribute and mbid and item.get(NAMED_FIELD) != mbid:
+                        if client_id is None:
+                            client_id = self._client_id()
+                        try:
+                            corpus.claim(fingerprint_hash=key, recording_mbid=mbid, client_id=client_id)
+                        except CorpusError as exc:
+                            self._log.info("{0}: not named ({1})", item, exc)
+                        else:
+                            item[NAMED_FIELD] = mbid
                     item.store()
                     found += 1
                     continue
@@ -308,12 +392,14 @@ class ClapbackPlugin(plugins.BeetsPlugin):
                 if contribute and corpus_ok:
                     if client_id is None:
                         client_id = self._client_id()
+                    mbid = item.get("mb_trackid") or None
                     try:
                         corpus.contribute(
                             fingerprint_hash=key,
                             embedding=vector,
                             pipeline_version=pipeline_version,
                             client_id=client_id,
+                            recording_mbid=mbid,
                         )
                     except CorpusError as exc:
                         self._log.warning("{0}: not contributed ({1})", item, exc)
@@ -321,6 +407,8 @@ class ClapbackPlugin(plugins.BeetsPlugin):
                         local += 1
                     else:
                         item[STATUS_FIELD] = "contributed"
+                        if mbid:
+                            item[NAMED_FIELD] = mbid
                         contributed += 1
                         time.sleep(pace)
                 else:
