@@ -126,6 +126,14 @@ supersedes `ADR-0009`'s account of how a contributor arrives; `ADR-0009` points 
 execution order is the client package, then the beets plugin, then the recording-id key, then Picard,
 then outreach.
 
+**`ADR-0012` is proposed, not accepted** (2026-09-13). It answers `ADR-0001` deferred item 4, the
+recording-id key: a recording id is a *claim* per client in a new `recording_claims` table, not a
+column on the row, because the server cannot verify it and `ADR-0008` says the corpus counts
+assertions rather than trusting one. The identifier is the MusicBrainz **recording** MBID — beets'
+`mb_trackid` is one despite its name; Familiar's `musicbrainz_track_id` is unconfirmed and covers
+6.8% of its library, unchanged since August. Ids will come from the plug-ins. Do not add a
+`recording_mbid` column until it is decided.
+
 `ADR-0008` closes `ADR-0001` deferred item 2 — the part the cross-machine measurement did not answer,
 being where the agreement threshold sits and what the corpus does with it.
 
