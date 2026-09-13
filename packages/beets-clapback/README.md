@@ -20,6 +20,7 @@ beet clapback                        # every track: look up, else embed; contrib
 beet clapback artist:Autechre        # any beets query
 beet clapback -p                     # say what would happen, touch nothing
 beet clapback-search "dreamy ambient with piano"
+beet clapback-similar title:"Gantz Graf"    # what sounds like this — including music you don't own
 ```
 
 ## What it does
@@ -36,6 +37,7 @@ Two flexible attributes land on each item, so you can query them like anything e
 |---|---|
 | `clapback_hash` | the corpus key — SHA256 of the fingerprint |
 | `clapback_status` | `found` · `contributed` · `local` · `unfingerprinted` · `unembedded` |
+| `clapback_named` | the MusicBrainz recording id this install has told the commons about |
 
 ```bash
 beet ls clapback_status:local        # embedded here, not yet in the commons
@@ -44,6 +46,22 @@ beet ls -a clapback_status:found     # albums the commons already had
 
 The vectors live in `clapback/` under your beets config directory, so `clapback-search` works
 offline over everything embedded or fetched. Delete that directory and nothing is lost but time.
+
+## What sounds like this
+
+`beet clapback-similar <query>` takes the first matching track and asks the commons what sounds
+like it — across every library it holds, not just yours:
+
+```
+sounds like: Plaid - Zala
+0.9731  Autechre - Gantz Graf  (in your library)
+0.9560  https://musicbrainz.org/recording/1c6da765-…  (1 claim)
+0.9246  6071d294e2b8a0f1…  (not yet named by anyone)
+```
+
+A neighbour you own is your track. One you don't is a MusicBrainz recording you can open, when
+anyone has told the commons what it is. One nobody has named yet is still a hash — shown as one,
+rather than hidden. The more people contribute with `mb_trackid`, the fewer of those there are.
 
 ## What it needs
 
@@ -58,9 +76,15 @@ offline over everything embedded or fetched. Delete that directory and nothing i
 
 ## What leaves the machine
 
-Nothing until `contribute: yes`. Then, per track the commons did not already hold: a 512-float
-vector and a one-way hash. **Never audio, never paths, never tags.** The hash cannot be reversed
-into the fingerprint, and the fingerprint is not the audio.
+Nothing until `contribute: yes`. Then, per track: a 512-float vector and a one-way hash for
+recordings the commons did not already hold, and — when the track has one — its **MusicBrainz
+recording id** (`mb_trackid`), for every track. **Never audio, never paths, never other tags.**
+The hash cannot be reversed into the fingerprint, and the fingerprint is not the audio.
+
+The recording id is what lets the commons tell somebody else what their nearest neighbour is
+called. It also tells the commons operator which recordings you hold. That is why it goes out
+under the same switch as the vector and not silently — turning `contribute` on is the consent for
+both, and this paragraph is where that is said.
 
 The first contribution mints a random `client_id` — a UUID, derived from nothing about you or
 your machine — and stores it at `clapback/client_id` under your config directory. It lets the
