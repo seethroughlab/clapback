@@ -1,15 +1,17 @@
 """API routes for the cache server."""
 
 import json
+import re
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.api.deps import DbSession
 from app.config import settings
-from app.db.models import AnalysisDetail, Embedding, Features, SubmissionAgreement
+from app.db.models import AnalysisDetail, Embedding, Features, RecordingClaim, SubmissionAgreement
 from app.limiter import limiter
 
 router = APIRouter(prefix="/v1")
@@ -69,6 +71,68 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float | None:
     return max(-1.0, min(1.0, value))
 
 
+#: A MusicBrainz identifier in canonical form: lowercase hex, hyphenated 8-4-4-4-12.
+#: `ADR-0012` point 2 — the server validates the shape and never the referent.
+_MBID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+
+
+def _canonical_mbid(value: str) -> str:
+    """Lowercased, or a `ValueError` naming what was wrong.
+
+    Case-folded rather than rejected because MusicBrainz itself is case-insensitive
+    about these and tags in the wild carry both; a claim that differs only by case
+    is the same claim and must key the same row.
+    """
+    v = value.strip().lower()
+    if not _MBID.match(v):
+        raise ValueError("recording_mbid must be a MusicBrainz recording MBID (a UUID)")
+    return v
+
+
+async def _recordings_for(db, hashes: list[str]) -> dict[str, tuple[str, int]]:
+    """The recording each hash resolves to, and how many distinct clients say so.
+
+    `ADR-0012` point 1: derived from the claims rather than read from the row. The
+    winner is the MBID with the most distinct clients; ties break on the MBID text
+    so the answer is a **total** ordering — `ADR-0006` learned what a partial one
+    costs, being a corpus that answers the same question differently between calls.
+    Hashes with no claims are absent from the result, which callers render as null.
+    """
+    if not hashes:
+        return {}
+    stmt = (
+        select(
+            RecordingClaim.fingerprint_hash,
+            RecordingClaim.recording_mbid,
+            func.count(func.distinct(RecordingClaim.client_id)).label("n"),
+        )
+        .where(RecordingClaim.fingerprint_hash.in_(hashes))
+        .group_by(RecordingClaim.fingerprint_hash, RecordingClaim.recording_mbid)
+        .order_by(
+            RecordingClaim.fingerprint_hash,
+            func.count(func.distinct(RecordingClaim.client_id)).desc(),
+            RecordingClaim.recording_mbid,
+        )
+    )
+    out: dict[str, tuple[str, int]] = {}
+    for h, mbid, n in (await db.execute(stmt)).all():
+        out.setdefault(h, (mbid, int(n)))
+    return out
+
+
+async def _record_claim(db, fingerprint_hash: str, recording_mbid: str, client_id: str) -> None:
+    """One claim per (hash, mbid, client). Saying it twice is saying it once."""
+    await db.execute(
+        pg_insert(RecordingClaim)
+        .values(
+            fingerprint_hash=fingerprint_hash,
+            recording_mbid=recording_mbid,
+            client_id=client_id,
+        )
+        .on_conflict_do_nothing()
+    )
+
+
 class SimilarRequest(BaseModel):
     """Ask the corpus what a vector is near."""
 
@@ -98,6 +162,12 @@ class Neighbour(BaseModel):
     #: caller ranking these should know which results are comparable with its own
     #: vector and which are merely nearby in a mixed space.
     pipeline_version: str | None = None
+    #: `ADR-0012` point 5: the MusicBrainz recording this hash resolves to, and the
+    #: number of distinct clients who say so. Null and 0 when nobody has claimed
+    #: one — in which case this neighbour is still a hash, and the caller should
+    #: know that rather than be handed a blank.
+    recording_mbid: str | None = None
+    recording_claims: int = 0
 
 
 class SimilarResponse(BaseModel):
@@ -136,6 +206,15 @@ class EmbeddingRequest(BaseModel):
     #: the realistic failures; it is not a defence against a contributor who lies,
     #: and nothing here should be described as if it were.
     pipeline_version: str = Field(..., min_length=1, max_length=200)
+    #: `ADR-0012` point 4: an optional MusicBrainz recording MBID, recorded as a
+    #: claim by this client alongside the contribution. Needs `client_id` — a
+    #: claim nobody can be said to have made cannot be revoked or counted.
+    recording_mbid: str | None = Field(default=None, max_length=36)
+
+    @field_validator("recording_mbid")
+    @classmethod
+    def _mbid_shape(cls, v: str | None) -> str | None:
+        return None if v is None else _canonical_mbid(v)
 
 
 class EmbeddingResponse(BaseModel):
@@ -150,6 +229,9 @@ class EmbeddingResponse(BaseModel):
     #: relabelled (`ADR-0006` point 5).
     pipeline_version: str
     contributor_count: int
+    #: `ADR-0012` point 5, as on `Neighbour`.
+    recording_mbid: str | None = None
+    recording_claims: int = 0
 
 
 class ContributeResponse(BaseModel):
@@ -248,6 +330,7 @@ async def lookup_embedding(
     emb.last_accessed_at = datetime.utcnow()
     await db.commit()
 
+    recording = (await _recordings_for(db, [emb.fingerprint_hash])).get(emb.fingerprint_hash)
     return EmbeddingResponse(
         fingerprint_hash=emb.fingerprint_hash,
         embedding=list(emb.embedding),
@@ -255,6 +338,8 @@ async def lookup_embedding(
         clap_model_version=emb.clap_model_version,
         pipeline_version=emb.pipeline_version,
         contributor_count=emb.contributor_count,
+        recording_mbid=recording[0] if recording else None,
+        recording_claims=recording[1] if recording else 0,
     )
 
 
@@ -278,6 +363,15 @@ async def contribute_embedding(
     # undeclared contribution is Pydantic's 422 rather than a branch here. That is
     # the right place for it: the field is not optional-and-then-checked, it is
     # part of what a contribution is.
+    # `ADR-0012` point 1: a claim is keyed by the client that made it. A recording
+    # id with nobody behind it could be neither revoked nor counted, so it is
+    # refused up front rather than dropped on the floor.
+    if req.recording_mbid and not req.client_id:
+        raise HTTPException(
+            status_code=422,
+            detail="recording_mbid needs a client_id: a claim must be attributable (ADR-0012)",
+        )
+
     result = await db.execute(
         select(Embedding).where(
             Embedding.fingerprint_hash == req.fingerprint_hash,
@@ -322,6 +416,8 @@ async def contribute_embedding(
         # row that could not say what produced it, so there is no null left to fill
         # in. `ADR-0006` point 5 is discharged rather than ongoing.
         existing.contributor_count += 1
+        if req.recording_mbid:
+            await _record_claim(db, req.fingerprint_hash, req.recording_mbid, req.client_id)
         await db.commit()
         return ContributeResponse(
             status="confirmed",
@@ -363,6 +459,8 @@ async def contribute_embedding(
         pipeline_version=req.pipeline_version,
     )
     db.add(emb)
+    if req.recording_mbid:
+        await _record_claim(db, req.fingerprint_hash, req.recording_mbid, req.client_id)
     await db.commit()
 
     return ContributeResponse(status="created", contributor_count=1)
@@ -381,13 +479,14 @@ async def similar(
     capability the commons exists to provide; exact-key lookup is a cache, and a
     cache is not worth a public endpoint."
 
-    **It returns fingerprint hashes, and that is the known limit rather than an
-    oversight.** `ADR-0002` point 4 is explicit: a caller who does not already
-    hold the audio cannot resolve what came back, so this is useful for "is this
-    recording already known" and not yet for "what does this record I do not own
-    sound like". The second needs a recording id as a second key — `ADR-0001`
-    deferred item 4 — and that record says plainly: do not ship the endpoint and
-    call the capability delivered.
+    **Each neighbour carries a recording id when anyone has claimed one, and is a
+    bare hash when nobody has.** `ADR-0002` point 4 said not to call this
+    capability delivered while results were hashes a caller could not resolve;
+    `ADR-0012` is the record that resolves them, by counting per-client claims
+    rather than trusting a column. `recording_claims` says how many distinct
+    clients stand behind the id, and with one contributor that number is 1 for
+    every claimed row — evidence of nothing yet, which the field makes visible
+    rather than hides.
 
     A read, so it is unauthenticated (`ADR-0004` point 8) and carries the lookup
     rate limit rather than the contribution one.
@@ -419,6 +518,9 @@ async def similar(
     if filters:
         count_stmt = count_stmt.where(*filters)
     searched = await db.scalar(count_stmt)
+    # `ADR-0012` point 5: a neighbour with a recording is a title and a page; one
+    # without is still a hash, and the response says which is which.
+    recordings = await _recordings_for(db, [r.fingerprint_hash for r in rows])
     return SimilarResponse(
         neighbours=[
             Neighbour(
@@ -427,10 +529,153 @@ async def similar(
                 analysis_version=r.analysis_version,
                 clap_model_version=r.clap_model_version,
                 pipeline_version=r.pipeline_version,
+                recording_mbid=recordings[r.fingerprint_hash][0]
+                if r.fingerprint_hash in recordings
+                else None,
+                recording_claims=recordings[r.fingerprint_hash][1]
+                if r.fingerprint_hash in recordings
+                else 0,
             )
             for r in rows
         ],
         searched=searched or 0,
+    )
+
+
+# --- Recording claims (`ADR-0012`) ---
+
+
+class ClaimRequest(BaseModel):
+    """Attach a recording id to a row that already exists.
+
+    `ADR-0012` point 4: this exists so nobody re-sends a vector to name it. A
+    repeat `POST /v1/embeddings` increments `contributor_count` and writes an
+    agreement row — one installation agreeing with itself — and a client
+    backfilling ids for a library it already contributed would do that thousands
+    of times. This path records the claim and touches nothing else.
+    """
+
+    fingerprint_hash: str = Field(..., min_length=64, max_length=64)
+    recording_mbid: str = Field(..., max_length=36)
+    client_id: str = Field(..., min_length=1, max_length=64)
+
+    @field_validator("recording_mbid")
+    @classmethod
+    def _mbid_shape(cls, v: str) -> str:
+        return _canonical_mbid(v)
+
+
+class ClaimResponse(BaseModel):
+    status: str
+    #: What the hash resolves to after this claim, and how many clients agree.
+    recording_mbid: str | None
+    recording_claims: int
+
+
+class RecordingEmbedding(BaseModel):
+    """One row claimed under a recording. Per pipeline, since a recording the
+    corpus holds from two pipelines is two rows that are not comparable."""
+
+    fingerprint_hash: str
+    pipeline_version: str
+    embedding: list[float]
+    contributor_count: int
+    #: How many distinct clients claim *this hash* is this recording.
+    recording_claims: int
+
+
+class RecordingResponse(BaseModel):
+    recording_mbid: str
+    embeddings: list[RecordingEmbedding]
+
+
+@router.post("/recordings/claims", status_code=201, response_model=ClaimResponse)
+@limiter.limit(settings.contribute_rate_limit)
+async def claim_recording(
+    request: Request,
+    req: ClaimRequest,
+    db: DbSession,
+) -> ClaimResponse:
+    """Say which recording a hash the corpus already holds is.
+
+    A write, so it carries the contribution rate limit. The row must exist: a
+    claim about a vector the corpus does not hold would be an identity for
+    nothing, and `ADR-0012` point 9 removes claims when their row goes for the
+    same reason.
+    """
+    exists = await db.scalar(
+        select(func.count())
+        .select_from(Embedding)
+        .where(Embedding.fingerprint_hash == req.fingerprint_hash)
+    )
+    if not exists:
+        raise HTTPException(
+            status_code=404,
+            detail="No embedding with that fingerprint_hash; contribute one first",
+        )
+    await _record_claim(db, req.fingerprint_hash, req.recording_mbid, req.client_id)
+    await db.commit()
+    recording = (await _recordings_for(db, [req.fingerprint_hash])).get(req.fingerprint_hash)
+    return ClaimResponse(
+        status="claimed",
+        recording_mbid=recording[0] if recording else None,
+        recording_claims=recording[1] if recording else 0,
+    )
+
+
+@router.get("/recordings/{recording_mbid}", response_model=RecordingResponse)
+@limiter.limit(settings.lookup_rate_limit)
+async def recording(
+    request: Request,
+    recording_mbid: str,
+    db: DbSession,
+    pipeline_version: str | None = None,
+) -> RecordingResponse:
+    """What does recording X sound like — without holding X.
+
+    `ADR-0012` point 5's third read, and Familiar's `ADR-0102`'s whole purpose.
+    Returns every row any client has claimed under this id, one per pipeline,
+    each with the count of distinct clients behind *that* row's claim. Filter by
+    `pipeline_version` to get only vectors comparable with your own.
+
+    A read, unauthenticated, on the lookup rate limit.
+    """
+    try:
+        mbid = _canonical_mbid(recording_mbid)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    claimed = (
+        select(
+            RecordingClaim.fingerprint_hash,
+            func.count(func.distinct(RecordingClaim.client_id)).label("n"),
+        )
+        .where(RecordingClaim.recording_mbid == mbid)
+        .group_by(RecordingClaim.fingerprint_hash)
+        .subquery()
+    )
+    stmt = (
+        select(Embedding, claimed.c.n)
+        .join(claimed, claimed.c.fingerprint_hash == Embedding.fingerprint_hash)
+        .order_by(claimed.c.n.desc(), Embedding.contributor_count.desc(), Embedding.created_at)
+    )
+    if pipeline_version is not None:
+        stmt = stmt.where(Embedding.pipeline_version == _decode_pipeline(pipeline_version))
+    rows = (await db.execute(stmt)).all()
+    if not rows:
+        raise HTTPException(status_code=404, detail="No embedding claimed under that recording")
+    return RecordingResponse(
+        recording_mbid=mbid,
+        embeddings=[
+            RecordingEmbedding(
+                fingerprint_hash=e.fingerprint_hash,
+                pipeline_version=e.pipeline_version,
+                embedding=list(e.embedding),
+                contributor_count=e.contributor_count,
+                recording_claims=int(n),
+            )
+            for e, n in rows
+        ],
     )
 
 
