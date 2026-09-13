@@ -11,7 +11,15 @@ Implementation:
   because until it runs the corpus is one library with no ids and similarity returns hashes for
   everything regardless of what the plug-ins send. It comes fourth in the order, after the claims
   endpoint exists to receive it, and it is owed on Familiar's side as its `ADR-0102` point 5.
-- Nothing is built. Point 11's order begins with the server.
+- **The server side is built** (2026-09-13): migration `012`, the `recording_claims` table, both
+  write paths, all three read paths, and deletion covering claims. Additive — the first migration
+  since `011` that moves no data. 25 tests, contract-level like the rest of the suite.
+- **Familiar's `musicbrainz_track_id` is the recording entity, confirmed 2026-09-13.** Three ids
+  drawn at random resolved at `musicbrainz.org/ws/2/recording/{id}` as recordings ("Gemini",
+  "Orion Megalith", "Die 4 You"). Same misnomer as beets' `mb_trackid`, same referent. The
+  follow-up that gated Familiar sending its 1,791 ids is closed; the backfill for the rest is not.
+- Points 11's next steps — the client's `claim` method, then the beets plugin sending
+  `mb_trackid` — are not built.
 
 Answers [ADR-0001](ADR-0001-clapback-is-a-public-clap-embedding-commons.md) deferred item 4 — "the
 recording-id key, `ADR-0102`'s substance, and the reason other applications would query this at
