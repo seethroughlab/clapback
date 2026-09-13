@@ -109,6 +109,14 @@ were never touched. Both clients now hash canonically (Familiar's `ADR-0114`), F
 14,192 rows under canonical keys, and the 14,246 stranded old keys were deleted through the admin
 API. Every count was predicted before it was measured; the Implementation block has them.
 
+**`ADR-0011` was accepted 2026-09-13**, and is the first record about who the commons is *for*. It says the commons is the product and `clapback-cli` is the reference client, not the
+acquisition channel: the tools people already run — beets and Picard first, both of which shipped and
+then lost exactly this fetch-and-submit pair when AcousticBrainz died — are where a second
+contributor comes from, via a stdlib-only `clapback-client` package. On acceptance it partially
+supersedes `ADR-0009`'s account of how a contributor arrives; `ADR-0009` points 2 to 9 stand. Its
+execution order is the client package, then the beets plugin, then the recording-id key, then Picard,
+then outreach.
+
 `ADR-0008` closes `ADR-0001` deferred item 2 — the part the cross-machine measurement did not answer,
 being where the agreement threshold sits and what the corpus does with it.
 
