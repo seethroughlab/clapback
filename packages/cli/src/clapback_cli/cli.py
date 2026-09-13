@@ -15,7 +15,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from .corpus import DEFAULT_BASE_URL as DEFAULT_CORPUS_URL
+from clapback_client import DEFAULT_BASE_URL as DEFAULT_CORPUS_URL
+
 from .store import Store
 
 #: What we will try to embed. `clapback-embed` decodes through soundfile and
@@ -131,13 +132,6 @@ def cmd_duplicates(args: argparse.Namespace) -> int:
     return 0
 
 
-#: This tool's own counter, and nothing more. `ADR-0006` points 2 and 3 took
-#: `analysis_version` out of the key and left it as a recorded column, so it is no
-#: longer a claim about whether two vectors are comparable — `pipeline_version` is.
-#: A new client therefore starts at 1 rather than pretending to share Familiar's
-#: history, which is what the number used to imply.
-ANALYSIS_VERSION = 1
-
 #: How long to wait between writes. The server rate-limits contributions and the
 #: client backs off on 429; pacing just means it rarely has to.
 CONTRIBUTE_PACE_SECONDS = 0.15
@@ -152,8 +146,16 @@ def cmd_contribute(args: argparse.Namespace) -> int:
     """
     import time
 
-    from .corpus import Corpus, CorpusError
-    from .fingerprint import FingerprintUnavailable, fingerprint_file, hash_fingerprint
+    # `ADR-0011` point 2: the contract lives in `clapback-client` and this tool
+    # imports it rather than carrying a copy, so the reference client and the
+    # published contract are the same code and cannot drift.
+    from clapback_client import (
+        Corpus,
+        CorpusError,
+        FingerprintUnavailable,
+        fingerprint_file,
+        hash_fingerprint,
+    )
 
     embed = _embedder()
     store = Store(args.home).load()
@@ -175,9 +177,6 @@ def cmd_contribute(args: argparse.Namespace) -> int:
 
     corpus = Corpus(args.url)
     pipeline_version = embed.PIPELINE_VERSION
-    # The checkpoint is already the first component of the pipeline identity, so
-    # taking it from there keeps the two from ever disagreeing about one fact.
-    clap_model_version = pipeline_version.split("+")[0]
 
     entries = store.entries[: args.limit] if args.limit else store.entries
     print(f"{len(entries):,} indexed track(s)")
@@ -225,8 +224,6 @@ def cmd_contribute(args: argparse.Namespace) -> int:
                     fingerprint_hash=entry.fingerprint_hash,
                     embedding=[float(x) for x in store.vectors[idx]],
                     pipeline_version=pipeline_version,
-                    clap_model_version=clap_model_version,
-                    analysis_version=ANALYSIS_VERSION,
                     client_id=client_id,
                 )
                 sent += 1
