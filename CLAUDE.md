@@ -17,6 +17,10 @@ same thing.
   beyond the standard library**, so a tool with its own embedder can contribute without ONNX
   Runtime. The CLI imports it; it is the published surface for plug-ins (`ADR-0011`). It must be on
   PyPI before any `clapback-cli` release that depends on it.
+- **beets plugin** (`packages/beets-clapback/`): `beets-clapback`, `ADR-0011` point 5's first
+  integration — `absubmit` reborn. Ships only `beetsplug/clapback.py` into a namespace package it
+  shares with every other beets plugin; **never add a `beetsplug/__init__.py`**. Releases after
+  both `clapback-client` and `clapback-embed`.
 - **Corpus**: embeddings keyed on the SHA256 of an AcoustID fingerprint, stored as `Vector(512)`.
 - **Deployment**: self-hosted. See `ADR-0003` for where it is going.
 
