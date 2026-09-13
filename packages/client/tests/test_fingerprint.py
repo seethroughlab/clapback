@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import hashlib
 
-from clapback_cli.fingerprint import canonical, hash_fingerprint
+from clapback_client.fingerprint import canonical, hash_fingerprint
 
 #: A real-shaped chromaprint fingerprint: base64 alphabet, starts `AQAD`.
 RAW = "AQADtJESbVkUhYL84z4CnwZ4HsdxHD6P4_hx_EAO_cjx"

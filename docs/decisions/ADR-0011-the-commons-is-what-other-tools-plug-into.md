@@ -6,7 +6,28 @@ Date: 2026-09-13
 
 Implementation:
 - **Accepted 2026-09-13**, the day it was proposed. `ADR-0009`'s `Status:` line records the partial
-  supersession. Nothing is built; point 2's package is first.
+  supersession.
+- **Point 2 is built** (2026-09-13): `packages/client/`, distribution `clapback-client`, import
+  `clapback_client`. Nine names — `Corpus` with `lookup`, `has` and `contribute`; `hash_fingerprint`,
+  `canonical` and `fingerprint_file`; `mint_client_id` and `ensure_client_id`; the errors. The built
+  wheel declares **no** `Requires-Dist` beyond the dev extras, installs cold into an empty venv with
+  nothing else, and answers a live lookup against the deployed corpus with a 512-float row. Moved
+  from the CLI with `git mv` so history follows, and the CLI now imports it — 26 CLI tests pass
+  against the package, and the one test that asserted the checkpoint rule moved with the rule.
+- **The extraction found a bug the CLI had shipped with.** After the last retry, a 429 fell through
+  to the generic "contribute returned 429" error, and the "rate limited repeatedly" message below the
+  loop was unreachable. Caught by writing the contract's tests against a scripted server rather than
+  by reading the loop, which is the argument for publishing the contract as code: a plug-in author
+  who wrote their own loop would have shipped the same bug or a different one.
+- **`Corpus.lookup` returns the row, not just its presence**, because the row is the exchange.
+  `has` was the CLI's need; a plug-in's need is the 512 floats, so that on a Raspberry Pi it does not
+  run the model. `contribute` derives `clap_model_version` from the pipeline identity and defaults
+  `analysis_version` to 1, so every plug-in gets the same rule for the two recorded columns the key
+  no longer includes.
+- **Release order is constrained, and the constraint is recorded in `ADR-0005`**: `clapback-client`
+  goes to PyPI before the next `clapback-cli` tag. The `pypi` environment's deployment policy now
+  admits `client-v*`, added by the same one-line call the CLI release needed and did not have.
+- Point 5's beets plugin is next.
 
 Extends [ADR-0001](ADR-0001-clapback-is-a-public-clap-embedding-commons.md) points 3 and 8, and
 [ADR-0005](ADR-0005-the-repository-is-a-workspace-of-peers.md), whose "published for others to

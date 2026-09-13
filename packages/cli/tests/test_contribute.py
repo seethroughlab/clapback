@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import argparse
 
+import clapback_client
 import numpy as np
 import pytest
 
 from clapback_cli import cli
-from clapback_cli import corpus as corpus_mod
 from clapback_cli.store import Store
 
 PIPELINE = "laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32"
@@ -67,10 +67,10 @@ def _args(tmp_path, **kw):
 def wired(monkeypatch, store):
     fake = FakeCorpus()
     monkeypatch.setattr(cli, "_embedder", lambda: FakeEmbed)
-    monkeypatch.setattr(corpus_mod, "Corpus", lambda *a, **k: fake)
+    monkeypatch.setattr(clapback_client, "Corpus", lambda *a, **k: fake)
     # One fingerprint per file, distinct and canonical-shaped.
     monkeypatch.setattr(
-        "clapback_cli.fingerprint.fingerprint_file",
+        "clapback_client.fingerprint_file",
         lambda path: "AQAD" + ("a" if path.endswith("a.flac") else "b") * 20,
     )
     return fake
@@ -91,14 +91,12 @@ class TestItDoesNotManufactureAgreement:
         second = FakeCorpus()
         second.holds = already
         wired.calls.clear()
-        import clapback_cli.corpus as cm
-
-        original = cm.Corpus
-        cm.Corpus = lambda *a, **k: second
+        original = clapback_client.Corpus
+        clapback_client.Corpus = lambda *a, **k: second
         try:
             cli.cmd_contribute(_args(tmp_path))
         finally:
-            cm.Corpus = original
+            clapback_client.Corpus = original
         assert second.contributed == []
 
 
@@ -110,12 +108,6 @@ class TestItSendsWhatTheRecordsRequire:
         for sent in wired.contributed:
             assert sent["pipeline_version"] == PIPELINE
             assert sent["client_id"]
-
-    def test_the_checkpoint_agrees_with_the_pipeline_identity(self, wired, store, tmp_path):
-        """Taken from the identity rather than written down twice, so the two
-        cannot disagree about one fact."""
-        cli.cmd_contribute(_args(tmp_path))
-        assert all(s["clap_model_version"] == PIPELINE.split("+")[0] for s in wired.contributed)
 
     def test_each_track_is_sent_with_its_own_vector(self, wired, store, tmp_path):
         """The entries are addressed by position; looking them up by value would

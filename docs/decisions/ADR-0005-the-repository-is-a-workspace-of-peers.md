@@ -42,6 +42,18 @@ Implementation:
   above `models.py`'s key columns, and widening `__all__` pushed `PIPELINE_VERSION` down eleven.
   Fifteen more named a file without its directory — harmless until `config.py` in another repository
   resolved against this one's, so citations now carry a repository-root-relative path.
+- **A fourth peer, `packages/client/`, joined 2026-09-13** under `ADR-0011` point 2. It publishes
+  the contract a tool follows to take part in the commons — fingerprint canonically, look up before
+  contributing, send `client_id` and `pipeline_version`, back off on 429 — with no dependency beyond
+  the standard library, so a tool with its own embedder need not install ONNX Runtime to contribute.
+  Extracted from the CLI rather than written fresh, and the CLI now depends on it, so the reference
+  client and the published contract are one body of code. Point 4's rule applies to it unchanged:
+  its version is its own, and nothing about the pipeline identity lives there.
+- **A member that depends on an unpublished member breaks the index-only install** that point 7
+  chose for CI. `cli-ci.yml` and `cli-release.yml` now install `../client` from the checkout before
+  the CLI, which also means a change to the contract is tested against the CLI before it is
+  released. The consequence for release order is that `clapback-client` must be on PyPI before the
+  next `clapback-cli` tag, or the CLI wheel's `Requires-Dist` names a package nobody can install.
 
 ## Context
 

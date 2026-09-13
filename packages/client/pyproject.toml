@@ -1,0 +1,46 @@
+[project]
+name = "clapback-client"
+version = "0.1.0"
+description = "Contribute to and look up the clapback commons — the contract a tool follows, with no dependency beyond the standard library"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+authors = [{ name = "Jeff Crouse", email = "jeff@seethroughlab.com" }]
+keywords = ["clap", "audio", "embeddings", "music", "acoustid", "commons"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio :: Analysis",
+]
+
+# `ADR-0011` point 2: nothing beyond the standard library. A tool that already has
+# an embedder and only wants to contribute under its own pipeline identity must not
+# have to install ONNX Runtime to do so. Fingerprinting shells out to pyacoustid in a
+# subprocess and is optional at import time — see `fingerprint.py`.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4.0", "ruff>=0.1.0"]
+
+[project.urls]
+Homepage = "https://clapback.seethroughlab.com"
+Repository = "https://github.com/seethroughlab/clapback"
+Decisions = "https://github.com/seethroughlab/clapback/tree/main/docs/decisions"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/clapback_client"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

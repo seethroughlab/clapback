@@ -11,6 +11,7 @@ resolution-markers = [
 [manifest]
 members = [
     "clapback-cli",
+    "clapback-client",
     "clapback-embed",
     "clapback-server",
 ]
@@ -376,6 +377,7 @@ name = "clapback-cli"
 version = "0.1.0"
 source = { editable = "packages/cli" }
 dependencies = [
+    { name = "clapback-client" },
     { name = "clapback-embed" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
@@ -389,8 +391,27 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "clapback-client", editable = "packages/client" },
     { name = "clapback-embed", editable = "packages/embed" },
     { name = "numpy", specifier = ">=1.24.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
+]
+provides-extras = ["dev"]
+
+[[package]]
+name = "clapback-client"
+version = "0.1.0"
+source = { editable = "packages/client" }
+
+[package.optional-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
 ]

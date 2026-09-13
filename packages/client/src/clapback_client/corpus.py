@@ -1,5 +1,10 @@
 """Talking to the commons over HTTP, and only over HTTP.
 
+This is the client half of the contract `ADR-0011` publishes: look up before you
+contribute, send what the records require, and back off when told to. A tool that
+imports this and `fingerprint.py` has everything it needs to be a contributor,
+and nothing it does not.
+
 `ADR-0005` point 12: the API is the only way in. Every guarantee the corpus makes
 — revocation, quotas, the row ceiling, agreement recording — is code on the write
 path, so a client that reached the database directly would be a second write path
@@ -48,7 +53,7 @@ class Corpus:
                 # Say who is calling. Not identity — `ADR-0004` point 1 keeps that
                 # to `client_id` in the body — but an operator reading logs should
                 # be able to tell this tool from a browser.
-                "User-Agent": "clapback-cli",
+                "User-Agent": "clapback-client",
             },
         )
         try:
@@ -71,6 +76,33 @@ class Corpus:
         status, _ = self._request("GET", "/health")
         return status == 200
 
+    def lookup(self, fingerprint_hash: str, pipeline_version: str) -> dict | None:
+        """The corpus's row for this recording from this pipeline, or None.
+
+        The row carries `embedding` (512 floats), `contributor_count`, and the
+        pipeline it was produced by. A tool that gets a row back here does not
+        need to run the model: that is the whole exchange a plug-in makes, and
+        on a Raspberry Pi it is minutes per track.
+
+        Only a row from the *same* pipeline is returned. Two vectors are comparable
+        exactly when their pipeline identities match (`ADR-0006`), so a vector from
+        another pipeline would be a wrong answer wearing the right shape.
+        """
+        # The pipeline identity is `+`-joined, and `+` means a space in a query
+        # string. `ADR-0006`'s Implementation block records what an unescaped one
+        # costs: a 404 that looks exactly like the recording being absent.
+        from urllib.parse import quote
+
+        status, payload = self._request(
+            "GET",
+            f"/v1/embeddings/{fingerprint_hash}?pipeline_version={quote(pipeline_version, safe='')}",
+        )
+        if status == 200:
+            return payload
+        if status == 404:
+            return None
+        raise CorpusError(f"lookup returned {status}")
+
     def has(self, fingerprint_hash: str, pipeline_version: str) -> bool:
         """Whether the corpus already holds this recording from this pipeline.
 
@@ -79,22 +111,10 @@ class Corpus:
         `contributor_count` and records a `submission_agreement` row, so a client
         that re-sent its library would manufacture evidence of one installation
         independently agreeing with itself — which is precisely the measurement
-        `ADR-0008` is built on. Familiar's backfill learned this the same way.
+        `ADR-0008` is built on. Two clients have learned this now; it is why the
+        contract publishes the check rather than trusting each tool to write it.
         """
-        # The pipeline identity is `+`-joined, and `+` means a space in a query
-        # string. `ADR-0006`'s Implementation block records what an unescaped one
-        # costs: a 404 that looks exactly like the recording being absent.
-        from urllib.parse import quote
-
-        status, _ = self._request(
-            "GET",
-            f"/v1/embeddings/{fingerprint_hash}?pipeline_version={quote(pipeline_version, safe='')}",
-        )
-        if status == 200:
-            return True
-        if status == 404:
-            return False
-        raise CorpusError(f"lookup returned {status}")
+        return self.lookup(fingerprint_hash, pipeline_version) is not None
 
     def contribute(
         self,
@@ -102,16 +122,24 @@ class Corpus:
         fingerprint_hash: str,
         embedding: list[float],
         pipeline_version: str,
-        clap_model_version: str,
-        analysis_version: int,
         client_id: str,
+        clap_model_version: str | None = None,
+        analysis_version: int = 1,
     ) -> str:
-        """POST one embedding. Returns a short word describing what happened."""
+        """POST one embedding. Returns a short word describing what happened.
+
+        `pipeline_version` and `client_id` are what the records require of a
+        contribution (`ADR-0006` point 4, `ADR-0004` point 1) and have no
+        defaults. The other two are recorded columns the key no longer includes:
+        `clap_model_version` defaults to the first component of the pipeline
+        identity, which is the checkpoint, so the two cannot disagree about one
+        fact; `analysis_version` is the caller's own counter and starts at 1.
+        """
         body = {
             "fingerprint_hash": fingerprint_hash,
             "embedding": embedding,
             "pipeline_version": pipeline_version,
-            "clap_model_version": clap_model_version,
+            "clap_model_version": clap_model_version or pipeline_version.split("+")[0],
             "analysis_version": analysis_version,
             "client_id": client_id,
         }
@@ -119,7 +147,9 @@ class Corpus:
             status, payload = self._request("POST", "/v1/embeddings", body)
             if status in (200, 201):
                 return "contributed"
-            if status == 429 and delay is not None:
+            if status == 429:
+                if delay is None:
+                    break
                 time.sleep(delay)
                 continue
             if status == 422:

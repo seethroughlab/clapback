@@ -15,11 +15,11 @@ from __future__ import annotations
 
 import dataclasses
 import json
-import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+from clapback_client import mint_client_id
 
 DEFAULT_HOME = Path.home() / ".clapback"
 
@@ -99,7 +99,7 @@ class Store:
         that this install exists.
         """
         if not self.client_id:
-            self.client_id = str(uuid.uuid4())
+            self.client_id = mint_client_id()
         return self.client_id
 
     def known(self) -> dict[str, Entry]:

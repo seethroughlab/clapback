@@ -12,6 +12,11 @@ same thing.
   deployed image.
 - **Embedder** (`packages/embed/`): `clapback-embed`, the reference implementation. ONNX Runtime
   only — no `torch`, no `transformers` at runtime. Published for others to depend on.
+- **Client** (`packages/client/`): `clapback-client`, the contract a tool follows to take part —
+  canonical fingerprint hashing, lookup-before-contribute, `client_id`, backoff. **No dependency
+  beyond the standard library**, so a tool with its own embedder can contribute without ONNX
+  Runtime. The CLI imports it; it is the published surface for plug-ins (`ADR-0011`). It must be on
+  PyPI before any `clapback-cli` release that depends on it.
 - **Corpus**: embeddings keyed on the SHA256 of an AcoustID fingerprint, stored as `Vector(512)`.
 - **Deployment**: self-hosted. See `ADR-0003` for where it is going.
 

@@ -21,6 +21,7 @@ license-files = ["LICENSE"]
 # 500,000. An index buys nothing at personal-library scale and costs a compiled
 # wheel in a tool whose adoption argument is that it installs cleanly.
 dependencies = [
+    "clapback-client>=0.1.0,<0.2",
     "clapback-embed>=0.1.0,<0.2",
     "numpy>=1.24.0",
 ]
@@ -38,6 +39,7 @@ dev = ["pytest>=7.4.0", "ruff>=0.1.0"]
 # to resolve a member depending on another member without being told which source
 # to use — which is how this arrived as a red build on `main`.
 [tool.uv.sources]
+clapback-client = { workspace = true }
 clapback-embed = { workspace = true }
 
 [project.scripts]
