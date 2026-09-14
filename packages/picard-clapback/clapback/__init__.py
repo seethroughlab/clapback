@@ -20,7 +20,7 @@ Nothing leaves the machine until <i>Contribute</i> is turned on in the options. 
 per file: a one-way fingerprint hash, a 512-float vector when one is computed here,
 and the MusicBrainz recording id. Never audio, never paths, never other tags.
 """
-PLUGIN_VERSION = "0.1.0"
+PLUGIN_VERSION = "0.1.1"
 PLUGIN_API_VERSIONS = ["2.6", "2.7", "2.8", "2.9", "2.10", "2.11", "2.12", "2.13"]
 PLUGIN_LICENSE = "MIT"
 PLUGIN_LICENSE_URL = "https://opensource.org/license/mit"

@@ -92,6 +92,13 @@ Implementation:
   live in lookup-only mode against the deployed commons with a recording it holds: found, and
   six neighbours back, one named. Not exercised live: contributing, for the reason the beets
   entry gives.
+- **`picard-v0.1.0` was withdrawn nine minutes after it was published** (2026-09-14). Picard
+  names a plugin's module after the zip's basename, so `clapback-0.1.0.zip` — the name the build
+  script chose so a tag and an archive could not disagree — loaded as a module called
+  `clapback-0.1.0` and failed silently. Found by installing the released asset through Picard's
+  own `PluginManager` rather than importing the source tree, which is now a test, with the
+  negative case beside it. The zip is `clapback.zip`; the version is the tag and the header.
+  Released again as `picard-v0.1.1`.
 - **Picard 3 is a port, deliberately deferred.** 3.0 was at rc3 on 2026-09-13 with a new plugin
   system — git-distributed, TOML manifest, PyQt6, a `PluginApi` object — whose own documentation
   says its migration tool converts 94.5% of 2.x plugins automatically. The registrations here are

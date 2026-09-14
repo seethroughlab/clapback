@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Build `dist/clapback.zip`, the file Picard's Options → Plugins → Install accepts.
 
-Picard loads a zip whose top-level directory is a package with `__init__.py`.
-The version in the archive name is read from the plugin header so a tag and the
-header cannot disagree silently.
+Picard loads a zip whose top-level directory is a package with `__init__.py`,
+**and names the plugin module after the zip's basename** — so the file must be
+`clapback.zip` and nothing else. `clapback-0.1.0.zip` loads as a module called
+`clapback-0.1.0`, which is not a Python name, and the plugin silently fails to
+load. The version lives in the release tag and the plugin header, not the filename.
 """
 
 from __future__ import annotations
@@ -29,14 +31,14 @@ def main() -> None:
     version = plugin_version()
     dist = HERE / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / f"clapback-{version}.zip"
+    out = dist / "clapback.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
         for p in sorted(PKG.rglob("*.py")):
             if "__pycache__" in p.parts:
                 continue
             zf.write(p, p.relative_to(HERE))
         zf.write(HERE / "LICENSE", "clapback/LICENSE")
-    print(out)
+    print(f"{out} (PLUGIN_VERSION {version})")
 
 
 if __name__ == "__main__":
