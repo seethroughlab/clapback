@@ -18,8 +18,26 @@ Implementation:
   drawn at random resolved at `musicbrainz.org/ws/2/recording/{id}` as recordings ("Gemini",
   "Orion Megalith", "Die 4 You"). Same misnomer as beets' `mb_trackid`, same referent. The
   follow-up that gated Familiar sending its 1,791 ids is closed; the backfill for the rest is not.
-- Points 11's next steps — the client's `claim` method, then the beets plugin sending
-  `mb_trackid` — are not built.
+- **Point 11's client and plugin steps shipped 2026-09-13**: `clapback-client` 0.2.0 (`claim`,
+  `similar`, `recording`, and `recording_mbid` on `contribute`) and `beets-clapback` 0.2.0 (sends
+  `mb_trackid`, adds `beet clapback-similar`), both on PyPI.
+- **The first coverage number, measured 2026-09-14 00:00 UTC.** Familiar claimed the ids it already
+  held — `scripts/claim_recordings.py`, its `ADR-0102`'s cheap half — through
+  `POST /v1/recordings/claims`: **1,748 considered, 1,745 claimed, 3 not found**, zero lost to
+  retries. The corpus's 25,515 rows now carry **1,745 claims, 6.8%** — the figure point 8
+  predicted — every one under a single client id, so `recording_claims` is 1 on all of them:
+  evidence of nothing yet, shown rather than hidden as `ADR-0008` asks. The three 404s are
+  tracks Familiar has fingerprinted but whose hash the corpus does not hold; they are not a
+  claim-path failure.
+  Worth recording how the number was reached: the first attempt paced at 200/min against the
+  30/min contribution limit and silently lost 45 of its first 500 claims to exhausted retries on
+  `429` — the client gives up after three attempts and the script's tally called them "refused".
+  It was stopped at ~470, Familiar's #304 set the pace to 25/min, and the rerun was idempotent:
+  every already-claimed row returned `201` again. A claim is a write and shares the write limit;
+  a backfill script must pace under it, not at the rate the limit names.
+- **Still owed:** the AcoustID backfill for the 93% Familiar cannot name from its own tags
+  (`ADR-0102` point 5, never built). Until it runs, a second contributor's similarity results
+  will resolve for one row in fifteen of this corpus.
 
 Answers [ADR-0001](ADR-0001-clapback-is-a-public-clap-embedding-commons.md) deferred item 4 — "the
 recording-id key, `ADR-0102`'s substance, and the reason other applications would query this at
