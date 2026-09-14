@@ -88,3 +88,37 @@ def test_a_selection_yields_each_file_once(plugin):
             return [a, b]
 
     assert list(plugin._files_of([a, Track(), b])) == [a, b]
+
+
+def test_the_built_zip_loads_through_picards_own_installer(app, plugin, tmp_path):
+    """The zip's basename is the module name Picard imports. `clapback-0.1.0.zip`
+    was released for nine minutes on 2026-09-14 before this was discovered."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    from picard.i18n import setup_gettext
+    from picard.pluginmanager import PluginManager, register_plugin_dir
+
+    here = Path(__file__).resolve().parents[1]
+    subprocess.run([sys.executable, str(here / "scripts" / "build_zip.py")], check=True, capture_output=True)
+    built = here / "dist" / "clapback.zip"
+    assert built.name == "clapback.zip"
+    setup_gettext(None, "en")
+    register_plugin_dir(str(tmp_path))
+    manager = PluginManager(plugins_directory=str(tmp_path))
+    manager.install_plugin(str(built))
+    assert [p.module_name for p in manager.plugins] == ["clapback"]
+    assert (tmp_path / "clapback.zip").exists()
+
+    # And the negative, so this test means something: the same bytes under the
+    # old name do not load, because "clapback-0.1.0" is not a module name.
+    import shutil
+
+    other = tmp_path / "other"
+    other.mkdir()
+    register_plugin_dir(str(other))
+    shutil.copy(built, other / "clapback-0.1.0.zip")
+    manager2 = PluginManager(plugins_directory=str(other))
+    manager2.load_plugins_from_directory(str(other))
+    assert manager2.plugins == []

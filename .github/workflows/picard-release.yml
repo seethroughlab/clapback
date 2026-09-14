@@ -50,7 +50,7 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          files: packages/picard-clapback/dist/clapback-*.zip
+          files: packages/picard-clapback/dist/clapback.zip
           name: ${{ github.ref_name }}
           body: |
             Clapback plugin for MusicBrainz Picard 2.6–2.13. Install the zip from

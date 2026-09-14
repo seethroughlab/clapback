@@ -7,7 +7,7 @@ file it scans and knows its MusicBrainz recording id, which is exactly the pair 
 
 ## Install
 
-Download `clapback-<version>.zip` from the
+Download `clapback.zip` from the
 [latest `picard-v*` release](https://github.com/seethroughlab/clapback/releases?q=picard-v), then
 in Picard: **Options → Plugins → Install plugin…**, pick the zip, enable *Clapback*, restart.
 Picard 2.6 through 2.13.
@@ -74,7 +74,7 @@ uv venv && uv pip install "picard>=2.13,<3" pytest ruff
 QT_QPA_PLATFORM=offscreen .venv/bin/pytest -q     # against real Picard, headless
 .venv/bin/ruff check .
 python scripts/sync_client.py --check              # the vendored client is current
-python scripts/build_zip.py                        # dist/clapback-<version>.zip
+python scripts/build_zip.py                        # dist/clapback.zip — the name is the module name
 ```
 
 A release is a tag: bump `PLUGIN_VERSION` in `clapback/__init__.py`, then
