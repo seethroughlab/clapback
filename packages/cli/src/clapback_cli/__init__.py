@@ -5,4 +5,4 @@ does locally needs no network, no account and no fingerprinting.
 """
 
 __all__ = ["__version__"]
-__version__ = "0.1.0"
+__version__ = "0.1.1"
