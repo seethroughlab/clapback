@@ -1,0 +1,57 @@
+name: picard-clapback release
+
+# `ADR-0005` point 5: a release is a tag, and the tag is what publishes. Not to
+# PyPI — a Picard plugin is a zip a person installs from Options → Plugins — so
+# this attaches it to a GitHub release under the tag.
+
+on:
+  push:
+    tags: ["picard-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and attach
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/picard-clapback
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+
+      - name: Tag must match the declared version
+        run: |
+          declared=$(grep -m1 '^PLUGIN_VERSION = ' clapback/__init__.py | cut -d'"' -f2)
+          tagged="${GITHUB_REF_NAME#picard-v}"
+          if [ "$declared" != "$tagged" ]; then
+            echo "tag ${GITHUB_REF_NAME} claims ${tagged}; clapback/__init__.py declares ${declared}" >&2
+            exit 1
+          fi
+
+      - name: Qt runtime libraries
+        run: sudo apt-get update -q && sudo apt-get install -y -q libegl1 libgl1 libxkbcommon0 libdbus-1-3
+
+      - name: Install and test
+        run: |
+          uv venv --python 3.11
+          uv pip install "picard>=2.13,<3" pytest ruff
+          .venv/bin/ruff check .
+          python scripts/sync_client.py --check
+          .venv/bin/pytest -q
+
+      - name: Build
+        run: python scripts/build_zip.py
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: packages/picard-clapback/dist/clapback-*.zip
+          name: ${{ github.ref_name }}
+          body: |
+            Clapback plugin for MusicBrainz Picard 2.6–2.13. Install the zip from
+            **Options → Plugins → Install plugin…**. See `packages/picard-clapback/README.md`.

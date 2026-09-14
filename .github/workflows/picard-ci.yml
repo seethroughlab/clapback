@@ -1,0 +1,48 @@
+name: picard-clapback
+
+# `ADR-0011` point 5's second integration. Tested against real Picard from PyPI,
+# headless, so a renamed hook fails here rather than on somebody's desktop.
+
+on:
+  push:
+    branches: [main]
+    paths: ["packages/picard-clapback/**", "packages/client/**", ".github/workflows/picard-ci.yml"]
+  pull_request:
+    paths: ["packages/picard-clapback/**", "packages/client/**", ".github/workflows/picard-ci.yml"]
+
+jobs:
+  test:
+    name: Lint and test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/picard-clapback
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+
+      # PyQt5's offscreen platform still needs these shared libraries.
+      - name: Qt runtime libraries
+        run: sudo apt-get update -q && sudo apt-get install -y -q libegl1 libgl1 libxkbcommon0 libdbus-1-3
+
+      - name: Install
+        run: |
+          uv venv --python 3.11
+          uv pip install "picard>=2.13,<3" pytest ruff
+
+      - name: Lint
+        run: .venv/bin/ruff check .
+
+      # The plugin carries a copy of clapback-client. It must be the package,
+      # not a fork of it — a change to packages/client that is not synced here
+      # fails this job, which is why that path triggers it.
+      - name: Vendored client is current
+        run: python scripts/sync_client.py --check
+
+      - name: Test
+        run: .venv/bin/pytest -q
+
+      - name: Build the zip
+        run: python scripts/build_zip.py

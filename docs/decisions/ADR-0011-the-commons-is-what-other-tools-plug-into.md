@@ -61,7 +61,44 @@ Implementation:
   `beets-clapback`, since the wheel depends on both from the index. The `pypi` environment admits
   `beets-v*`. Not yet published; needs a pending publisher for `beets-clapback` and a
   `beets-v0.1.0` tag.
-- Point 4, the recording-id key, is next.
+- **Point 4 shipped as `ADR-0012`** (2026-09-13), and its coverage came from Familiar's
+  `ADR-0115` backfill (2026-09-14) rather than from the plug-ins, as `ADR-0102`'s Implementation
+  block predicted the other way round.
+- **Point 5's Picard plugin is built** (2026-09-14): `packages/picard-clapback/`, a Picard 2.6–2.13
+  plugin shipped as a zip on a `picard-v*` GitHub release — a plugin is a file a person installs
+  from Options → Plugins, not a distribution on PyPI. Two context-menu actions on tracks and
+  files: *look up in the commons* (per file: held or not, named under *Contribute*, embedded and
+  contributed if an embedder is present) and *what sounds like this* (a dialog of neighbours with
+  MusicBrainz links for the named and hashes for the rest). An options page with *Contribute* off
+  by default and a post-save hook off by default. Files without a fingerprint go through Picard's
+  own fpcalc first — the same one *Scan* uses — so the plugin never fingerprints anything itself.
+- **Lookup-only mode is the default and is the point.** Picard's bundled application cannot
+  `pip install`, so `clapback-embed` is absent for nearly every user, exactly as this record
+  predicted. The plugin says so in the options page, computes nothing, and still does the two
+  things Picard is uniquely placed to do — **name** rows (every matched file carries the recording
+  id) and **ask** (using the commons's own vector under the commons's own pipeline). For that,
+  `clapback-client` 0.2.1 made `Corpus.lookup`'s pipeline filter optional: without a vector of
+  your own there is no comparability question, and the row says which pipeline it came from.
+- **The contract is copied in, not depended on.** `clapback/clapback_client/` is a verbatim copy
+  of `packages/client`, for the same reason: nothing can be installed beside a bundled Picard.
+  `scripts/sync_client.py` refreshes it, a test fails when the copy and the package differ, and CI
+  runs on changes to either directory. This is the vendoring this record's point 2 made cheap by
+  keeping the client stdlib-only — four files, no dependency to carry with them.
+- **Tested against real Picard, not a stub.** Picard 2.13.3 installs from PyPI and imports
+  headless (`QT_QPA_PLATFORM=offscreen`), so the tests load the plugin as `picard.plugins.clapback`
+  and assert what is registered — both actions on both menus, the options page, the post-save
+  hook — and round-trip the options page through a real config. The contract itself is tested
+  with the corpus scripted, in the same shape as the beets plugin's tests: 26 tests. Exercised
+  live in lookup-only mode against the deployed commons with a recording it holds: found, and
+  six neighbours back, one named. Not exercised live: contributing, for the reason the beets
+  entry gives.
+- **Picard 3 is a port, deliberately deferred.** 3.0 was at rc3 on 2026-09-13 with a new plugin
+  system — git-distributed, TOML manifest, PyQt6, a `PluginApi` object — whose own documentation
+  says its migration tool converts 94.5% of 2.x plugins automatically. The registrations here are
+  the standard module-level ones it handles. Porting before 3.0 ships and its registry exists
+  would be porting to a moving target.
+- Outreach — dj-track-similarity and KalinkaPlayer — is next, and lands on a site that now
+  says the right thing (2026-09-14).
 
 Extends [ADR-0001](ADR-0001-clapback-is-a-public-clap-embedding-commons.md) points 3 and 8, and
 [ADR-0005](ADR-0005-the-repository-is-a-workspace-of-peers.md), whose "published for others to

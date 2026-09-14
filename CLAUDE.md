@@ -21,6 +21,12 @@ same thing.
   integration — `absubmit` reborn. Ships only `beetsplug/clapback.py` into a namespace package it
   shares with every other beets plugin; **never add a `beetsplug/__init__.py`**. Releases after
   both `clapback-client` and `clapback-embed`.
+- **Picard plugin** (`packages/picard-clapback/`): `ADR-0011` point 5's second integration, for
+  Picard 2.6–2.13. Not on PyPI — a zip attached to a `picard-v*` GitHub release, because a Picard
+  plugin is a file installed from Options → Plugins. It **carries a verbatim copy of
+  `clapback_client`** (`scripts/sync_client.py`; a test fails when the copy drifts) because a
+  bundled Picard cannot install packages. Lookup-only mode is the default and must keep working
+  with no embedder present. Tests run against real Picard from PyPI, headless.
 - **Corpus**: embeddings keyed on the SHA256 of an AcoustID fingerprint, stored as `Vector(512)`.
 - **Deployment**: self-hosted. See `ADR-0003` for where it is going.
 

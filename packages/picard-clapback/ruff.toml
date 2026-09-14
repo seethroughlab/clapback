@@ -1,0 +1,9 @@
+line-length = 120
+target-version = "py39"
+extend-exclude = ["clapback/clapback_client"]  # vendored; linted in packages/client
+[lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E402"]  # the plugin header must precede the imports — Picard reads it first
+[lint.isort]
+# PyQt5 is a third-party import like picard; keep them in one block, the way Picard's own plugins do.
+known-third-party = ["PyQt5", "picard"]
