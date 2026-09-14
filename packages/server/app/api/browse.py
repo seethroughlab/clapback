@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import DbSession
 from app.cache import stats_cache
 from app.config import settings
-from app.db.models import AnalysisDetail, Embedding, Features, IPStats
+from app.db.models import AnalysisDetail, Embedding, Features, IPStats, RecordingClaim
 from app.limiter import limiter
 from app.templates import fmt_vec_preview, templates
 
@@ -33,7 +33,11 @@ async def _fetch_counts(db: AsyncSession) -> dict:
     """Row counts for the API page. Two cheap aggregates, not the dashboard's full set."""
     embeddings = await db.scalar(select(func.count()).select_from(Embedding))
     features = await db.scalar(select(func.count()).select_from(Features))
-    return {"embeddings": embeddings or 0, "features": features or 0}
+    # Rows anyone has named, `ADR-0012`: the coverage number that says whether a
+    # similarity result will resolve. Distinct hashes, not claims — two clients
+    # naming one row is one named row.
+    named = await db.scalar(select(func.count(func.distinct(RecordingClaim.fingerprint_hash))))
+    return {"embeddings": embeddings or 0, "features": features or 0, "named": named or 0}
 
 
 async def _fetch_top_stats(db: AsyncSession) -> dict:
@@ -170,6 +174,7 @@ async def api_page(request: Request, db: DbSession) -> HTMLResponse:
             "counts": counts,
             "host": request.url.hostname or "clapback.seethroughlab.com",
             "lookup_limit": settings.lookup_rate_limit.replace("/", " per "),
+            "contribute_limit": settings.contribute_rate_limit.replace("/", " per "),
         },
     )
 

@@ -86,9 +86,20 @@ two things a CLAP embedding makes uniquely easy and stops.
 
 ## Why it exists
 
-It is the reference implementation's first real client, and the argument for it
+It is the **reference client** — the place the commons's contract is exercised end
+to end — and not the way most people are expected to arrive. The argument for it
 is in [`ADR-0009`](../../docs/decisions/ADR-0009-the-tool-is-useful-before-the-corpus-is.md):
 a donation client with no local value has no first contributor, and this project
 has measured proof that passive accumulation does not happen. What the tool does
 locally is the draw; contributing to the [commons](https://clapback.seethroughlab.com)
 is a byproduct of it.
+
+The route to the commons for most people is the tool they already run.
+[`ADR-0011`](../../docs/decisions/ADR-0011-the-commons-is-what-other-tools-plug-into.md)
+says so: if you use beets, [`beets-clapback`](https://pypi.org/project/beets-clapback/)
+does everything above against your library and can name what it contributes with
+`mb_trackid`. If you are writing a tool, the contract this CLI follows is published
+on its own as [`clapback-client`](https://pypi.org/project/clapback-client/) — no
+dependency beyond the standard library, so a tool with its own embedder can take
+part without ONNX Runtime. This CLI is built on it, which is what keeps the reference
+client and the published contract from drifting apart.
