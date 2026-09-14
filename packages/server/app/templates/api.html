@@ -57,7 +57,10 @@ key = hash_fingerprint(fingerprint_file("track.flac"))
 row = Corpus().lookup(key, pipeline_version)       # None on a miss — then embed and contribute</code></pre>
     <p class="muted">
         If you run beets, <a href="https://pypi.org/project/beets-clapback/"><code>beets-clapback</code></a>
-        is that contract already wired to your library — <code>absubmit</code> reborn. The reference
+        is that contract already wired to your library — <code>absubmit</code> reborn; if you run
+        Picard, the <a href="https://github.com/seethroughlab/clapback/releases?q=picard-v">Picard
+        plugin</a> is the same contract carried in a zip, since a bundled Picard cannot install
+        packages. The reference
         client, <a href="https://pypi.org/project/clapback-cli/"><code>clapback-cli</code></a>,
         exercises all of it end to end. Why the way in is a package rather than an application is
         <a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0011-the-commons-is-what-other-tools-plug-into.md">ADR-0011</a>.

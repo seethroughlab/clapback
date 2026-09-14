@@ -263,3 +263,34 @@ class TestSimilarAndRecording:
         assert "+" not in urlsplit(wire.requests[-1].full_url).query
         wire.answer(404)
         assert Corpus("https://x.invalid").recording(MBID) == []
+
+
+class TestLookupWithoutAPipeline:
+    """0.2.1: the filter became optional for a tool with no embedder at all —
+    Picard's plugin in lookup-only mode — which wants the corpus's own row and
+    the pipeline it says it came from."""
+
+    def test_no_pipeline_means_no_query_string(self):
+        seen = {}
+
+        def fake(method, path, body=None):
+            seen["path"] = path
+            return 200, {"embedding": [0.0] * 512, "pipeline_version": "corpus-pipe", "contributor_count": 1}
+
+        c = Corpus("https://x.invalid")
+        c._request = fake  # type: ignore[method-assign]
+        row = c.lookup(HASH)
+        assert seen["path"] == f"/v1/embeddings/{HASH}"
+        assert row["pipeline_version"] == "corpus-pipe"
+
+    def test_a_pipeline_is_still_escaped_when_given(self):
+        seen = {}
+
+        def fake(method, path, body=None):
+            seen["path"] = path
+            return 404, None
+
+        c = Corpus("https://x.invalid")
+        c._request = fake  # type: ignore[method-assign]
+        assert c.lookup(HASH, PIPELINE) is None
+        assert "%2B" in seen["path"] and "+" not in seen["path"]

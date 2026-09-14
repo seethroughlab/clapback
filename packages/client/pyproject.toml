@@ -1,6 +1,6 @@
 [project]
 name = "clapback-client"
-version = "0.2.0"
+version = "0.2.1"
 description = "Contribute to and look up the clapback commons — the contract a tool follows, with no dependency beyond the standard library"
 readme = "README.md"
 license = { file = "LICENSE" }
