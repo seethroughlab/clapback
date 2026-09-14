@@ -16,6 +16,7 @@
 </p>
 <div class="header-links">
     <a href="/docs">OpenAPI / Swagger</a>
+    <a href="https://pypi.org/project/clapback-client/">clapback-client on PyPI</a>
     <a href="https://pypi.org/project/clapback-embed/">clapback-embed on PyPI</a>
     <a href="https://github.com/seethroughlab/clapback">GitHub</a>
     <a href="https://github.com/seethroughlab/clapback/tree/main/docs/decisions">Decisions</a>
@@ -31,10 +32,35 @@
     </p>
     <p class="muted">
         Recordings are keyed by the <strong>SHA256 of an AcoustID fingerprint</strong>, so the
-        corpus never learns a title, an artist or a filename. It follows that you can ask for the
-        embedding of a track <em>you already have</em>, and cannot yet ask "what does this record I
-        do not own sound like" — that needs a recording id as a second key, which is
-        <a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0001-clapback-is-a-public-clap-embedding-commons.md">decided and not built</a>.
+        corpus never learns a title, an artist or a filename. A hash names a recording only to
+        someone who already holds it, so a client may also <em>claim</em> a MusicBrainz recording
+        id for a row — counted per client, never verified, and shown beside every result that has
+        one. {{ "{:,}".format(counts.named) }} rows are named so far. The rest are hashes, and a
+        result that is one says so rather than handing you a blank.
+    </p>
+</div>
+
+<div class="card">
+    <h2>For tool authors</h2>
+    <p class="muted">
+        You do not have to speak this API by hand. The contract a tool follows — fingerprint and
+        hash canonically, look up before contributing, send <code>client_id</code> and
+        <code>pipeline_version</code>, back off when told to — is published as
+        <a href="https://pypi.org/project/clapback-client/"><code>clapback-client</code></a>, with
+        no dependency beyond the standard library. A tool that already has an embedder contributes
+        under its own pipeline identity without installing ONNX Runtime.
+    </p>
+    <pre><code>pip install clapback-client</code></pre>
+    <pre><code>from clapback_client import Corpus, fingerprint_file, hash_fingerprint
+
+key = hash_fingerprint(fingerprint_file("track.flac"))
+row = Corpus().lookup(key, pipeline_version)       # None on a miss — then embed and contribute</code></pre>
+    <p class="muted">
+        If you run beets, <a href="https://pypi.org/project/beets-clapback/"><code>beets-clapback</code></a>
+        is that contract already wired to your library — <code>absubmit</code> reborn. The reference
+        client, <a href="https://pypi.org/project/clapback-cli/"><code>clapback-cli</code></a>,
+        exercises all of it end to end. Why the way in is a package rather than an application is
+        <a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0011-the-commons-is-what-other-tools-plug-into.md">ADR-0011</a>.
     </p>
 </div>
 
@@ -42,8 +68,9 @@
     <h2>Get an embedding</h2>
     <pre><code>curl "https://{{ host }}/v1/embeddings/{fingerprint_hash}?pipeline_version=laion%2Fclap-htsat-unfused%2Bfrontend1%2Bartifact1%2Bpool1%2Bfp32"</code></pre>
     <p class="muted">
-        Returns the vector, what produced it, and how many submissions it has had.
-        <code>404</code> if the corpus has not seen that recording from that pipeline.
+        Returns the vector, what produced it, how many submissions it has had, and its
+        <code>recording_mbid</code> when anyone has claimed one. <code>404</code> if the corpus has
+        not seen that recording from that pipeline.
     </p>
     <p class="muted">
         <strong>Ask by <code>pipeline_version</code> if you intend to use the vector.</strong> It is
@@ -103,7 +130,8 @@ query  = embed_text("dreamy ambient with piano")   # the same space</code></pre>
     <h2>Ask what a vector is near</h2>
     <pre><code>curl -X POST https://{{ host }}/v1/similar \
   -H 'Content-Type: application/json' \
-  -d '{"embedding": [ ...512 floats... ], "limit": 20, "analysis_version": 7}'</code></pre>
+  -d '{"embedding": [ ...512 floats... ], "limit": 20,
+       "pipeline_version": "laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32"}'</code></pre>
     <p class="muted">
         Returns the nearest recordings by cosine similarity, each labelled with the pipeline that
         produced it — vectors from two pipelines are not comparable, so a result that did not say
@@ -117,11 +145,39 @@ query  = embed_text("dreamy ambient with piano")   # the same space</code></pre>
         cosine similarity looks.
     </p>
     <p class="muted">
-        <strong>It returns fingerprint hashes, which is a real limit and not an oversight.</strong>
-        If you do not already hold the audio, you cannot resolve what comes back. That makes this
-        useful for "does the corpus already know this recording" and not yet for "what does this
-        record I do not own sound like" — the second needs a recording id as a second key, which is
-        decided and unbuilt.
+        <strong>Each neighbour carries a <code>recording_mbid</code> when anyone has claimed one,
+        and is a bare hash when nobody has.</strong> A named neighbour is a MusicBrainz recording
+        you can look up without holding it; <code>recording_claims</code> says how many distinct
+        clients stand behind the name. An unnamed one is still a hash — shown as one, because a
+        result you cannot resolve should say so. The vector can come from audio or from text:
+        <code>embed_text("distant piano under tape hiss")</code> is a query in the same space.
+    </p>
+</div>
+
+<div class="card">
+    <h2>Name a recording</h2>
+    <pre><code>curl -X POST https://{{ host }}/v1/recordings/claims \
+  -H 'Content-Type: application/json' \
+  -d '{"fingerprint_hash": "...", "recording_mbid": "1c6da765-da50-476b-a000-61e7cf45ded8",
+       "client_id": "any-opaque-string-your-install-keeps"}'</code></pre>
+    <p class="muted">
+        Attaches a MusicBrainz <strong>recording</strong> id to a row the corpus already holds,
+        without touching its contributor count. This exists so nobody re-sends a vector to name it:
+        a repeat contribution is recorded as agreement, and a library naming itself would read as a
+        library agreeing with itself thousands of times. Idempotent; <code>404</code> if the hash is
+        not held. A contribution can carry <code>recording_mbid</code> directly, which is the same
+        claim made at the same time.
+    </p>
+    <p class="muted">
+        A claim is counted, not trusted. The corpus never resolves an id against MusicBrainz; a
+        row's recording is whichever id the most distinct clients assert, and the count travels
+        with it so a reader can see one client's word for what it is
+        (<a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0012-a-contribution-can-name-its-recording.md">ADR-0012</a>).
+    </p>
+    <pre><code>curl https://{{ host }}/v1/recordings/1c6da765-da50-476b-a000-61e7cf45ded8</code></pre>
+    <p class="muted">
+        Goes the other way: every row claimed under that recording, one per pipeline, with its
+        vector. What does this recording sound like — without holding it.
     </p>
 </div>
 
@@ -132,7 +188,8 @@ query  = embed_text("dreamy ambient with piano")   # the same space</code></pre>
   -d '{"fingerprint_hash": "...", "embedding": [ ...512 floats... ],
        "analysis_version": 7, "clap_model_version": "laion/clap-htsat-unfused",
        "client_id": "any-opaque-string-your-install-keeps",
-       "pipeline_version": "laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32"}'</code></pre>
+       "pipeline_version": "laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32",
+       "recording_mbid": "1c6da765-da50-476b-a000-61e7cf45ded8"}'</code></pre>
     <p class="muted">
         First write wins. A submission for a recording the corpus already holds is not discarded —
         it is compared against the stored vector and the similarity recorded, which is how this
@@ -161,6 +218,8 @@ query  = embed_text("dreamy ambient with piano")   # the same space</code></pre>
         <tr><th>Method</th><th>Path</th><th>Status</th></tr>
         <tr><td><code>GET</code></td><td><code>/v1/embeddings/{hash}</code></td><td>open</td></tr>
         <tr><td><code>POST</code></td><td><code>/v1/similar</code></td><td>open · a read that needs a body</td></tr>
+        <tr><td><code>GET</code></td><td><code>/v1/recordings/{mbid}</code></td><td>open</td></tr>
+        <tr><td><code>POST</code></td><td><code>/v1/recordings/claims</code></td><td><strong>open</strong> · a write</td></tr>
         <tr><td><code>GET</code></td><td><code>/v1/features/{hash}</code></td><td>open · legacy</td></tr>
         <tr><td><code>GET</code></td><td><code>/v1/analysis-detail/{hash}</code></td><td>open · legacy</td></tr>
         <tr><td><code>GET</code></td><td><code>/health</code>, <code>/health/db</code></td><td>open</td></tr>
@@ -182,7 +241,10 @@ query  = embed_text("dreamy ambient with piano")   # the same space</code></pre>
 <div class="card">
     <h2>Rate limits</h2>
     <p class="muted">
-        {{ lookup_limit }} for lookups, per address. There is no key to obtain and no plan to buy.
+        {{ lookup_limit }} for reads and {{ contribute_limit }} for writes, per address — a claim
+        is a write. Pace a backfill under the limit, not at it: the client retries three times
+        and then gives up, and a run at the limit loses submissions silently. There is no key to
+        obtain and no plan to buy.
         If you need more, the corpus is a few hundred megabytes and open source — run your own.
     </p>
 </div>

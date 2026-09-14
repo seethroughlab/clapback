@@ -11,12 +11,28 @@ That proviso is the whole design. `clapback-embed` exists so there is exactly on
 implementation: if two contributors disagree about a recording, the disagreement is
 about the audio, not about whose code ran.
 
-**Deployment:** self-hosted. The instance backing Familiar runs on the same machine
-as it, reached over a shared Docker network. There is no public endpoint at present —
-`familiar-cache.fly.dev` was retired when the service moved off Fly, and the DNS name
-no longer resolves.
+The commons is public at **https://clapback.seethroughlab.com**. Reads need no key and no
+account. Contribution is open, opt-in in every client, and sends a vector and a one-way
+hash — never audio, never a filename.
 
-## The package
+## Take part
+
+The commons is the product. It is meant to be reached from the tools people already run,
+and the way in is a package with no dependency beyond the standard library
+([`ADR-0011`](docs/decisions/ADR-0011-the-commons-is-what-other-tools-plug-into.md)).
+
+| If you… | Install | What it is |
+|---|---|---|
+| use **beets** | `pip install beets-clapback` | `absubmit` reborn: look up, else embed; contribute if you say so; `beet clapback-similar`. [README](packages/beets-clapback/) |
+| write a **tool** | `pip install clapback-client` | The contract — canonical hashing, lookup-before-contribute, `client_id`, backoff — as code. Stdlib only, so a tool with its own embedder needs no ONNX Runtime. [README](packages/client/) |
+| want a **command line** | `pip install clapback-cli` | The reference client: index a directory, search it by description, find duplicates, contribute. [README](packages/cli/) |
+| need the **embedder** | `pip install clapback-embed` | The reference pipeline. ONNX Runtime, no `torch`. [README](packages/embed/) |
+
+Picard is next, and this project writes that plugin too. A tool that already computes
+CLAP vectors can contribute under its own pipeline identity; they sit beside the
+reference's rather than being compared with it.
+
+## The reference pipeline
 
 ```bash
 pip install clapback-embed
@@ -31,7 +47,8 @@ query  = embed_text("dreamy ambient with piano")   # same space
 
 No `torch`, no `transformers` — it runs on ONNX Runtime, and optionally on a GPU.
 Everything that could vary is pinned and versioned: the mel front-end, the windowing
-rule, the pooling, the checkpoint and the precision.
+rule, the pooling, the checkpoint and the precision. `PIPELINE_VERSION` is the identity
+of all of it together, and it travels with every contribution.
 
 Measured, not asserted:
 
@@ -49,48 +66,58 @@ for the cross-machine check.
 
 ## Where this actually stands
 
-Early, and worth being plain about:
+Early, and worth being plain about. As of 2026-09-14:
 
-- **25,558 embeddings, all from a single contributor.** Before 2026-09-08 it was 9
-  addresses with one accounting for 99.85%; migration `011` then removed every row
-  that could not say which pipeline produced it, and those 8 other addresses had
-  contributed before there was a field to say it in. So the concentration went from
-  nearly total to total, and the honest description is that this is one library with
-  a public API in front of it. Getting a second contributor is the single most
-  valuable thing that could happen to this project — four accepted decisions are
-  waiting on one.
-- The corpus is keyed on the SHA256 of an AcoustID fingerprint, so it can answer
-  "here is the embedding for a track you have" and *not* "what does this record I do
-  not own sound like". Fixing that needs a recording id as a second key — decided
-  in Familiar's `ADR-0102`, not yet built here.
-- The `features` endpoints below still work and still hold 77,770 rows.
+- **25,515 embeddings, all from a single contributor.** Every row declares the pipeline
+  that produced it and is keyed on a hash any client can reproduce from the audio —
+  migration `011` removed the 47,486 rows that could not say what produced them, and
+  [`ADR-0010`](docs/decisions/ADR-0010-the-corpus-key-is-a-function-of-the-audio.md)
+  collapsed a key that had been stored in two encodings. So this is one library with a
+  public API in front of it, and the honest description of the mechanism is that it is
+  in place ahead of the evidence. **A second contributor is the single most valuable
+  thing that could happen to this project** — four accepted decisions are waiting on one.
+- **1,745 of those rows name their recording — 6.8%.** A row is keyed on a one-way
+  hash, so similarity search used to return hashes nobody could resolve.
+  [`ADR-0012`](docs/decisions/ADR-0012-a-contribution-can-name-its-recording.md) lets a
+  client *claim* a MusicBrainz recording id for a row; a neighbour with a claim is a
+  recording you can look up, and one without is still a hash, shown as one. beets sends
+  `mb_trackid`; the rest of the coverage is a backfill that has not run.
+- The `features` endpoints below still work and still serve the rows they hold.
   [`ADR-0001`](docs/decisions/ADR-0001-clapback-is-a-public-clap-embedding-commons.md)
   decided the commons carries **embeddings**, not the bpm/key/valence estimates that
   killed AcousticBrainz — so those endpoints are legacy, not direction.
 
-[Familiar](https://github.com/seethroughlab/familiar) is the first client and largest
-contributor. It is not the owner: the point of the package is that anything can
-contribute.
+[Familiar](https://github.com/seethroughlab/familiar) is the first client and, so far,
+the only contributor. It is not the owner: the point of the packages above is that
+anything can contribute.
 
 ## Privacy
 
-- Only SHA256 hashes of audio fingerprints are stored (one-way, anonymous)
-- No filenames, metadata, or personal information is transmitted
-- The public browse pages (`/`, `/browse/{hash}`) only show those hashes and the analysis data keyed off them
-- Contribution is opt-in via Familiar's Admin settings
+- A recording is identified by the SHA256 of its AcoustID fingerprint — one-way, and
+  computed by the client. The corpus never receives a title, an artist, a filename or a
+  path, and cannot recover one.
+- A client *may* attach a MusicBrainz recording id. That tells the operator which
+  recording you hold, which is why every client sends it under the same opt-in switch
+  as the vector and says so.
+- `client_id` is a random UUID minted on the first contribution, derived from nothing
+  about you or your machine. Delete it and you are a new contributor.
+- Contribution is off until you turn it on, in every client.
 
-## API Endpoints
+## API
+
+Full reference at [`/api`](https://clapback.seethroughlab.com/api); schema at
+[`/docs`](https://clapback.seethroughlab.com/docs).
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/` | GET | Public browse landing page (stats + paginated table) |
-| `/browse/{hash}` | GET | Public detail view for a fingerprint |
-| `/health` | GET | Basic liveness check |
-| `/health/db` | GET | Database connectivity check |
-| `/v1/embeddings/{hash}` | GET | Lookup CLAP embedding |
-| `/v1/embeddings` | POST | Contribute an embedding |
-| `/v1/features/{hash}` | GET | Lookup audio features |
-| `/v1/features` | POST | Contribute audio features |
+| `/v1/embeddings/{hash}` | GET | The vector for a recording you hold, its pipeline, its confirmations, and its recording id if anyone has claimed one |
+| `/v1/embeddings` | POST | Contribute a vector — optionally with a `recording_mbid` |
+| `/v1/similar` | POST | Nearest recordings to a vector, across every library the corpus holds |
+| `/v1/recordings/claims` | POST | Name a row you already contributed, without re-sending the vector |
+| `/v1/recordings/{mbid}` | GET | What does this recording sound like — without holding it |
+| `/v1/features/{hash}`, `/v1/features` | GET, POST | Legacy |
+| `/`, `/browse/{hash}`, `/map` | GET | Public browse pages |
+| `/health`, `/health/db` | GET | Liveness, database connectivity |
 
 ### Embeddings
 
@@ -120,9 +147,12 @@ Response 200:
   "analysis_version": 8,
   "clap_model_version": "laion/clap-htsat-unfused:v1",
   "pipeline_version": "laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32",
-  "contributor_count": 3
+  "contributor_count": 3,
+  "recording_mbid": "1c6da765-da50-476b-a000-61e7cf45ded8"
 }
 ```
+
+`recording_mbid` is null when nobody has claimed one.
 
 #### POST `/v1/embeddings`
 
@@ -134,7 +164,8 @@ Request body:
   "analysis_version": 5,
   "clap_model_version": "laion/clap-htsat-unfused:v1",
   "client_id": "any-opaque-string-your-install-keeps",
-  "pipeline_version": "laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32"
+  "pipeline_version": "laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32",
+  "recording_mbid": "1c6da765-da50-476b-a000-61e7cf45ded8"
 }
 ```
 
@@ -157,61 +188,74 @@ The same recording contributed from two pipelines is two rows, not a disagreemen
 which is the point. A confirmation only happens between vectors that claim the same
 provenance.
 
+`recording_mbid` is optional and needs a `client_id`, because it is recorded as a
+claim by that client. **Look up before you contribute**: a repeat submission is recorded
+as agreement, and one install agreeing with itself would corrupt the one measurement
+the commons exists to make.
+
+### Recordings
+
+A recording id is a *claim*, per client, that a hash is a particular MusicBrainz
+**recording** — never verified against MusicBrainz, and counted rather than trusted
+([`ADR-0012`](docs/decisions/ADR-0012-a-contribution-can-name-its-recording.md)). A
+row's recording is whichever id the most distinct clients assert.
+
+#### POST `/v1/recordings/claims`
+
+```json
+{"fingerprint_hash": "abc123...", "recording_mbid": "1c6da765-...", "client_id": "..."}
+```
+
+Attaches an id to a row that already exists without touching `contributor_count`. Use
+this to name a library you already contributed; never re-send the vector to do it.
+Idempotent. `404` if the corpus does not hold the hash.
+
+#### GET `/v1/recordings/{recording_mbid}`
+
+Every row claimed under that recording, one per pipeline, each with its vector,
+`contributor_count`, and how many clients stand behind the claim. The way to ask what a
+recording sounds like without holding it.
+
+### Similarity
+
+#### POST `/v1/similar`
+
+```json
+{"embedding": [ ...512 floats... ], "limit": 20,
+ "pipeline_version": "laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32"}
+```
+
+Nearest recordings by cosine similarity, HNSW-indexed, about 3 ms across the corpus.
+Each neighbour carries its `pipeline_version` — vectors from two pipelines are not
+comparable however close they look, so filter by yours — and a `recording_mbid` with a
+`recording_claims` count when anyone has named it. A neighbour nobody has named is a
+bare hash, shown as one rather than hidden. The vector can come from `embed_file` or
+`embed_text`: the space is joint, so a description is a query too.
+
 ### Features (legacy)
 
 `ADR-0001` point 4 decided the commons stores embeddings and not features. These
-endpoints still work and the existing 77,770 rows are still served, but they are not
-where this is going: bpm, key and valence are *claims about the world* that consensus
-cannot verify, which is precisely what MetaBrainz identified when AcousticBrainz
-stopped taking submissions. Familiar keeps its own private feature cache instead.
+endpoints still work and the existing rows are still served, but they are not where
+this is going: bpm, key and valence are *claims about the world* that consensus cannot
+verify, which is precisely what MetaBrainz identified when AcousticBrainz stopped taking
+submissions. Familiar keeps its own private feature cache instead.
 
-#### GET `/v1/features/{fingerprint_hash}`
+`GET /v1/features/{fingerprint_hash}?analysis_version=5` returns the stored feature
+dict and its `contributor_count`; `POST /v1/features` takes `fingerprint_hash`,
+`analysis_version` and a `features` object.
 
-Query params:
-- `analysis_version` (int): Analysis pipeline version
+### Rate limits
 
-Response 200:
-```json
-{
-  "fingerprint_hash": "abc123...",
-  "analysis_version": 5,
-  "features": {
-    "bpm": 120.5,
-    "key": "C",
-    "energy": 0.8,
-    "danceability": 0.7,
-    "valence": 0.6,
-    "acousticness": 0.2,
-    "instrumentalness": 0.9,
-    "speechiness": 0.1,
-    "liveness": 0.15,
-    "loudness": -8.5
-  },
-  "contributor_count": 2
-}
-```
-
-#### POST `/v1/features`
-
-Request body:
-```json
-{
-  "fingerprint_hash": "abc123...",
-  "analysis_version": 5,
-  "features": {
-    "bpm": 120.5,
-    "key": "C",
-    "energy": 0.8
-  }
-}
-```
-
-Response: 201 (created) or 200 (confirmed, contributor count incremented).
+300 lookups and 30 writes per minute, per address. A claim is a write. There is no key
+to obtain and no plan to buy; if you need more, the corpus is a few hundred megabytes
+and open source.
 
 ## Development
 
-The repository is a `uv` workspace of peer members (`ADR-0005`): `packages/embed` is the
-published library, `packages/server` is the commons. The root builds nothing.
+The repository is a `uv` workspace of peers
+([`ADR-0005`](docs/decisions/ADR-0005-the-repository-is-a-workspace-of-peers.md)):
+`packages/embed`, `packages/client`, `packages/cli` and `packages/beets-clapback` are
+published; `packages/server` is the commons. The root builds nothing.
 
 ```bash
 # Install everything, from the root
@@ -219,32 +263,34 @@ uv sync
 
 # The server
 cd packages/server
-CACHE_DATABASE_URL="postgresql+asyncpg://cache:cache@localhost:5432/cache" \
+CACHE_DATABASE_URL="postgresql+asyncpg://cache:cache@localhost:5433/cache" \
   uv run uvicorn app.main:app --reload
 uv run pytest
-docker compose up          # includes PostgreSQL
+docker compose up          # includes PostgreSQL, published on 5433
 
-# The library
+# A package
 cd packages/embed
 uv pip install -e '.[dev]'
 pytest                     # add -m artifacts once the encoders are exported
 ```
 
+Each package has its own CI (`.github/workflows/<name>-ci.yml`) and publishes to PyPI
+from a tag with its own prefix (`embed-v*`, `client-v*`, `cli-v*`, `beets-v*`). The
+embedder's conformance job checks the ONNX front-end against `transformers`, which is
+the drift guard for the whole corpus — two implementations disagreeing looks exactly
+like two contributors disagreeing, and nothing distinguishes them after the fact.
+
+Architectural changes go through the records in [`docs/decisions/`](docs/decisions/).
+Read the relevant ones before changing anything they govern.
+
 ## Deployment
 
 [`ADR-0003`](docs/decisions/ADR-0003-the-commons-runs-on-one-small-server.md) chose one
 small AWS instance running both Postgres and the application, sized by index RAM rather
-than corpus size, with the upgrade path written down. `docker-compose.aws.yml` is that
-configuration; nothing is deployed to it yet.
-
-The first public step is deliberately partial.
-[`ADR-0003`](docs/decisions/ADR-0003-the-commons-runs-on-one-small-server.md) point 7
-allows **reads served publicly while writes stay restricted**, and forbids the reverse —
-so Caddy refuses writes at the edge and Familiar keeps contributing over the private
-network. That restriction is topological rather than a new authentication scheme, and it
-is one `respond` line to delete once
-[`ADR-0004`](docs/decisions/ADR-0004-contributors-are-identified-but-not-accounts.md)
-is built.
+than corpus size, with the upgrade path written down. That is what runs: TLS via Caddy,
+nightly `pg_dump` to S3, a disk alert that delivers to a phone. `docker-compose.aws.yml`
+is the configuration and [`deploy/RUNBOOK.md`](packages/server/deploy/RUNBOOK.md) is
+how it was brought up and how it is operated.
 
 ```bash
 cd packages/server
@@ -258,12 +304,17 @@ sudo systemctl enable --now clapback-backup.timer
 Backups are part of shipping rather than a follow-up, per `ADR-0003` point 6: the corpus
 is contributed data nobody here can rebuild.
 
+**The API is the only way in.** Every guarantee the corpus makes — confirmability,
+revocation, the row ceiling, agreement recording — is code on the write path, so a
+direct database connection is a second write path with none of them. The deployed
+compose file exposes no database port.
+
 ### Locally, or on a NAS
 
 ```bash
 cd packages/server
 docker compose up -d                              # development, publishes Postgres on 5433
-docker compose -f docker-compose.omv.yml up -d    # the NAS deployment this ran on
+docker compose -f docker-compose.omv.yml up -d    # the NAS deployment this ran on first
 docker compose exec api uv run alembic upgrade head
 curl http://localhost:8000/health
 ```
@@ -275,20 +326,19 @@ Environment variables (prefix: `CACHE_`):
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CACHE_DATABASE_URL` | `postgresql+asyncpg://...` | PostgreSQL connection URL |
-| `CACHE_LOOKUP_RATE_LIMIT` | `100/minute` | Rate limit for lookups |
-| `CACHE_CONTRIBUTE_RATE_LIMIT` | `10/minute` | Rate limit for contributions |
-| `CACHE_DEBUG` | `false` | Enable debug logging |
-
-Fly.io also reads `DATABASE_URL` and converts `postgres://` to `postgresql+asyncpg://` automatically.
+| `CACHE_DB_DISABLE_SSL` | `false` | For a self-hosted Postgres with no TLS |
+| `CACHE_LOOKUP_RATE_LIMIT` | `300/minute` | Reads, per address |
+| `CACHE_CONTRIBUTE_RATE_LIMIT` | `30/minute` | Writes, per address — contributions and claims |
+| `CACHE_MAX_EMBEDDINGS` | `500000` | Row ceiling, checked on write (`ADR-0004` point 9); 0 disables |
+| `CACHE_ADMIN_PASSWORD` | — | The admin dashboard; unset disables it |
+| `CACHE_DEBUG` | `false` | Debug logging |
 
 ## Architecture
 
-- **Layout**: a `uv` workspace — `packages/embed` (the published library),
-  `packages/server` (the commons). Neither is the repository root.
-- **API**: FastAPI + uvicorn
-- **Database**: PostgreSQL with pgvector extension
-- **Hosting**: self-hosted today; [`ADR-0003`](docs/decisions/ADR-0003-the-commons-runs-on-one-small-server.md)
-  chose one small AWS instance, and nothing is deployed there yet
-- **CI**: `embed-ci.yml` lints, tests and checks the embedder against `transformers`;
-  `server-ci.yml` lints and tests the server; `embed-release.yml` publishes on an
-  `embed-v*` tag. There is no auto-deploy.
+- **Layout**: a `uv` workspace — four published packages and the server. Neither the
+  root nor any package is the whole.
+- **API**: FastAPI + uvicorn, SQLAlchemy 2.0 async, Alembic migrations.
+- **Database**: PostgreSQL with pgvector; `(fingerprint_hash, pipeline_version)` is the
+  key, HNSW over the vectors, and recording ids in a claims table beside them.
+- **Hosting**: one AWS Lightsail instance, per `ADR-0003`. No auto-deploy; the runbook
+  is the deploy.

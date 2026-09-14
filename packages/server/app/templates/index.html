@@ -11,13 +11,23 @@
 </p>
 <p class="tagline">
     Keyed on anonymised SHA256 fingerprint hashes: no titles, no artists, no filenames.
+    Reached from the tools you already run — <code>pip install beets-clapback</code> — or from
+    your own, through a client package with no dependency beyond the standard library.
     <a href="https://github.com/seethroughlab/familiar">Familiar</a> is its first client and
-    largest contributor, and is not its owner — anything can contribute.
+    is not its owner.
 </p>
 <nav class="primary-nav">
     <a href="/api">
         <strong>API</strong>
         <span>Query the corpus. No key, no account.</span>
+    </a>
+    <a href="https://pypi.org/project/beets-clapback/">
+        <strong>beets</strong>
+        <span><code>absubmit</code> reborn. Look up, embed, contribute if you say so.</span>
+    </a>
+    <a href="https://pypi.org/project/clapback-client/">
+        <strong>Plug in</strong>
+        <span>The contract as a package. Stdlib only.</span>
     </a>
     <a href="/map">
         <strong>Map</strong>
@@ -66,9 +76,30 @@
             filename or a path, and cannot recover one.
         </p>
         <p class="muted">
-            That is a real limit as much as a privacy property: you can ask about a recording
-            <em>you already have</em>, because you can compute its hash. You cannot yet ask "what
-            does this record I do not own sound like".
+            That is a real limit as much as a privacy property: a hash names a recording only to
+            someone who already holds it. So a client <em>may</em> attach a MusicBrainz recording
+            id — a claim, counted per client and never verified — and a neighbour with one is a
+            recording anyone can look up. One without is still a hash, and is shown as one.
+        </p>
+    </div>
+    <div class="card">
+        <h2>Reached from the tools you already run</h2>
+        <p class="muted">
+            The commons is the product; nothing here needs its own application. beets shipped
+            <code>absubmit</code> for years and lost it when AcousticBrainz closed —
+            <a href="https://pypi.org/project/beets-clapback/"><code>beets-clapback</code></a> is
+            that pair back, with a payload that can be reconciled between contributors, and
+            <code>beet clapback-similar</code> to ask what sounds like a track across every library
+            the commons holds. Picard is next.
+        </p>
+        <p class="muted">
+            A tool of your own plugs in through
+            <a href="https://pypi.org/project/clapback-client/"><code>clapback-client</code></a>:
+            canonical hashing, look-up-before-contribute, <code>client_id</code>, backoff — the
+            records as code, with no dependency beyond the standard library. A tool with its own
+            embedder contributes under its own pipeline identity and never installs ONNX Runtime.
+            <a href="https://pypi.org/project/clapback-cli/"><code>clapback-cli</code></a> is the
+            reference client that exercises the contract end to end.
         </p>
     </div>
     <div class="card">
@@ -167,7 +198,9 @@
     had a way to retract a recording, which
     <a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0004-contributors-are-identified-but-not-accounts.md">ADR-0004</a>
     made a precondition rather than a follow-up; that path exists, so it is open. See the
-    <a href="/api">API</a> page for what to send.
+    <a href="/api">API</a> page for what to send, and
+    <a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0011-the-commons-is-what-other-tools-plug-into.md">ADR-0011</a>
+    for why the way in is a package rather than an application.
 </p>
 {% endblock %}
 
