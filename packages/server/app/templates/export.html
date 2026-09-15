@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}Export · {{ site.name }}{% endblock %}
+{% block description %}Take the whole corpus with you: weekly CSV exports of every embedding, pipeline identity and recording claim, under CC0.{% endblock %}
+{% block og_title %}Export · {{ site.name }}{% endblock %}
+
+{% block body %}
+<section class="explore-head">
+    <h1>Take it with you</h1>
+    <p class="lede">
+        The corpus is public <em>data</em>, not only a public endpoint. Every row — the vector, the
+        pipeline identity, the recording claims, the contributor count — is dedicated to the public
+        domain under <a href="https://creativecommons.org/publicdomain/zero/1.0/">CC0 1.0</a>, and
+        published weekly as files anyone can download, load into their own instance, or build on.
+        The reasoning is
+        <a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0013-the-corpus-is-public-data-not-just-a-public-endpoint.md">ADR-0013</a>.
+    </p>
+</section>
+
+{% if manifest %}
+<div class="card">
+    <h2>Latest export · {{ manifest.generated[:10] }}</h2>
+    <p class="muted">
+        {{ "{:,}".format(manifest.embeddings_total) }} embeddings across
+        {{ manifest.embeddings | length }} pipeline identit{{ 'y' if manifest.embeddings | length == 1 else 'ies' }},
+        and {{ "{:,}".format(manifest.claims.rows) }} recording claims. Generated
+        <code>{{ manifest.generated }}</code>. A new one lands every Sunday; if this date is more
+        than a fortnight old, the timer has stopped and the page is telling you so.
+    </p>
+    <table>
+        <thead><tr><th>File</th><th>Pipeline identity</th><th>Rows</th></tr></thead>
+        <tbody>
+        {% for f in manifest.embeddings %}
+        <tr>
+            <td><a href="{{ manifest.url }}{{ f.file }}"><code>{{ f.file }}</code></a></td>
+            <td><code>{{ f.pipeline_version }}</code></td>
+            <td>{{ "{:,}".format(f.rows) }}</td>
+        </tr>
+        {% endfor %}
+        <tr>
+            <td><a href="{{ manifest.url }}{{ manifest.claims.file }}"><code>{{ manifest.claims.file }}</code></a></td>
+            <td class="muted">recording claims — <code>fingerprint_hash, recording_mbid, claim_count</code></td>
+            <td>{{ "{:,}".format(manifest.claims.rows) }}</td>
+        </tr>
+        <tr>
+            <td><a href="{{ manifest.url }}manifest.json"><code>manifest.json</code></a></td>
+            <td class="muted">this listing, as data — <a href="/export/latest.json"><code>/export/latest.json</code></a> always redirects to the current one</td>
+            <td></td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card">
+    <h2>Decided, not yet published</h2>
+    <p class="muted">
+        The export is decided (ADR-0013 point 3) and this page will list the files the day the
+        first one lands. Until then the data is reachable only through the <a href="/api">API</a>
+        — under the same licence, one row at a time. This page saying so is deliberate: a site
+        that claimed an export it did not have would be the first thing a mirror discovered.
+    </p>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>What is in a file</h2>
+    <p class="muted">
+        One gzipped CSV per pipeline identity, so you take only the vectors you can compare with.
+        Columns: <code>fingerprint_hash</code> (the SHA256 of an AcoustID fingerprint — the key),
+        <code>named</code> (whether any client has claimed a recording id for it),
+        <code>pipeline_version</code>, <code>contributor_count</code> (how many independent
+        installations confirmed the vector), <code>created</code> (the day it arrived), and
+        <code>embedding</code> (512 floats, as pgvector prints them). The claims file maps hashes
+        to MusicBrainz recording ids with a count per pair.
+    </p>
+    <p class="muted">
+        <strong>What is never in a file:</strong> which installation contributed a row. The
+        agreement count is published; the parties are not. A random <code>client_id</code>
+        identifies nobody, but the set of recordings one contributed is a person's record
+        collection, and that stays on this server (ADR-0013 point 4).
+    </p>
+</div>
+
+<div class="card">
+    <h2>Run your own</h2>
+    <p class="muted">
+        The server is MIT and runs from the repository's compose files; an export loads into a
+        fresh instance and it answers the same lookups under the same keys. A mirror is another
+        instance, not a federation — nothing syncs, and a copy is as current as the export it
+        loaded. The <a href="https://github.com/seethroughlab/clapback/blob/main/packages/server/deploy/RUNBOOK.md">runbook</a>
+        has the steps.
+    </p>
+</div>
+
+<div class="card">
+    <h2>What a snapshot cannot do</h2>
+    <p class="muted">
+        A row deleted here — a takedown, a retraction — is absent from the next export, and a
+        takedown regenerates the export straight away rather than at the next tick. What nobody can
+        do is recall a file already downloaded: that is what public domain means, and it is stated
+        here rather than discovered later (ADR-0013 point 6). Exports older than five weeks expire;
+        the first of each month is kept.
+    </p>
+</div>
+{% endblock %}

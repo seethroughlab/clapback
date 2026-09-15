@@ -378,6 +378,98 @@ only credential. Anyone who guesses it reads the alerts and can publish fakes to
 them. Use a long random suffix. The alert body carries the hostname and disk
 figures, which is what leaves the machine.
 
+## 10. The public export, and running your own
+
+`ADR-0013` points 3 to 6. **This is not the backup.** The dump in section 6
+carries `client_id` on every row and IP addresses in `ip_stats`; the export
+selects only what is public and goes to a *different* bucket that anyone can
+read. Confusing the two publishes a contributor's library. The script cannot
+reach the backup bucket and the test suite fails if it ever names it.
+
+**The bucket, once.** Public-read on its three prefixes and nothing else; the
+instance can add objects and never delete. Versioning on, so an overwritten
+`latest/` keeps its history; a lifecycle rule expires `exports/` after 35 days
+and leaves `monthly/` alone — retention is S3's job, on S3's side, where a
+compromised host cannot reach it.
+
+```bash
+aws s3api create-bucket --bucket clapback-export --region us-east-1
+aws s3api put-public-access-block --bucket clapback-export \
+	--public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=false,RestrictPublicBuckets=false
+aws s3api put-bucket-policy --bucket clapback-export --policy file://deploy/s3-export-bucket-policy.json
+aws s3api put-bucket-versioning --bucket clapback-export --versioning-configuration Status=Enabled
+aws s3api put-bucket-lifecycle-configuration --bucket clapback-export --lifecycle-configuration '{
+  "Rules": [
+    {"ID": "weekly-exports-expire", "Status": "Enabled", "Filter": {"Prefix": "exports/"},
+     "Expiration": {"Days": 35}, "NoncurrentVersionExpiration": {"NoncurrentDays": 7}},
+    {"ID": "latest-history-is-short", "Status": "Enabled", "Filter": {"Prefix": "latest/"},
+     "NoncurrentVersionExpiration": {"NoncurrentDays": 7}},
+    {"ID": "abort-multipart", "Status": "Enabled", "Filter": {"Prefix": ""},
+     "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 7}}
+  ]}'
+aws iam create-user --user-name clapback-export-writer
+aws iam put-user-policy --user-name clapback-export-writer \
+	--policy-name clapback-export-write \
+	--policy-document file://deploy/iam-export-policy.json
+aws iam create-access-key --user-name clapback-export-writer
+```
+
+The instance already holds the backup writer's key as `AWS_ACCESS_KEY_ID`.
+Rather than a second key in `.env`, attach the export policy to the *same* user
+(`put-user-policy --user-name clapback-backup-writer --policy-name
+clapback-export-write ...`): one principal, two write-only policies on two
+buckets, still no delete anywhere. Then in `.env`:
+
+```
+EXPORT_S3_BUCKET=clapback-export
+EXPORT_PUBLIC_URL=https://clapback-export.s3.us-east-1.amazonaws.com
+```
+
+`docker-compose.aws.yml` passes `EXPORT_PUBLIC_URL` to the application and
+mounts `./exports` read-only, which is where the script leaves a copy of the
+manifest so `/export` can show the date without an outbound request.
+
+```bash
+docker compose -f docker-compose.aws.yml up -d api        # picks up the env and the mount
+sudo cp deploy/clapback-export.service deploy/clapback-export.timer /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now clapback-export.timer
+./deploy/export.sh                                        # once by hand; do not wait for Sunday
+curl -sI https://clapback.seethroughlab.com/export/latest.json | grep -i location
+```
+
+**Then download the manifest from somewhere that is not the instance** and open
+`/export` in a browser: the date on the page must be today's. A green timer is
+evidence the script ran, not evidence anyone can fetch the result — the same
+lesson as section 9.
+
+**After a takedown** (`ADR-0013` point 6): `sudo systemctl start
+clapback-export.service`, so the row is gone from `latest/` now rather than on
+Sunday. The dated export it was in expires with the lifecycle rule; nothing can
+recall a copy already downloaded, and `/export` says so.
+
+**Running your own.** An export loads into a fresh instance with `psql` —
+the one direct-database write `ADR-0013` point 7 sanctions, because it is your
+box and the file carries `contributor_count`, so the row means what it meant:
+
+```bash
+docker compose up -d postgres && uv run alembic upgrade head
+gunzip -c embeddings-*.csv.gz | docker compose exec -T postgres psql -U cache cache -c "
+  CREATE TEMP TABLE e (fingerprint_hash text, named bool, pipeline_version text,
+                       contributor_count int, created date, embedding text);
+  COPY e FROM STDIN WITH (FORMAT csv, HEADER);
+  INSERT INTO embeddings (fingerprint_hash, pipeline_version, embedding, analysis_version,
+                          clap_model_version, contributor_count, created_at, last_accessed_at)
+  SELECT fingerprint_hash, pipeline_version, embedding::vector, 1,
+         split_part(pipeline_version, '+', 1), contributor_count, created, created
+  FROM e ON CONFLICT DO NOTHING;"
+```
+
+`ADR-0013` point 7's `scripts/import_export.py` will wrap that for a whole
+manifest, claims included; until it exists the SQL above is the import path, and
+claims are not imported (the export carries a count per pair, and
+`recording_claims` is keyed per client — how a mirror represents that is point
+7's question). A mirror is another instance; nothing syncs.
+
 ## What is still not done after all of this
 
 - **Anonymous writes**, which stay refused until `ADR-0004` is built.

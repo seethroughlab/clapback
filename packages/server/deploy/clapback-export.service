@@ -1,0 +1,13 @@
+[Unit]
+Description=clapback weekly public export of the corpus (ADR-0013 points 3-6)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# Adjust if the checkout lives elsewhere.
+WorkingDirectory=/home/ubuntu/clapback/packages/server
+ExecStart=/home/ubuntu/clapback/packages/server/deploy/export.sh
+User=ubuntu
+# snap installs aws outside systemd's default PATH — see clapback-backup.service.
+Environment=PATH=/snap/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin

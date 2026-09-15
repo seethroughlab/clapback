@@ -15,7 +15,11 @@ deliberately — closer to a release than to a cache.
 **It reads an export, not the database.** `ADR-0005` point 12 gives the corpus no
 reachable database port — the API is the only way in — so there is no DSN to hand
 this, and UMAP cannot run on the instance because that is the entire reason this
-is offline. The workflow is two steps and both are honest about where they run:
+is offline. Since `ADR-0013` the weekly public export's per-pipeline file
+(`embeddings-<slug>.csv.gz`, linked from /export) is exactly this shape — hash
+first, `named` second, vector last, header skipped — so the usual run is
+`--from` that file and needs no shell on the instance at all. The hand-made
+route below still works and is what the export was modelled on:
 
     # on the instance, where the database is — one pipeline, by its identity
     docker compose -f docker-compose.aws.yml exec -T postgres psql -U cache -c "

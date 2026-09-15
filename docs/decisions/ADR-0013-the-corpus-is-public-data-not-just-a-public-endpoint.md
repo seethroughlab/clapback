@@ -24,6 +24,39 @@ Implementation:
   package asserts the text is where the switch is. Versions bumped — client 0.2.2, cli 0.1.2,
   beets 0.2.1, Picard 0.1.2 — and **not yet released**: the order is client → cli and beets →
   Picard (`ADR-0005`), and each tag is a decision to publish.
+- **Points 3 to 6 are built and not yet deployed** (2026-09-15). `deploy/export.sh` runs
+  `COPY` through `psql` in the existing Postgres container — one gzipped CSV per
+  `pipeline_version`, `claims.csv.gz`, `manifest.json` — and uploads with `aws s3 cp` to a
+  second bucket; `clapback-export.service`/`.timer` run it Sundays 05:12 UTC, an hour after the
+  backup; `iam-export-policy.json` grants `PutObject` and `ListBucket` on three prefixes and no
+  delete; `s3-export-bucket-policy.json` makes those prefixes public-read. `/export` renders the
+  manifest — a copy the script leaves beside the compose project, mounted read-only into the
+  container, so the page makes no outbound request — and says "decided, not yet published" when
+  there is none; `/export/latest.json` redirects into the bucket, or 404s until one is
+  configured. RUNBOOK section 10 has the bucket, the policies, the timer and the takedown step.
+- **Two things came out differently from the Decision.** *Retention* (point 6) was written as
+  "keep the last four weekly and the first of each month"; built, it is a 35-day S3 lifecycle
+  rule on `exports/` plus a `monthly/YYYY-MM/` copy the script writes only when that prefix is
+  empty. Same effect, but the host never holds `s3:DeleteObject` — the property the backup's
+  IAM policy already had and this record would have been wrong to give up for a retention
+  loop. *Column order* (point 3) is `fingerprint_hash, named, pipeline_version, contributor_count,
+  created, embedding` rather than the order the Decision listed, so `scripts/build_map.py`'s
+  reader — hash first, vector last — takes the published file unchanged; a `named` column was
+  added for the same reason. *A takedown regenerating the export* is a runbook step
+  (`systemctl start clapback-export.service`), not automation: the admin route runs in the
+  container and the exporter on the host, and wiring one to the other is not worth a second
+  channel for an event that has never happened.
+- **The script was run against a real schema before it was committed, and that found a bug.**
+  Against the dev compose stack, migrated to head and seeded with two pipeline identities (one
+  containing a quote, to exercise the dollar-quoting) and overlapping claims, the first run
+  exported one pipeline. `docker compose exec -T` inside the `while read` loop consumed the
+  rest of the pipeline list as its own stdin. Fixed with `< /dev/null`; the second run produced
+  both files, 512 floats a row, no `client_id` anywhere in the output, `named` and
+  `claim_count` correct, and `build_map.py` read the file as-is. Tests pin the script's text:
+  no private column or table in code, hash first and vector last, `HEADER`, day-precision
+  dates, never the backup bucket, and a writer policy with no delete. Not exercised: S3
+  itself, `aws` was a stub writing to a directory. That is what the runbook's "download the
+  manifest from somewhere that is not the instance" step is for.
 
 Extends [ADR-0001](ADR-0001-clapback-is-a-public-clap-embedding-commons.md) point 1,
 [ADR-0003](ADR-0003-the-commons-runs-on-one-small-server.md) point 6 and

@@ -1,0 +1,22 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "WriteExportsOnly",
+      "Effect": "Allow",
+      "Action": "s3:PutObject",
+      "Resource": [
+        "arn:aws:s3:::clapback-export/exports/*",
+        "arn:aws:s3:::clapback-export/monthly/*",
+        "arn:aws:s3:::clapback-export/latest/*"
+      ]
+    },
+    {
+      "Sid": "ListSoTheScriptCanSeeWhetherThisMonthExists",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::clapback-export",
+      "Condition": {"StringLike": {"s3:prefix": ["exports/*", "monthly/*", "latest/*"]}}
+    }
+  ]
+}

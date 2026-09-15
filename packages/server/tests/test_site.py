@@ -250,3 +250,96 @@ def test_every_page_states_the_data_licence():
         assert "CC0 1.0" in html, name
         assert "ADR-0013" in html, name
     assert "Contributing dedicates what you" in render("api.html", **API_CTX)
+
+
+MANIFEST = {
+    "schema_version": 1,
+    "generated": "2026-09-21T05:12:40Z",
+    "licence": "CC0-1.0",
+    "url": "https://clapback-export.s3.us-east-1.amazonaws.com/exports/2026-09-21/",
+    "embeddings": [
+        {"pipeline_version": "laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32",
+         "file": "embeddings-laion_clap.htsat.unfused_frontend1_artifact1_pool1_fp32.csv.gz",
+         "rows": 25886},
+    ],
+    "embeddings_total": 25886,
+    "claims": {"file": "claims.csv.gz", "rows": 23196},
+}
+
+
+class TestTheExportPage:
+    """`ADR-0013` point 5 — and honest in both directions."""
+
+    def test_with_a_manifest_it_lists_the_files_and_the_date(self):
+        html = render("export.html", manifest=MANIFEST, public_url="https://x")
+        assert "2026-09-21" in html
+        assert "25,886" in html and "23,196" in html
+        assert MANIFEST["url"] + MANIFEST["embeddings"][0]["file"] in html
+        assert "CC0 1.0" in html and "cannot" in html  # the recall caveat, point 6
+
+    def test_without_one_it_says_decided_not_published(self):
+        html = render("export.html", manifest=None, public_url="")
+        assert "not yet published" in html
+        assert "2026-09-21" not in html
+
+    def test_the_footer_links_to_it(self):
+        assert 'href="/export"' in render("api.html", **API_CTX)
+
+    def test_a_missing_manifest_reads_as_none_not_an_error(self, tmp_path, monkeypatch):
+        from app.api import browse
+
+        monkeypatch.setattr(browse.settings, "export_manifest_path", str(tmp_path / "nope.json"))
+        assert browse._export_manifest() is None
+        (tmp_path / "m.json").write_text('{"generated": "2026-09-21T05:12:40Z"}')
+        monkeypatch.setattr(browse.settings, "export_manifest_path", str(tmp_path / "m.json"))
+        assert browse._export_manifest()["generated"].startswith("2026-09-21")
+
+    async def test_latest_json_redirects_only_once_a_bucket_is_configured(self, monkeypatch):
+        from fastapi import HTTPException
+
+        from app.api import browse
+
+        monkeypatch.setattr(browse.settings, "export_public_url", "")
+        with pytest.raises(HTTPException) as e:
+            await browse.export_latest(_Request())
+        assert e.value.status_code == 404
+        monkeypatch.setattr(browse.settings, "export_public_url", "https://bucket.example/")
+        r = await browse.export_latest(_Request())
+        assert r.status_code == 307
+        assert r.headers["location"] == "https://bucket.example/latest/manifest.json"
+
+
+class TestTheExportScript:
+    """`ADR-0013` point 4, enforced on the script rather than trusted.
+
+    The export is a shell script running `COPY` through psql, so the guarantee
+    that no private column leaves is a property of its text. Comments may name
+    the forbidden things (they explain the rule); code may not.
+    """
+
+    SCRIPT = (SERVER / "deploy" / "export.sh").read_text()
+    CODE = "\n".join(line for line in SCRIPT.splitlines() if not line.lstrip().startswith("#"))
+
+    def test_no_private_column_or_table_is_selected(self):
+        for forbidden in ("client_id", "ip_stats", "banned_ips", "submission_agreement", "ip_address"):
+            assert forbidden not in self.CODE, forbidden
+
+    def test_the_embedding_rows_keep_the_shape_the_map_builder_reads(self):
+        """hash first, vector last — `scripts/build_map.py` takes row[0] and row[-1]."""
+        sel = self.CODE[self.CODE.index("SELECT e.fingerprint_hash"):self.CODE.index("FROM embeddings e")]
+        cols = [c.strip().split(" AS ")[-1].split(".")[-1] for c in sel.replace("SELECT", "").split(",\n")]
+        assert cols[0] == "fingerprint_hash" and cols[-1] == "embedding"
+        assert "created_at::date" in sel  # day precision, point 4
+        assert "HEADER" in self.CODE
+
+    def test_it_never_shares_a_bucket_with_the_backup(self):
+        assert "BACKUP_S3_BUCKET" not in self.CODE
+        assert "EXPORT_S3_BUCKET" in self.CODE
+
+    def test_the_writer_policy_cannot_delete(self):
+        import json
+
+        pol = json.loads((SERVER / "deploy" / "iam-export-policy.json").read_text())
+        actions = {a for st in pol["Statement"] for a in ([st["Action"]] if isinstance(st["Action"], str) else st["Action"])}
+        assert "s3:DeleteObject" not in actions and "s3:PutObject" in actions
+        assert all("clapback-backup" not in json.dumps(st) for st in pol["Statement"])

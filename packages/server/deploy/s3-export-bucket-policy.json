@@ -1,0 +1,16 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AnyoneMayRead",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "s3:GetObject",
+      "Resource": [
+        "arn:aws:s3:::clapback-export/exports/*",
+        "arn:aws:s3:::clapback-export/monthly/*",
+        "arn:aws:s3:::clapback-export/latest/*"
+      ]
+    }
+  ]
+}

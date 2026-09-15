@@ -34,6 +34,15 @@ class Settings(BaseSettings):
     # 0 disables it. The default is `ADR-0003` point 11's stated comfortable limit.
     max_embeddings: int = 500_000
 
+    # `ADR-0013` point 5: where the weekly public export is served from. The base
+    # URL of the export bucket; /export/latest.json redirects into it. Blank
+    # means no export is published yet, and /export says so rather than 404ing.
+    export_public_url: str = ""
+    # The manifest deploy/export.sh leaves beside the compose project, mounted
+    # read-only into the container. Read per request: it changes weekly and the
+    # page's whole job is to show the date it carries.
+    export_manifest_path: str = "/exports/manifest.json"
+
     # Server
     debug: bool = False
 

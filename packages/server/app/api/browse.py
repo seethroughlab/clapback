@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -209,6 +209,48 @@ async def map_page(request: Request) -> HTMLResponse:
     `ADR-0012`'s rule of never resolving an id.
     """
     return templates.TemplateResponse(request, "map.html", {"map_meta": MAP_META})
+
+
+def _export_manifest() -> dict | None:
+    """The latest export's manifest, or None when there has never been one.
+
+    Read on every request rather than at import, unlike the map: the file is
+    rewritten weekly by `deploy/export.sh`, and the date it carries is the only
+    evidence a visitor has that the export is still happening — a stalled timer
+    must show as a stale date, not as a cached fresh one.
+    """
+    try:
+        with open(settings.export_manifest_path) as fh:
+            d = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    return d if isinstance(d, dict) and d.get("generated") else None
+
+
+@browse_router.get("/export", response_class=HTMLResponse)
+async def export_page(request: Request) -> HTMLResponse:
+    """`ADR-0013` point 5: the corpus as files anyone can take away, under CC0.
+
+    The page is honest in both directions. With a manifest it shows the date
+    and the per-pipeline counts; without one it says the export is decided and
+    not yet published, because a page that hides that would be the site
+    claiming point 3 is built. And it says, in plain words, what point 6
+    admits: a snapshot already downloaded cannot be recalled.
+    """
+    return templates.TemplateResponse(
+        request,
+        "export.html",
+        {"manifest": _export_manifest(), "public_url": settings.export_public_url.rstrip("/")},
+    )
+
+
+@browse_router.get("/export/latest.json")
+async def export_latest(request: Request):
+    """Redirect to the current manifest in the bucket — a stable URL on this
+    domain, so the bucket can move (`ADR-0013` point 5) without breaking links."""
+    if not settings.export_public_url:
+        raise HTTPException(status_code=404, detail="No export has been published yet — see /export")
+    return RedirectResponse(f"{settings.export_public_url.rstrip('/')}/latest/manifest.json", status_code=307)
 
 
 class HashResolution(BaseModel):

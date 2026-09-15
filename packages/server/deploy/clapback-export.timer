@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the clapback public export weekly
+
+[Timer]
+# Sunday 05:12 UTC: an hour after the nightly backup, so the two never overlap
+# on a box with one CPU, and off the hour for the same reason the backup is.
+OnCalendar=Sun *-*-* 05:12:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -42,6 +42,12 @@ services:
       CACHE_DB_DISABLE_SSL: "true"   # same host, container network — TLS terminates at Caddy
       CACHE_ADMIN_PASSWORD: ${CACHE_ADMIN_PASSWORD:?set CACHE_ADMIN_PASSWORD in .env}
       CACHE_MAX_EMBEDDINGS: ${CACHE_MAX_EMBEDDINGS:-500000}
+      CACHE_EXPORT_PUBLIC_URL: ${EXPORT_PUBLIC_URL:-}
+    # `ADR-0013` point 5: /export shows the latest manifest's date and counts.
+    # deploy/export.sh writes a copy here after each upload, so the page reads a
+    # file rather than making an outbound request to the bucket on every view.
+    volumes:
+      - ./exports:/exports:ro
     # **Loopback only**, which is not the same as no port at all.
     #
     # Caddy is the only *public* route in, and it refuses writes and 404s the

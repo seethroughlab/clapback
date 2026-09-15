@@ -43,3 +43,6 @@ Thumbs.db
 packages/*/.venv/
 *.onnx
 *.onnx.data
+
+# Local copy of the latest public export manifest, written by deploy/export.sh
+packages/server/exports/
