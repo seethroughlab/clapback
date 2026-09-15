@@ -14,6 +14,16 @@ Implementation:
   the data, MIT for the code, and this record. A site test asserts both pages carry it. Says
   nothing about the clients' switches, because point 2 is not built and the page must not claim it
   is. Deployed when the instance next pulls `main`.
+- **Point 2 is written** (2026-09-15), one sentence, byte-identical in all four places so it
+  cannot drift: *Everything sent is dedicated to the public domain under CC0 1.0, like every other
+  row in the corpus, and may be republished in its public exports.* In `Corpus.contribute`'s
+  docstring and the client README's rules (a fifth rule); printed by `clapback contribute` before
+  anything is sent, dry run included; in `beets-clapback`'s docstring, its README's option comment
+  and its "what leaves the machine" section; in the Picard plugin's description (what Options →
+  Plugins shows) and the options-page note beside the *Contribute* checkbox. A test in each
+  package asserts the text is where the switch is. Versions bumped — client 0.2.2, cli 0.1.2,
+  beets 0.2.1, Picard 0.1.2 — and **not yet released**: the order is client → cli and beets →
+  Picard (`ADR-0005`), and each tag is a decision to publish.
 
 Extends [ADR-0001](ADR-0001-clapback-is-a-public-clap-embedding-commons.md) point 1,
 [ADR-0003](ADR-0003-the-commons-runs-on-one-small-server.md) point 6 and

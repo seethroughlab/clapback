@@ -1,6 +1,6 @@
 [project]
 name = "beets-clapback"
-version = "0.2.0"
+version = "0.2.1"
 description = "beets plugin: look up, embed, and contribute CLAP embeddings to the clapback commons — absubmit reborn"
 readme = "README.md"
 license = { file = "LICENSE" }

@@ -47,6 +47,10 @@ is those decisions as code so a tool does not have to reimplement them.
    no defaults. `client_id` is a random UUID minted once per install — `identity.mint_client_id`
    — on the first contribution, never on install, and stored where the user can find and delete
    it.
+5. **Say what the licence is, beside the switch.** Everything sent is dedicated to the public domain under CC0 1.0, like every other row in the corpus, and may be republished in its public exports
+   ([`ADR-0013`](../../docs/decisions/ADR-0013-the-corpus-is-public-data-not-just-a-public-endpoint.md)).
+   A self-issued client has no account to agree to terms on, so the sentence goes where the user
+   turns contribution on.
 
 ## What you get back
 

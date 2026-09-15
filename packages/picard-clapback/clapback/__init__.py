@@ -19,8 +19,10 @@ own vector — and says so rather than computing anything.
 Nothing leaves the machine until <i>Contribute</i> is turned on in the options. Then,
 per file: a one-way fingerprint hash, a 512-float vector when one is computed here,
 and the MusicBrainz recording id. Never audio, never paths, never other tags.
+Everything sent is dedicated to the public domain under CC0 1.0, like every other row in the
+corpus, and may be republished in its public exports.
 """
-PLUGIN_VERSION = "0.1.1"
+PLUGIN_VERSION = "0.1.2"
 PLUGIN_API_VERSIONS = ["2.6", "2.7", "2.8", "2.9", "2.10", "2.11", "2.12", "2.13"]
 PLUGIN_LICENSE = "MIT"
 PLUGIN_LICENSE_URL = "https://opensource.org/license/mit"
@@ -299,7 +301,9 @@ class ClapbackOptionsPage(OptionsPage):
             "<p><b>What leaves the machine, per file, only when Contribute is on:</b> a one-way "
             "SHA256 of the AcoustID fingerprint; a 512-float vector when one is computed here; "
             "and the MusicBrainz recording id, which tells the commons which recording you hold. "
-            "Never audio, never paths, never other tags.</p>"
+            "Never audio, never paths, never other tags. Everything sent is dedicated to the "
+            "public domain under CC0 1.0, like every other row in the corpus, and may be "
+            "republished in its public exports.</p>"
             f"<p>{mode}</p>"
             "<p>A random client id is minted on your first contribution and stored in Picard's "
             "settings. It lets the commons tell two contributions apart from one retrying; "

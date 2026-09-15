@@ -28,7 +28,7 @@ paths, never other tags. The hash cannot be reversed into the fingerprint, and
 the fingerprint is not the audio. The recording id is what lets the corpus tell
 *somebody else* what their nearest neighbour is called; it also tells the corpus
 operator which recording you hold, which is why it goes out under the same
-switch and not silently (`ADR-0012` point 6).
+switch and not silently (`ADR-0012` point 6). Everything sent is dedicated to the public domain under CC0 1.0, like every other row in the corpus, and may be republished in its public exports (`ADR-0013`).
 """
 
 from __future__ import annotations

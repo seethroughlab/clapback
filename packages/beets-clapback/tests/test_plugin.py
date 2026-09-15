@@ -365,3 +365,10 @@ class TestWhatSoundsLikeThis(ClapbackHarness):
         assert out.count("1.0000") == 0
         assert ("similar", 11, PIPELINE) in FakeCorpus.log
 
+
+def test_the_plugin_says_what_is_sent_is_cc0():
+    """`ADR-0013` point 2, in the docstring beets shows and the README beside the option."""
+    from beetsplug import clapback as plugin
+
+    assert "CC0 1.0" in plugin.__doc__
+

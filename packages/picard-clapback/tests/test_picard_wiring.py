@@ -66,6 +66,18 @@ def test_the_options_page_round_trips_and_contribute_defaults_off(config, plugin
     assert config.setting[plugin.OPT_URL] == "https://corpus.invalid"
 
 
+def test_the_options_page_says_what_is_sent_is_cc0(plugin):
+    """`ADR-0013` point 2: the licence is stated where the switch is, because a
+    self-issued client has nowhere else to consent. Also in the plugin description,
+    which is what Options → Plugins shows before the plugin is enabled."""
+    from PyQt5 import QtWidgets
+
+    page = plugin.ClapbackOptionsPage()
+    labels = " ".join(w.text() for w in page.findChildren(QtWidgets.QLabel))
+    assert "CC0 1.0" in labels
+    assert "CC0 1.0" in plugin.PLUGIN_DESCRIPTION
+
+
 def test_the_client_id_is_minted_once_and_kept(config, plugin):
     assert config.setting[plugin.OPT_CLIENT_ID] == ""
     first = plugin._client_id()

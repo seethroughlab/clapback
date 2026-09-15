@@ -1,6 +1,6 @@
 [project]
 name = "clapback-cli"
-version = "0.1.1"
+version = "0.1.2"
 description = "Search your own music by description, and find duplicates across formats and masters"
 readme = "README.md"
 requires-python = ">=3.11"

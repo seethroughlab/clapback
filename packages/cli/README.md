@@ -34,7 +34,7 @@ clapback contribute
 This sends the vectors — never your audio, never filenames, never your library's
 contents. A recording is identified by the SHA256 of its AcoustID fingerprint,
 which is one-way: the corpus learns that somebody has a recording without learning
-which recording it is.
+which recording it is. Everything sent is dedicated to the public domain under CC0 1.0, like every other row in the corpus, and may be republished in its public exports.
 
 Every track is looked up before it is offered, so re-running contributes only
 what is new. That is not politeness about bandwidth — a repeat submission is

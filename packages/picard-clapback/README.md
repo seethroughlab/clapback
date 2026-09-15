@@ -52,7 +52,7 @@ Nothing until *Contribute* is on. Then, per file: a **one-way SHA256 of the Acou
 a **512-float vector** when one is computed here; and the **MusicBrainz recording id**, which tells
 the commons which recording you hold. Never audio, never paths, never other tags. The id goes out
 under the same switch as the vector because it is the larger disclosure of the two, and the
-options page says so where the switch is.
+options page says so where the switch is. Everything sent is dedicated to the public domain under CC0 1.0, like every other row in the corpus, and may be republished in its public exports.
 
 The first contribution mints a random client id — a UUID, derived from nothing about you or your
 machine — and keeps it in Picard's settings. It lets the commons tell two contributions apart from

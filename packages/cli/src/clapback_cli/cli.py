@@ -182,6 +182,7 @@ def cmd_contribute(args: argparse.Namespace) -> int:
     print(f"{len(entries):,} indexed track(s)")
     print(f"corpus:   {corpus.base_url}")
     print(f"pipeline: {pipeline_version}")
+    print("licence:  CC0 1.0 — everything sent is public domain and may be republished")
 
     if args.dry_run:
         need = sum(1 for e in entries if not e.fingerprint_hash)

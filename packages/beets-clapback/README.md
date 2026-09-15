@@ -12,7 +12,8 @@ pip install beets-clapback
 plugins: chroma clapback
 
 clapback:
-  contribute: no      # opt-in. Turn it on when you have read "what leaves the machine".
+  contribute: no      # opt-in. Turn it on when you have read "what leaves the machine";
+                      # what you send is CC0.
 ```
 
 ```bash
@@ -84,7 +85,7 @@ The hash cannot be reversed into the fingerprint, and the fingerprint is not the
 The recording id is what lets the commons tell somebody else what their nearest neighbour is
 called. It also tells the commons operator which recordings you hold. That is why it goes out
 under the same switch as the vector and not silently — turning `contribute` on is the consent for
-both, and this paragraph is where that is said.
+both, and this paragraph is where that is said. Everything sent is dedicated to the public domain under CC0 1.0, like every other row in the corpus, and may be republished in its public exports.
 
 The first contribution mints a random `client_id` — a UUID, derived from nothing about you or
 your machine — and stores it at `clapback/client_id` under your config directory. It lets the

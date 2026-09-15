@@ -151,6 +151,10 @@ class Corpus:
         else's similarity results. Sending it tells the corpus operator which
         recording this client holds, so a tool should send it under the same
         setting that sends the vector, and say so where the user will read it.
+
+        Everything sent is dedicated to the public domain under CC0 1.0, like every other row in the corpus, and may be republished in its public exports (`ADR-0013` point 2). A tool says this beside its
+        contribution switch, because a self-issued client has nowhere else to
+        consent.
         """
         body = {
             "fingerprint_hash": fingerprint_hash,

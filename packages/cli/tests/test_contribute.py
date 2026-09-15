@@ -134,6 +134,12 @@ class TestNothingLeavesTheMachineByDefault:
         cli.cmd_contribute(_args(tmp_path, dry_run=True))
         assert wired.calls == []
 
+    def test_the_licence_is_said_before_anything_is_sent(self, wired, store, tmp_path, capsys):
+        """`ADR-0013` point 2: the dedication is stated where the switch is, and a
+        dry run is the switch a person reads first."""
+        cli.cmd_contribute(_args(tmp_path, dry_run=True))
+        assert "CC0 1.0" in capsys.readouterr().out
+
     def test_a_dry_run_mints_no_identifier(self, wired, store, tmp_path):
         """`ADR-0009` point 4 covers the fact that this install exists, too."""
         cli.cmd_contribute(_args(tmp_path, dry_run=True))
