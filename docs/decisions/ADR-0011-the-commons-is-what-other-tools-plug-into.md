@@ -153,6 +153,26 @@ Implementation:
 - **What waits on somebody else now:** four replies. The two listings are docs-only and ask
   nothing of the maintainers but a merge. The two proposals commit this project to writing a
   ~50-line PR in each codebase, in its conventions, on a yes.
+- **beets#7032 was closed the same day** (2026-09-15, 20:09 UTC), by Jeff, after a maintainer
+  replied within ninety minutes with two objections, both fair. First, the project is a week
+  old with one contributor, and a listing in beets' docs is an endorsement: wait a few weeks and
+  see whether it survives bootstrap. Second, beets has an `AI_POLICY.md` this record did not
+  know about — agents may not open PRs, issues or comments under a contributor's name, and AI
+  use must be disclosed — and the PR text and commit message were agent-drafted and submitted
+  without disclosure. The reply owned both, made the case once — that a commons cannot get its
+  second contributor without being seen, that the plug-in is deliberately tiny, and that the key
+  and wire format are offered as a convention to co-maintain rather than a product — and left it
+  there. CI was otherwise green except `docstrfmt`, which wanted the entry's em dash wrapped
+  differently; a fix was prepared and deliberately not pushed.
+- **Two premises corrected.** This record treated *sending* the messages as the outreach step;
+  the step is a person the maintainers can talk to, and the messages were the least of it.
+  And it assumed a docs-only listing asks nothing of a maintainer; it asks them to vouch, which
+  a week-old project has not earned. **What changes:** outreach text is written by Jeff and
+  disclosed where a project asks for it; a project's AI policy is read before its CONTRIBUTING;
+  and the beets listing is resubmitted, by hand, only once there are users to point at. The
+  chicken-and-egg problem this leaves — the second contributor was supposed to come from the
+  listings — is now the open question, and the three other threads are where an answer would
+  come from.
 
 Extends [ADR-0001](ADR-0001-clapback-is-a-public-clap-embedding-commons.md) points 3 and 8, and
 [ADR-0005](ADR-0005-the-repository-is-a-workspace-of-peers.md), whose "published for others to

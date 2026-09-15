@@ -194,7 +194,11 @@ green timer is evidence the check ran, not evidence anyone would hear it.**
 listings), dj-track-similarity#2 and KalinkaPlayer#128 (proposals, PR offered). Its
 Implementation block has the links and the one thing the code survey changed: both proposals
 ask for contribution *under their own pipeline identity*, not a checkpoint swap. A yes on
-either proposal commits this project to a ~50-line PR in that codebase.
+either proposal commits this project to a ~50-line PR in that codebase. **beets#7032 was
+closed the same day**: too new to list, and beets' `AI_POLICY.md` forbids agent-drafted PRs,
+which it was. The Implementation block records what that corrected — **messages to
+maintainers are written by Jeff, AI use is disclosed where a project asks, and a project's AI
+policy is read before anything is sent.**
 
 **The bottleneck is a second contributor, not a decision, and not a build.** Everything queued
 that this project can do alone is done; the next step is somebody else replying.
