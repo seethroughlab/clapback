@@ -21,6 +21,30 @@ Implementation:
   confirmations, which is true and is the most useful thing the corpus can tell a stranger.
 - It reports nothing but zero until Familiar sends a `client_id`. That one line is now named by
   `ADR-0004`, `ADR-0006` and this record, which makes it the cheapest unblocking change on the board.
+- **The "two different rips" row in the table below is a lossless-only figure, and the lossy case
+  is a different order of magnitude** (measured 2026-09-15, 56 FLACs, five pipelines;
+  `packages/embed/scripts/measure_leadin.py`, results beside it). Re-encoding a FLAC losslessly
+  or to MP3 320k moves the reference pipeline's vector by under 3e-04 at the median, consistent
+  with the row. **Re-encoding to MP3 128k moves it to a median cosine of 0.929 and a minimum of
+  0.750** — in the range where a *different* track on the same album sits (the nearest other
+  original in that library: median 0.936) — and under the music checkpoint further still
+  (median 0.81, minimum 0.60). 8 of 56 tracks' 128k rips were nearer to an album-mate than to
+  their own lossless rip. Opus 128k, by contrast, stays at 0.998. The waveforms correlate at
+  0.9996; the mel front-end is what MP3's lowpass and pre-echo reach. **What this means for this
+  record:** the agreement bands are for what they say — the same audio through honest
+  pipelines. A lossy rip of a recording is a different fingerprint (a different row, which the
+  corpus already accepts) *and* a vector that may be nearer to a sibling than to its lossless
+  self, so a `recording_mbid` claim joining two such rows is the only thing that says they are
+  one recording, and `/v1/similar` results carrying a 128k-MP3 population will show album-mates
+  interleaved with re-encodings. Not a defect in the bands; a fact about CLAP the bands do not
+  cover, now written where the 3e-04 figure would otherwise mislead.
+- **Lead-in offsets, the hazard `ADR-0009` cites from Familiar's `ADR-0104`, are not one for
+  whole-track or three-fragment pooling** (same measurement). Trimming 0.5 to 5 s from the start
+  of a track keeps the reference pipeline at 0.999 median, 0.988 minimum, and 100% rank-1
+  self-retrieval across all 56; a single middle window — `ADR-0104`'s case — is the fragile
+  rule (minimum 0.894 at 5 s), and Kalinka's 25/50/75% three-fragment mean is nearly as robust as
+  the whole-track mean (0.99 median, 0.955 minimum, 100% retrieval). `ADR-0011`'s Implementation
+  block records the correction this makes to what was said in KalinkaPlayer#128.
 
 ## Context
 

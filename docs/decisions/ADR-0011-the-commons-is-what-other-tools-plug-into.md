@@ -197,6 +197,18 @@ Implementation:
   the shared corpus itself. `ADR-0001` point 8 said the tool must be worth running with the
   corpus empty; the converse, that the corpus must be worth joining when your own compute is
   cheap, is what this thread is testing.
+- **The Q5 answer overstated the lead-in hazard for Kalinka's rule, and the measurement that
+  says so was run the same night** (2026-09-15; `packages/embed/scripts/measure_leadin.py`,
+  56 FLACs, results in `ADR-0008`'s Implementation block). The reply cited `ADR-0104`'s 0.950 at
+  1.2 s of lead-in and said one-to-three 10-s fragments "are exposed to that". Measured, the
+  three-fragment 25/50/75% mean under the music checkpoint holds 0.99 at the median and 0.955
+  at the minimum through 5 s of trim, with every track still retrieving itself; the 0.950 figure
+  belongs to a *single* middle window, which Kalinka does not use. What the measurement found
+  instead, and what the thread should hear next: **MP3 128k rips** land at 0.81 median under the
+  music checkpoint (0.60 minimum) and 0.93 under the reference — about where an album-mate sits —
+  while 320k and Opus are transparent. For a Pi library that may well be lossy, that is the
+  population-level fact, not the lead-in. The correction goes in the next reply, as a
+  correction, with the numbers.
 
 Extends [ADR-0001](ADR-0001-clapback-is-a-public-clap-embedding-commons.md) points 3 and 8, and
 [ADR-0005](ADR-0005-the-repository-is-a-workspace-of-peers.md), whose "published for others to
