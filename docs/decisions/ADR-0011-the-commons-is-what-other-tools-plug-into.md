@@ -104,8 +104,31 @@ Implementation:
   says its migration tool converts 94.5% of 2.x plugins automatically. The registrations here are
   the standard module-level ones it handles. Porting before 3.0 ships and its registry exists
   would be porting to a moving target.
-- Outreach — dj-track-similarity and KalinkaPlayer — is next, and lands on a site that now
-  says the right thing (2026-09-14).
+- **The site was rebuilt for the maintainer it will be sent to** (2026-09-15), after a design
+  canvas Jeff reviewed. The landing page now leads with what a maintainer decides on — the pitch
+  in one sentence, three real lines of `clapback-client`, four dated numbers including "1
+  contributing installation — yours would be the second" — and the map of the corpus as its
+  figure. The legacy BPM / key / mood charts are gone from the page and their three full-table
+  scans from the route: they drew the `features` data `ADR-0001` says the commons does not carry,
+  and they were the largest thing on the page. The identity is a mark (a C with an echo stroke,
+  chosen over two alternatives; one of them was too close to Familiar's), a nine-token palette
+  in dark and light following `prefers-color-scheme`, one tagline — *Compute it once. Every tool
+  gets it back.* — used in the header, the description, the OG card and the OpenAPI description,
+  and a favicon. Chart.js was dropped: the growth line is an inline `<polyline>` from Jinja, and
+  the site now makes zero external requests. `ADR-0001` deferred item 6, the domain, is untouched.
+- **`/map` became the explorer, because the corpus became browsable.** With 89.6% of rows named,
+  a point on the map is a recording a person can read for the first time, so it is now
+  clickable: a click resolves the point's hash prefix through `/browse/hash/{prefix}`, shows the
+  row and its twelve nearest neighbours from `/v1/similar`, and highlights them on the map; a
+  MusicBrainz recording or a hash can be pasted; `/browse/recent` lists the latest contributions.
+  **Names are resolved in the visitor's browser** from MusicBrainz's API (one request a second,
+  cached in `localStorage`), so the server keeps `ADR-0012`'s rule of never resolving an id.
+  `build_map.py` now filters on `pipeline_version` rather than a client's `analysis_version`
+  and emits a second file of twelve-character hash prefixes — its old "no hashes, nobody can
+  resolve them" paragraph was true when written and `ADR-0012` made it false. The projection
+  committed on 2026-09-05 predates that index, so until it is regenerated the explorer says so
+  and selection works by paste rather than by click.
+- Outreach — dj-track-similarity and KalinkaPlayer — is next.
 
 Extends [ADR-0001](ADR-0001-clapback-is-a-public-clap-embedding-commons.md) points 3 and 8, and
 [ADR-0005](ADR-0005-the-repository-is-a-workspace-of-peers.md), whose "published for others to

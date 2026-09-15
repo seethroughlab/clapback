@@ -1,221 +1,256 @@
 {% extends "base.html" %}
 
-{% block title %}clapback{% endblock %}
+{% block title %}{{ site.name }} — {{ site.tagline }}{% endblock %}
 
 {% block body %}
-<h1>🎵 clapback</h1>
-<p class="tagline">
-    A public commons of <strong>CLAP audio embeddings</strong> — 512-dimensional vectors
-    describing what a recording sounds like. Expensive to compute, trivial to compare, so
-    worth computing once and sharing.
-</p>
-<p class="tagline">
-    Keyed on anonymised SHA256 fingerprint hashes: no titles, no artists, no filenames.
-    Reached from the tools you already run — <code>pip install beets-clapback</code> — or from
-    your own, through a client package with no dependency beyond the standard library.
-    <a href="https://github.com/seethroughlab/familiar">Familiar</a> is its first client and
-    is not its owner.
-</p>
-<nav class="primary-nav">
-    <a href="/api">
-        <strong>API</strong>
-        <span>Query the corpus. No key, no account.</span>
-    </a>
-    <a href="https://pypi.org/project/beets-clapback/">
-        <strong>beets</strong>
-        <span><code>absubmit</code> reborn. Look up, embed, contribute if you say so.</span>
-    </a>
-    <a href="https://pypi.org/project/clapback-client/">
-        <strong>Plug in</strong>
-        <span>The contract as a package. Stdlib only.</span>
-    </a>
-    <a href="/map">
-        <strong>Map</strong>
-        <span>Every embedding, projected to two dimensions.</span>
-    </a>
-</nav>
-<div class="header-links">
-    <a href="https://github.com/seethroughlab/clapback">GitHub</a>
-    <a href="https://github.com/seethroughlab/clapback/tree/main/docs/decisions">Decisions</a>
-    <a href="/docs">OpenAPI</a>
-    <a href="/health/db">Health</a>
-</div>
+<section class="hero">
+    <div class="hero__copy">
+        <h1>A public commons of CLAP audio embeddings.</h1>
+        <p class="lede">
+            One 512-float vector per recording, describing what it sounds like, keyed on a hash any
+            tool can reproduce from the audio. Look it up before you run the model. Contribute what
+            you compute. Ask what sounds like it across every library that has plugged in.
+        </p>
+<pre><code><span class="dim">from clapback_client import Corpus, fingerprint_file, hash_fingerprint</span>
 
-<div class="hero-stats">
-    <div class="stat hero">
-        <div class="stat-value">{{ "{:,}".format(top.tracks) }}</div>
-        <div class="stat-label">Unique tracks</div>
+key = hash_fingerprint(fingerprint_file(path))   <span class="dim"># SHA256 of the AcoustID fingerprint</span>
+row = Corpus().lookup(key, PIPELINE_VERSION)     <span class="dim"># 512 floats, or None — then run your model</span>
+Corpus().contribute(fingerprint_hash=key, embedding=vector,
+                    pipeline_version=PIPELINE_VERSION, client_id=client_id)</code></pre>
+        <div class="hero__actions">
+            <a class="button" href="https://pypi.org/project/clapback-client/">pip install clapback-client</a>
+            <a class="arrow" href="/api">Read the API →</a>
+        </div>
     </div>
-    <div class="stat hero">
-        <div class="stat-value">{{ "{:,}".format(top.analyses) }}</div>
-        <div class="stat-label">Cached analyses</div>
-    </div>
-    <div class="stat hero">
-        <div class="stat-value">~{{ "{:,.0f}".format(top.hours_saved) }}<span class="stat-unit"> hr</span></div>
-        <div class="stat-label">Compute saved</div>
-    </div>
-    <div class="stat hero">
-        <div class="stat-value">{{ "%.0f"|format(top.hit_rate * 100) }}<span class="stat-unit">%</span></div>
-        <div class="stat-label">Lookup hit rate</div>
-    </div>
-</div>
-
-<div class="velocity">
-    <span class="velocity-arrow">▲</span>
-    <strong>+{{ "{:,}".format(velocity.last_7d) }}</strong> tracks contributed in the past 7 days
-    <span class="muted">· {{ "{:,}".format(velocity.last_24h) }} in the past 24 hours</span>
-</div>
-
-<h2>How it works</h2>
-<div class="how-grid">
-    <div class="card">
-        <h2>A fingerprint, never a filename</h2>
-        <p class="muted">
-            A client fingerprints the audio itself — an acoustic summary, not a tag — hashes that
-            with SHA256, and sends the hash. The corpus never receives a title, an artist, a
-            filename or a path, and cannot recover one.
-        </p>
-        <p class="muted">
-            That is a real limit as much as a privacy property: a hash names a recording only to
-            someone who already holds it. So a client <em>may</em> attach a MusicBrainz recording
-            id — a claim, counted per client and never verified — and a neighbour with one is a
-            recording anyone can look up. One without is still a hash, and is shown as one.
-        </p>
-    </div>
-    <div class="card">
-        <h2>Reached from the tools you already run</h2>
-        <p class="muted">
-            The commons is the product; nothing here needs its own application. beets shipped
-            <code>absubmit</code> for years and lost it when AcousticBrainz closed —
-            <a href="https://pypi.org/project/beets-clapback/"><code>beets-clapback</code></a> is
-            that pair back, with a payload that can be reconciled between contributors, and
-            <code>beet clapback-similar</code> to ask what sounds like a track across every library
-            the commons holds. Picard users get the same pair as a
-            <a href="https://github.com/seethroughlab/clapback/releases?q=picard-v">plugin</a> that
-            works with no embedder installed — Picard already holds the fingerprint and the
-            recording id, which is what naming a row needs.
-        </p>
-        <p class="muted">
-            A tool of your own plugs in through
-            <a href="https://pypi.org/project/clapback-client/"><code>clapback-client</code></a>:
-            canonical hashing, look-up-before-contribute, <code>client_id</code>, backoff — the
-            records as code, with no dependency beyond the standard library. A tool with its own
-            embedder contributes under its own pipeline identity and never installs ONNX Runtime.
-            <a href="https://pypi.org/project/clapback-cli/"><code>clapback-cli</code></a> is the
-            reference client that exercises the contract end to end.
-        </p>
-    </div>
-    <div class="card">
-        <h2>One implementation, deliberately</h2>
-        <p class="muted">
-            Everyone runs the same code — <code>clapback-embed</code>, published and pinned. The
-            checkpoint alone is not enough: the mel front-end, the windowing rule, the pooling and
-            the precision all move a vector, so all five are composed into one identity string that
-            travels with every contribution.
-        </p>
-        <p class="muted">
-            Two vectors are comparable when that string matches, and not otherwise. Without it,
-            <strong>two contributors running different code looks exactly like two contributors
-            disagreeing about the audio</strong>, and nothing afterwards can tell them apart.
-        </p>
-    </div>
-    <div class="card">
-        <h2>The first vector wins, the rest are measured</h2>
-        <p class="muted">
-            A contribution for a recording already in the corpus does not overwrite it and is not
-            thrown away. It is compared against what is stored and the similarity recorded.
-        </p>
-        <p class="muted">
-            That is how the commons will find out whether independent contributors actually agree.
-            It has not found out yet: almost every vector here came from one library, and a count of
-            submissions is not a count of contributors. The mechanism is in place ahead of the
-            evidence, on purpose.
-        </p>
-        <p class="muted">
-            What <em>is</em> measured is the implementation. The same audio through two CPU
-            architectures agrees to <code>6.6e-11</code> — some seven orders of magnitude tighter
-            than two rips of one recording differ from each other. That gap is the room a consensus
-            scheme has to work in.
-        </p>
-    </div>
-    <div class="card">
-        <h2>What it does not claim</h2>
-        <p class="muted">
-            The pipeline a contributor declares is <em>asserted, not proven</em>. The server
-            believes it. That catches the forgotten version bump and the stale build, which are the
-            realistic failures; it is not a defence against someone who lies.
-        </p>
-        <p class="muted">
-            Agreement is reported rather than ruled on. No threshold here declares a vector
-            trustworthy — the corpus tells you how many independent submissions matched and how
-            closely, and leaves the judgement to you.
-        </p>
-    </div>
-</div>
-
-<div class="card">
-    <h2>Cache growth (last 90 days)</h2>
-    {% if growth %}
-    <canvas id="chart-growth" height="120"></canvas>
-    {% else %}
-    <div class="muted">Not enough data yet — check back after a few contributions.</div>
-    {% endif %}
-</div>
-
-<div class="chart-grid">
-    <div class="card">
-        <h2>BPM distribution</h2>
-        {% if bpm %}
-        <canvas id="chart-bpm" height="180"></canvas>
+    <figure>
+        {% if map_meta.available %}
+        <a href="/map" aria-label="Explore the corpus"><canvas class="map map--link" id="hero-map" width="600" height="600"></canvas></a>
+        <figcaption>
+            {{ "{:,}".format(map_meta.count) }} recordings, projected from 512 dimensions to two ·
+            {{ map_meta.generated }} · <a href="/map">explore it</a>
+        </figcaption>
         {% else %}
-        <div class="muted">No BPM data yet.</div>
+        <div class="map"></div>
+        <figcaption>The projection has not been generated yet.</figcaption>
+        {% endif %}
+    </figure>
+</section>
+
+<section class="stats">
+    <div class="stat">
+        <div class="stat__value">{{ "{:,}".format(top.embeddings) }}</div>
+        <div class="stat__label">recordings held</div>
+        <div class="stat__note">counted live</div>
+    </div>
+    <div class="stat">
+        <div class="stat__value">{{ top.named_pct|fmt_pct }}</div>
+        <div class="stat__label">resolve to a MusicBrainz recording</div>
+        <div class="stat__note">named by their contributor · counted live</div>
+    </div>
+    <div class="stat">
+        <div class="stat__value">{{ similarity_ms }}&nbsp;ms</div>
+        <div class="stat__label">to ask what sounds like a vector</div>
+        <div class="stat__note">HNSW over the whole corpus · measured {{ similarity_measured }}, ADR-0002</div>
+    </div>
+    <div class="stat">
+        <div class="stat__value">{{ "{:,}".format(top.contributors) }}</div>
+        <div class="stat__label">contributing installation{{ "s" if top.contributors != 1 else "" }}</div>
+        <div class="stat__note">{% if top.contributors <= 1 %}yours would be the second{% else %}counted live{% endif %}</div>
+    </div>
+</section>
+
+<section class="section" id="why">
+    <div class="section-head">
+        <div class="kicker">The exchange</div>
+        <h2>Why plug your tool in</h2>
+    </div>
+    <div class="grid-3">
+        <div class="card">
+            <h3>Skip the recompute</h3>
+            <p>A hit is 512 floats. A miss is seconds of CPU and a 600 MB model — minutes per album
+            on a laptop, longer on a Pi. Look up first; run the model only for what nobody has
+            computed.</p>
+        </div>
+        <div class="card">
+            <h3>Similarity across libraries, not one user's</h3>
+            <p><code>/v1/similar</code> answers in {{ similarity_ms }} ms over every library that has
+            plugged in, and {{ top.named_pct|fmt_pct(0) }} of results carry a MusicBrainz recording id
+            a person can read. The rest are hashes, shown as hashes.</p>
+        </div>
+        <div class="card">
+            <h3>Somewhere to submit to again</h3>
+            <p>beets and Picard shipped exactly this fetch-and-submit pair and lost it when
+            AcousticBrainz closed in 2022. This corpus carries embeddings — reconcilable between
+            contributors — not the estimates that could not be.</p>
+        </div>
+    </div>
+</section>
+
+<section class="section" id="plug-in">
+    <div class="section-head">
+        <div class="kicker">The contract</div>
+        <h2>What plugging in takes</h2>
+    </div>
+    <div class="split split--narrow-left">
+        <ol class="steps">
+            <li><strong>Fingerprint the audio and hash it canonically.</strong> <span>SHA256 of the
+                AcoustID fingerprint as chromaprint returned it — not as your database stored it.</span></li>
+            <li><strong>Produce the vector through a declared pipeline.</strong> <span>The reference is
+                <code>clapback-embed</code>; your own pipeline identity is allowed, at 512 dimensions.</span></li>
+            <li><strong>Look up before you contribute.</strong> <span>A repeat submission is recorded
+                as agreement, and one install agreeing with itself is not evidence.</span></li>
+            <li><strong>Send <code>client_id</code> and <code>pipeline_version</code>.</strong> <span>A
+                random UUID minted on first contribution; the identity of everything that can move a
+                vector.</span></li>
+        </ol>
+        <div class="stack">
+<pre><code>row = corpus.lookup(key, pipeline_version)
+if row is not None:
+    vector = row["embedding"]          <span class="dim"># the commons already had it — skip the model</span>
+else:
+    vector = my_embedder(path)         <span class="dim"># your pipeline, declared by pipeline_version</span>
+    corpus.contribute(fingerprint_hash=key, embedding=vector,
+                      pipeline_version=pipeline_version, client_id=client_id)</code></pre>
+            <div class="facts">
+                <div><strong>Standard library only.</strong> No ONNX Runtime to contribute.</div>
+                <div><strong>Opt-in is the rule.</strong> Off by default in every client, including ours.</div>
+                <div><strong>What leaves the machine:</strong> a one-way hash, a vector, optionally a
+                    recording id. Never audio, paths or tags.</div>
+            </div>
+            <div class="hero__actions">
+                <a class="button" href="https://pypi.org/project/clapback-client/">pip install clapback-client</a>
+                <a class="arrow" href="https://github.com/seethroughlab/clapback/tree/main/packages/client">The package, and the records it encodes →</a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="section" id="plugged-in">
+    <div class="section-head">
+        <div class="kicker">Four clients</div>
+        <h2>Already plugged in</h2>
+    </div>
+    <div class="grid-4">
+        <a class="card" href="https://pypi.org/project/beets-clapback/">
+            <h3>beets</h3>
+            <div class="card__tag">pip install beets-clapback</div>
+            <p><code>absubmit</code> reborn. Look up, else embed; contribute if you say so;
+            <code>beet clapback-similar</code>.</p>
+        </a>
+        <a class="card" href="https://github.com/seethroughlab/clapback/releases?q=picard-v">
+            <h3>Picard</h3>
+            <div class="card__tag">clapback.zip · picard-v0.1.1</div>
+            <p>Right-click: look up, name, contribute. Works with no embedder installed, and says so.</p>
+        </a>
+        <a class="card" href="https://github.com/seethroughlab/familiar">
+            <h3>Familiar</h3>
+            <div class="card__tag">seethroughlab/familiar</div>
+            <p>The self-hosted music server this grew out of. The first contributor, and so far the
+            only one.</p>
+        </a>
+        <a class="card" href="https://pypi.org/project/clapback-cli/">
+            <h3>clapback-cli</h3>
+            <div class="card__tag">pip install clapback-cli</div>
+            <p>The reference client: index a directory, search it by description, find duplicates,
+            contribute.</p>
+        </a>
+    </div>
+</section>
+
+<section class="section" id="explore">
+    <div class="section-head">
+        <div class="kicker">Browse it</div>
+        <h2>Explore the corpus</h2>
+    </div>
+    <div class="split split--center">
+        <div class="stack">
+            <p class="lede lede--wide">
+                Every point is a recording; points that sit together sounded alike to the model. Click
+                one and it becomes a name — resolved in your browser from MusicBrainz, because the
+                commons itself holds no titles — with the twelve recordings that sound most like it.
+                Paste a MusicBrainz recording, or a hash, to jump to it.
+            </p>
+            <a class="arrow" href="/map">Open the explorer →</a>
+        </div>
+        {% if map_meta.available %}
+        <a href="/map" aria-label="Explore the corpus"><canvas class="map map--link" id="explore-map" width="480" height="480"></canvas></a>
         {% endif %}
     </div>
-    <div class="card">
-        <h2>Top musical keys</h2>
-        {% if keys %}
-        <canvas id="chart-keys" height="180"></canvas>
-        {% else %}
-        <div class="muted">No key data yet.</div>
-        {% endif %}
-    </div>
-</div>
+</section>
 
-<div class="card">
-    <h2>Mood landscape <span class="muted">· valence × energy</span></h2>
-    {% if mood %}
-    <canvas id="chart-mood" height="220"></canvas>
-    <div class="mood-axes">
-        <span class="muted">← sad</span>
-        <span class="muted">happy →</span>
+<section class="section" id="dated">
+    <div class="section-head">
+        <div class="kicker">What is actually here</div>
+        <h2>The corpus, dated</h2>
     </div>
-    {% else %}
-    <div class="muted">No valence/energy data yet.</div>
-    {% endif %}
-</div>
+    <div class="split">
+        <div class="card">
+            <div class="small muted">Recordings held, last 90 days — of the rows that exist now, by when they arrived</div>
+            {% if growth %}
+            <svg class="growth" viewBox="0 0 560 140" role="img" aria-label="Recordings held, last 90 days">
+                <line class="growth__axis" x1="0" y1="120" x2="560" y2="120"/>
+                <line class="growth__axis" x1="0" y1="20" x2="560" y2="20" stroke-dasharray="3 5"/>
+                <polyline class="growth__line" points="{{ growth_points }}"/>
+                <text class="growth__label" x="0" y="14">{{ "{:,}".format(growth_max) }}</text>
+                <text class="growth__label" x="0" y="134">{{ growth[0].day }}</text>
+                <text class="growth__label" x="560" y="134" text-anchor="end">{{ growth[-1].day }}</text>
+            </svg>
+            {% else %}
+            <div class="empty">Nothing has arrived in the last 90 days.</div>
+            {% endif %}
+        </div>
+        <div class="stack">
+            <div><span class="delta">+{{ "{:,}".format(velocity.last_7d) }}</span> in the past 7 days
+                <span class="muted">· {{ "{:,}".format(velocity.last_24h) }} in the past 24 hours</span></div>
+            <p class="muted">Almost every vector here came from one library. The mechanism for
+            finding out whether independent contributors agree is in place ahead of the evidence,
+            on purpose — and a second contributor is the single most valuable thing that could
+            happen to it.</p>
+            <p class="muted">Every row declares the pipeline that produced it and is keyed on a
+            hash any client can reproduce from the audio. The corpus is smaller than it has ever
+            been, and the first version where a disagreement is about the recording rather than
+            about whose code ran.</p>
+        </div>
+    </div>
+</section>
 
-<p class="muted footnote">
-    Looking up a specific fingerprint? Paste it as <code>/browse/{your-hash}</code> in the
-    URL bar, or use <code>GET /v1/embeddings/{hash}</code>. <strong>Reads and contributions
-    are both open</strong> — no key, no account. Contribution was held back until the corpus
-    had a way to retract a recording, which
-    <a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0004-contributors-are-identified-but-not-accounts.md">ADR-0004</a>
-    made a precondition rather than a follow-up; that path exists, so it is open. See the
-    <a href="/api">API</a> page for what to send, and
-    <a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0011-the-commons-is-what-other-tools-plug-into.md">ADR-0011</a>
-    for why the way in is a package rather than an application.
-</p>
+<section class="section" id="word">
+    <div class="section-head">
+        <div class="kicker">Four rules</div>
+        <h2>How it keeps its word</h2>
+    </div>
+    <div class="grid-4">
+        <div class="card">
+            <h3>One implementation, pinned</h3>
+            <p>Everyone runs <code>clapback-embed</code>. Front-end, windowing, pooling, checkpoint
+            and precision compose into one identity string that travels with every vector.</p>
+        </div>
+        <div class="card">
+            <h3>A hash, never a filename</h3>
+            <p>The corpus receives the SHA256 of a fingerprint and cannot recover a title, an artist
+            or a path. Naming a row is a claim its contributor makes, counted per client.</p>
+        </div>
+        <div class="card">
+            <h3>First vector wins, the rest are measured</h3>
+            <p>A repeat contribution is compared, not overwritten. The same audio on two
+            architectures agrees to 6.6e-11; two rips of one recording differ by 3e-4. That gap is
+            the room agreement has.</p>
+        </div>
+        <div class="card">
+            <h3>Asserted, not proven; reported, not ruled</h3>
+            <p>The server believes the pipeline you declare. No threshold calls a vector trustworthy —
+            you are told how many independent submissions matched, and how closely.</p>
+        </div>
+    </div>
+</section>
 {% endblock %}
 
 {% block scripts %}
-<script type="application/json" id="chart-data">{{ {
-    "growth": growth,
-    "bpm": bpm,
-    "keys": keys,
-    "mood": mood
-} | tojson }}</script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
-        integrity="sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g"
-        crossorigin="anonymous"></script>
-<script src="{{ url_for('static', path='js/dashboard.js') }}"></script>
+{% if map_meta.available %}
+<script src="{{ url_for('static', path='js/map.js') }}"></script>
+<script>
+    window.clapbackMap.decorate(document.getElementById("hero-map"));
+    window.clapbackMap.decorate(document.getElementById("explore-map"));
+</script>
+{% endif %}
 {% endblock %}
