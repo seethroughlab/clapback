@@ -150,6 +150,8 @@ th { color: var(--text-muted); font-weight: 600; }
 .site-footer__mark { display: flex; align-items: center; gap: 10px; color: var(--text-muted); font-size: 13px; }
 .site-footer__links { display: flex; gap: 20px; flex-wrap: wrap; }
 .site-footer__links a { color: var(--text-muted); font-size: 13px; }
+.site-footer__licence { color: var(--text-muted); font-size: 13px; padding-bottom: 24px; }
+.site-footer__licence a { color: var(--text-muted); text-decoration: underline; }
 
 /* ---- sections ------------------------------------------------------------------ */
 

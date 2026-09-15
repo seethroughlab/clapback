@@ -240,3 +240,13 @@ class TestTheExplorersRoutes:
         pts = growth_points([{"day": "a", "cumulative": 0}, {"day": "b", "cumulative": 10}], width=100, height=50, pad=5)
         assert pts == "0.0,45.0 100.0,5.0"
         assert growth_points([]) == ""
+
+
+def test_every_page_states_the_data_licence():
+    """`ADR-0013` point 1: the licence is stated on the site, not only in the README.
+    The footer carries it on every page; the API page says it where the row counts are."""
+    for name, ctx in (("index.html", INDEX_CTX), ("api.html", API_CTX)):
+        html = render(name, **ctx)
+        assert "CC0 1.0" in html, name
+        assert "ADR-0013" in html, name
+    assert "Contributing dedicates what you" in render("api.html", **API_CTX)

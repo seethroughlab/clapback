@@ -104,6 +104,20 @@ anything can contribute.
   about you or your machine. Delete it and you are a new contributor.
 - Contribution is off until you turn it on, in every client.
 
+## Licence
+
+Two licences, because they cover two different things.
+
+- **The code is MIT** — this repository, every package, the server. See [`LICENSE`](LICENSE).
+- **The data is CC0 1.0.** Every row a client can read — the vector, the pipeline identity, the
+  recording claims, the contributor count — is dedicated to the public domain, as MusicBrainz's
+  core data and AcousticBrainz's were. Contributing dedicates what you send: a one-way hash, a
+  vector, and a recording id if you attach one. There is nobody to attribute — contributors are
+  installations, not people — so no attribution or share-alike licence could be complied with.
+  [`ADR-0013`](docs/decisions/ADR-0013-the-corpus-is-public-data-not-just-a-public-endpoint.md)
+  is the decision; it also commits to a weekly public export and a documented path to running
+  your own copy, both of which are owed rather than built as of 2026-09-15.
+
 ## API
 
 Full reference at [`/api`](https://clapback.seethroughlab.com/api); schema at

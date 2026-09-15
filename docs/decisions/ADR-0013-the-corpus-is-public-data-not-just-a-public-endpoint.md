@@ -9,6 +9,11 @@ Implementation:
   takedown tradeoff in point 6 accepted as written. Nothing is built: the licence statement
   (point 1), the contribution text (point 2), the export (points 3–6) and the import path
   (point 7) are all owed, in point 8's order.
+- **Point 1 is stated** (2026-09-15): a `## Licence` section in the README, a licence line in the
+  site footer on every page, and a sentence on `/api` beside the row counts — each naming CC0 for
+  the data, MIT for the code, and this record. A site test asserts both pages carry it. Says
+  nothing about the clients' switches, because point 2 is not built and the page must not claim it
+  is. Deployed when the instance next pulls `main`.
 
 Extends [ADR-0001](ADR-0001-clapback-is-a-public-clap-embedding-commons.md) point 1,
 [ADR-0003](ADR-0003-the-commons-runs-on-one-small-server.md) point 6 and
