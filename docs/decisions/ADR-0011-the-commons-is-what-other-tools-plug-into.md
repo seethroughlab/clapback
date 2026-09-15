@@ -128,7 +128,31 @@ Implementation:
   resolve them" paragraph was true when written and `ADR-0012` made it false. The projection
   committed on 2026-09-05 predates that index, so until it is regenerated the explorer says so
   and selection works by paste rather than by click.
-- Outreach — dj-track-similarity and KalinkaPlayer — is next.
+- **Point 5's outreach went out** (2026-09-15), four messages in the order this record fixed,
+  each written after reading the project's code rather than its README:
+  [beetbox/beets#7032](https://github.com/beetbox/beets/pull/7032) lists `beets-clapback` under
+  "Other Plugins"; [metabrainz/picard-plugins#436](https://github.com/metabrainz/picard-plugins/pull/436)
+  adds `plugins/clapback/` to the `2.0` branch — the same bytes as the `picard-v0.1.1` zip;
+  [MeteorBurn/dj-track-similarity#2](https://github.com/MeteorBurn/dj-track-similarity/issues/2)
+  and [madenvel/KalinkaPlayer#128](https://github.com/madenvel/KalinkaPlayer/issues/128) are
+  proposals with a PR offered, not PRs. Every prerequisite this record named for the step was in
+  place: the client package, both plug-ins, a resolvable corpus, and a site that says what a
+  maintainer is deciding on.
+- **The proposals ask for less than this record's point 5 said they would.** Point 5 framed the
+  dj-track-similarity ask as routing CLAP through `clapback-embed`. Reading the code changed
+  that: both dj-track-similarity and KalinkaPlayer compute CLAP from `lukewys/laion_clap`'s
+  `music_audioset_epoch_15_esc_90.14` checkpoint over 10-second windows, not from
+  `laion/clap-htsat-unfused` whole-track means. A PR that swapped their checkpoint would ask
+  their users to recompute every vector so that ours could compare with them. The key admits any
+  pipeline identity at 512 dimensions (point 3), so the honest ask is *contribute under your
+  own identity*: their installs skip what other installs of the same tool computed and get
+  similarity among themselves. **Open question this raises:** two independent tools converged on
+  the same music checkpoint; if both plug in, the commons holds a second pipeline whose
+  population may become the larger. Whether to document it as a second reference is
+  `ADR-0002`'s question, to be had once a second contributor exists — not pre-empted here.
+- **What waits on somebody else now:** four replies. The two listings are docs-only and ask
+  nothing of the maintainers but a merge. The two proposals commit this project to writing a
+  ~50-line PR in each codebase, in its conventions, on a yes.
 
 Extends [ADR-0001](ADR-0001-clapback-is-a-public-clap-embedding-commons.md) points 3 and 8, and
 [ADR-0005](ADR-0005-the-repository-is-a-workspace-of-peers.md), whose "published for others to

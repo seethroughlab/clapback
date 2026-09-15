@@ -189,12 +189,15 @@ green timer is evidence the check ran, not evidence anyone would hear it.**
 
 - **`ADR-0007`**, deliberately, until a second contributor exists.
 - **`ADR-0008`** — the corpus cannot yet tell anyone how corroborated a vector is.
-- **`ADR-0011` point 5's outreach** — dj-track-similarity and KalinkaPlayer. Every prerequisite it
-  named is now in place: the client package, both plug-ins, a resolvable corpus, and a site that
-  says the commons is what tools plug into.
+
+**`ADR-0011` point 5's outreach went out 2026-09-15** — beets#7032 and picard-plugins#436 (the
+listings), dj-track-similarity#2 and KalinkaPlayer#128 (proposals, PR offered). Its
+Implementation block has the links and the one thing the code survey changed: both proposals
+ask for contribution *under their own pipeline identity*, not a checkpoint swap. A yes on
+either proposal commits this project to a ~50-line PR in that codebase.
 
 **The bottleneck is a second contributor, not a decision, and not a build.** Everything queued
-that this project can do alone is done; the next contributor comes from somebody else saying yes.
+that this project can do alone is done; the next step is somebody else replying.
 
 **The pattern worth keeping.** For most of this project's life the decisions ran far ahead of the
 code, and the `Implementation:` block is the only thing that kept that legible. Write one the day
