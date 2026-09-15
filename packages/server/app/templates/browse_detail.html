@@ -1,16 +1,18 @@
 {% extends "base.html" %}
 
-{% block title %}Fingerprint {{ fingerprint_hash[:12] }}… · clapback{% endblock %}
+{% block title %}Fingerprint {{ fingerprint_hash[:12] }}… · {{ site.name }}{% endblock %}
 
 {% block body %}
-<a class="back-link" href="/">← Back to index</a>
-<h1>Fingerprint detail</h1>
-<p><code style="font-size: 14px">{{ fingerprint_hash }}</code></p>
-<p class="muted">
-    {{ totals.embeddings }} embedding row(s) ·
-    {{ totals.features }} feature set(s) ·
-    {{ totals.details }} analysis detail(s)
-</p>
+<section class="explore-head">
+    <h1>One recording</h1>
+    <p><code style="font-size: 14px; overflow-wrap: anywhere;">{{ fingerprint_hash }}</code></p>
+    <p class="muted">
+        {{ totals.embeddings }} embedding row(s) ·
+        {{ totals.features }} feature set(s) ·
+        {{ totals.details }} analysis detail(s) ·
+        <a href="/map?hash={{ fingerprint_hash }}">what sounds like this →</a>
+    </p>
+</section>
 
 {% for v in versions %}
 <h2>Analysis version {{ v.av }}</h2>

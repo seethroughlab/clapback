@@ -1,112 +1,232 @@
 {% extends "base.html" %}
 
-{% block title %}Map · clapback{% endblock %}
+{% block title %}Explore the corpus · {{ site.name }}{% endblock %}
+{% block description %}Every recording in the commons, projected to two dimensions and clickable: a point becomes a MusicBrainz recording and the twelve that sound most like it.{% endblock %}
+{% block og_title %}Explore the corpus · {{ site.name }}{% endblock %}
 
 {% block body %}
-<div class="header-links">
-    <a href="/">← clapback</a>
-    <a href="/api">API</a>
-    <a href="https://github.com/seethroughlab/clapback">GitHub</a>
-</div>
-
-<h1>🎵 The shape of the corpus</h1>
-<p class="tagline">
-    Every embedding in the commons, projected from 512 dimensions to two. Points that sit together
-    sounded alike to the model. Nothing here is a title or an artist — the corpus holds neither.
-</p>
-
-<div class="card">
-    <canvas id="map" width="1200" height="760"></canvas>
-    <p class="muted" id="map-caption">Loading…</p>
-</div>
-
-<div class="card">
-    <h2>What you are looking at</h2>
-    <p class="muted">
-        512 numbers per recording, reduced to two by UMAP so they fit on a screen. The reduction is
-        <strong>lossy and not unique</strong>: distances between distant clusters mean much less than
-        the fact that a cluster is a cluster, and a different random seed would rotate the whole
-        picture. What survives is the neighbourhood structure — which recordings the model considered
-        close to which.
+<section class="explore-head">
+    <h1>Explore the corpus</h1>
+    <p class="lede">
+        Every recording the commons holds, projected from 512 dimensions to two. Points that sit
+        together sounded alike to the model. Click one, or paste a MusicBrainz recording or a hash.
     </p>
-    <p class="muted">
-        There are no labels because there is nothing to label with. The corpus is keyed on the SHA256
-        of an AcoustID fingerprint and holds no titles, artists or filenames, so a point can be
-        <em>near</em> other points and still not be nameable. That is the privacy property working as
-        intended rather than a missing feature.
-    </p>
-</div>
+    <form class="search" id="search" autocomplete="off">
+        <input type="text" id="query" placeholder="https://musicbrainz.org/recording/… or a 64-character hash" aria-label="A MusicBrainz recording URL or id, or a fingerprint hash">
+        <button class="button button--quiet" type="button" id="random">Random named recording</button>
+    </form>
+</section>
 
-<div class="card">
-    <h2>What changed when the pipeline did</h2>
-    <p class="muted">
-        This corpus was rebuilt on 2026-09-05. Until then it held vectors computed from the
-        <em>middle ten seconds</em> of each recording; it now holds whole-track means. The
-        difference is visible in the picture rather than only in a changelog — the same measurement
-        over both:
-    </p>
-    <table>
-        <tr><th></th><th>middle ten seconds</th><th>whole track</th></tr>
-        <tr><td>points</td><td>21,802</td><td>25,587</td></tr>
-        <tr><td>grid cells occupied</td><td>42%</td><td>36%</td></tr>
-        <tr><td>distinct dense regions</td><td>3</td><td>9</td></tr>
-    </table>
-    <p class="muted">
-        Fewer occupied cells holding more points means tighter clusters, and three regions became
-        nine. Under the old pipeline a 1.2-second difference in lead-in moved a recording as far as
-        a genuinely different piece of music would; the whole-track mean puts two rips of one
-        recording at 0.997 or better, so things that sound alike now land together.
-    </p>
-</div>
+<section class="explore">
+    <figure>
+        {% if map_meta.available %}
+        <canvas class="map" id="map" width="800" height="800"></canvas>
+        <figcaption id="caption">
+            {{ "{:,}".format(map_meta.count) }} recordings · {{ map_meta.generated }} ·
+            named points drawn brighter · hover shows the nearest point
+        </figcaption>
+        {% else %}
+        <div class="map"></div>
+        <figcaption>The projection has not been generated yet.</figcaption>
+        {% endif %}
+    </figure>
+    <aside class="panel" id="panel">
+        <div class="stack">
+            <div class="kicker">Nothing selected</div>
+            <p class="muted">Click a point, paste a recording, or take a random one. What you get:
+            its name, resolved in your browser from MusicBrainz; the row's hash and how many
+            contributions it has; and the twelve recordings nearest to it in the commons.</p>
+        </div>
+    </aside>
+</section>
 
-<div class="card">
-    <h2>Reproduce it</h2>
-    <p class="muted">
-        The projection is a committed artifact with a date on it, not something the server computes —
-        UMAP pulls in numba and llvmlite, and the instance is sized for a vector index rather than a
-        toolchain. <code>packages/server/scripts/build_map.py</code> regenerates it, and the seed is
-        pinned so the same corpus gives the same picture.
-    </p>
-</div>
+<section class="section" style="padding-top: 40px;">
+    <div class="section-head">
+        <div class="kicker">Recently</div>
+        <h2>Latest contributions</h2>
+    </div>
+    <div class="card recent" id="recent"><div class="empty">Loading…</div></div>
+</section>
+
+<section class="section">
+    <div class="grid-3">
+        <div class="card">
+            <h3>What you are looking at</h3>
+            <p>512 numbers per recording, reduced to two by UMAP so they fit on a screen. The reduction
+            is <strong>lossy and not unique</strong>: distances between distant clusters mean much less
+            than the fact that a cluster is a cluster, and a different seed would rotate the whole
+            picture. What survives is the neighbourhood structure.</p>
+        </div>
+        <div class="card">
+            <h3>Why names come from your browser</h3>
+            <p>The corpus is keyed on the SHA256 of an AcoustID fingerprint and holds no titles. A
+            contributor may <em>claim</em> a MusicBrainz recording id for a row; this page turns that
+            id into a name by asking MusicBrainz itself, one request a second, from your machine —
+            the server never resolves one.</p>
+        </div>
+        <div class="card">
+            <h3>Reproduce it</h3>
+            <p>The projection is a committed artifact with a date on it, not something the server
+            computes — UMAP pulls in numba and llvmlite, and the instance is sized for a vector index.
+            <code>packages/server/scripts/build_map.py</code> regenerates it with a pinned seed.</p>
+        </div>
+    </div>
+</section>
 {% endblock %}
 
 {% block scripts %}
+{% if map_meta.available %}
+<script src="{{ url_for('static', path='js/map.js') }}"></script>
+<script src="{{ url_for('static', path='js/names.js') }}"></script>
 <script>
-(async () => {
-  const el = document.getElementById('map');
-  const cap = document.getElementById('map-caption');
-  const ctx = el.getContext('2d');
-  let data;
-  try {
-    data = await (await fetch('/static/map.json')).json();
-  } catch (e) {
-    cap.textContent = 'Could not load the projection.';
-    return;
-  }
+(function () {
+    "use strict";
+    const panel = document.getElementById("panel");
+    const names = window.clapbackNames;
+    let map = null, hasIndex = false;
 
-  const {xy, grid, count, generated, analysis_version} = data;
-  const pad = 24;
-  const W = el.width - pad * 2, H = el.height - pad * 2;
+    function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
-  // Additive alpha rather than opaque dots: 21,802 points on 1200x760 overlap
-  // heavily, and a solid fill would show an outline where the interesting thing
-  // is the density.
-  ctx.fillStyle = '#12122a';
-  ctx.fillRect(0, 0, el.width, el.height);
-  ctx.globalCompositeOperation = 'lighter';
-  ctx.fillStyle = 'rgba(124, 58, 237, 0.30)';
+    function nameEl(mbid, cls) {
+        const el = document.createElement("span");
+        el.className = cls || "name";
+        names.fill(el, mbid);
+        return el;
+    }
 
-  for (let i = 0; i < xy.length; i += 2) {
-    const x = pad + (xy[i] / grid) * W;
-    const y = pad + (1 - xy[i + 1] / grid) * H;
-    ctx.beginPath();
-    ctx.arc(x, y, 1.6, 0, 6.2832);
-    ctx.fill();
-  }
-  ctx.globalCompositeOperation = 'source-over';
+    function showError(text) {
+        panel.innerHTML = '<div class="stack"><div class="kicker">Not found</div><p class="muted">' + esc(text) + '</p></div>';
+    }
 
-  cap.textContent =
-    `${count.toLocaleString()} embeddings · analysis_version ${analysis_version} · projected ${generated}`;
+    function showRow(row) {
+        // row: {fingerprint_hash, pipeline_version, contributor_count, recording_mbid, recording_claims}
+        panel.innerHTML = "";
+        const head = document.createElement("div"); head.className = "stack";
+        head.innerHTML = '<div class="kicker" style="color: var(--ok);">Selected</div>';
+        const title = document.createElement("div"); title.className = "panel__title";
+        title.appendChild(nameEl(row.recording_mbid));
+        head.appendChild(title);
+        const sub = document.createElement("div"); sub.className = "small muted";
+        if (row.recording_mbid) {
+            sub.innerHTML = 'name resolved in your browser from MusicBrainz · <a href="https://musicbrainz.org/recording/' + esc(row.recording_mbid) + '">open on musicbrainz.org →</a>';
+        } else {
+            sub.textContent = "a hash nobody has named yet — a contributor who holds it can claim its recording id";
+        }
+        head.appendChild(sub);
+        panel.appendChild(head);
+
+        const meta = document.createElement("div"); meta.className = "panel__meta";
+        meta.innerHTML =
+            '<div><div>hash</div><div><a href="/browse/' + esc(row.fingerprint_hash) + '"><code>' + esc(row.fingerprint_hash.slice(0, 12)) + '…</code></a></div></div>' +
+            '<div><div>contributions</div><div>' + esc(row.contributor_count) + '</div></div>' +
+            '<div><div>claims</div><div>' + esc(row.recording_claims) + ' client' + (row.recording_claims === 1 ? "" : "s") + '</div></div>';
+        panel.appendChild(meta);
+
+        const list = document.createElement("div"); list.className = "neighbours";
+        list.innerHTML = '<div class="neighbours__head"><div><strong>What sounds like this</strong></div><div class="small muted">asking…</div></div>';
+        panel.appendChild(list);
+
+        const note = document.createElement("div"); note.className = "small muted";
+        note.textContent = "Names are fetched one a second from MusicBrainz and cached in this browser. A hash is a recording nobody has named yet — shown as one, rather than hidden.";
+        panel.appendChild(note);
+
+        fetch("/v1/embeddings/" + row.fingerprint_hash + "?pipeline_version=" + encodeURIComponent(row.pipeline_version))
+            .then((r) => r.json())
+            .then((emb) => fetch("/v1/similar", {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ embedding: emb.embedding, limit: 13, pipeline_version: row.pipeline_version }),
+            }))
+            .then((r) => r.json())
+            .then((res) => {
+                const rows = (res.neighbours || []).filter((n) => n.fingerprint_hash !== row.fingerprint_hash).slice(0, 12);
+                list.querySelector(".neighbours__head .small").textContent = rows.length + " nearest";
+                const idx = [];
+                rows.forEach((n) => {
+                    const el = document.createElement("div"); el.className = "neighbour";
+                    const score = document.createElement("span"); score.className = "neighbour__score"; score.textContent = n.similarity.toFixed(4);
+                    const name = nameEl(n.recording_mbid);
+                    const hash = document.createElement("span"); hash.className = "neighbour__hash";
+                    hash.textContent = n.recording_mbid ? (n.recording_claims + " claim" + (n.recording_claims === 1 ? "" : "s")) : n.fingerprint_hash.slice(0, 16) + "…";
+                    el.append(score, name, hash);
+                    el.addEventListener("click", () => selectHash(n.fingerprint_hash));
+                    list.appendChild(el);
+                    if (map) { const i = map.indexOf(n.fingerprint_hash); if (i >= 0) idx.push(i); }
+                });
+                if (map) map.highlight(idx);
+            })
+            .catch(() => { list.querySelector(".neighbours__head .small").textContent = "could not ask"; });
+    }
+
+    function selectPrefix(prefix) {
+        return fetch("/browse/hash/" + prefix).then((r) => {
+            if (!r.ok) throw new Error(r.status === 404 ? "The commons holds no recording with that hash." : "That prefix matches more than one recording.");
+            return r.json();
+        });
+    }
+
+    function selectHash(hash) {
+        if (map) { const i = map.indexOf(hash); if (i >= 0) map.select(i); }
+        selectPrefix(hash.slice(0, 64)).then(showRow).catch((e) => showError(e.message));
+    }
+
+    function selectMbid(mbid) {
+        fetch("/v1/recordings/" + mbid).then((r) => {
+            if (!r.ok) throw new Error("Nobody has claimed that recording in the commons yet.");
+            return r.json();
+        }).then((rec) => {
+            const first = (rec.embeddings || [])[0];
+            if (!first) throw new Error("Nobody has claimed that recording in the commons yet.");
+            selectHash(first.fingerprint_hash);
+        }).catch((e) => showError(e.message));
+    }
+
+    document.getElementById("search").addEventListener("submit", (ev) => {
+        ev.preventDefault();
+        const q = document.getElementById("query").value.trim();
+        const mb = q.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+        if (mb) return selectMbid(mb[1].toLowerCase());
+        if (/^[0-9a-f]{12,64}$/i.test(q)) return selectHash(q.toLowerCase());
+        showError("Paste a MusicBrainz recording URL or id, or a fingerprint hash.");
+    });
+    document.getElementById("random").addEventListener("click", () => {
+        if (!map) return;
+        const i = map.randomNamed();
+        if (i < 0) { showError("The projection carries no names yet — regenerate it to click points."); return; }
+        map.select(i);
+        selectPrefix(map.prefixOf(i)).then(showRow).catch((e) => showError(e.message));
+    });
+
+    map = window.clapbackMap.explorer(document.getElementById("map"), {
+        onReady(api, indexed) {
+            hasIndex = indexed;
+            if (!indexed) {
+                document.getElementById("caption").textContent += " · this projection predates the index; paste a recording or a hash to select";
+            }
+            const fromUrl = new URLSearchParams(location.search);
+            if (fromUrl.get("hash")) selectHash(fromUrl.get("hash").toLowerCase());
+            else if (fromUrl.get("mbid")) selectMbid(fromUrl.get("mbid").toLowerCase());
+        },
+        onSelect(i, prefix) {
+            if (!prefix) { showError("This projection predates the index; regenerate it to click points."); return; }
+            selectPrefix(prefix).then(showRow).catch((e) => showError(e.message));
+        },
+    });
+
+    fetch("/browse/recent?limit=20").then((r) => r.json()).then((res) => {
+        const box = document.getElementById("recent");
+        box.innerHTML = "";
+        if (!res.rows || !res.rows.length) { box.innerHTML = '<div class="empty">Nothing yet.</div>'; return; }
+        res.rows.forEach((row) => {
+            const el = document.createElement("div"); el.className = "neighbour";
+            const when = document.createElement("span"); when.className = "neighbour__score"; when.textContent = row.created_at.replace("T", " ").slice(0, 16);
+            const name = nameEl(row.recording_mbid);
+            const hash = document.createElement("span"); hash.className = "neighbour__hash"; hash.textContent = row.fingerprint_hash.slice(0, 12) + "…";
+            el.append(when, name, hash);
+            el.addEventListener("click", () => selectHash(row.fingerprint_hash));
+            box.appendChild(el);
+        });
+    }).catch(() => { document.getElementById("recent").innerHTML = '<div class="empty">Could not load.</div>'; });
 })();
 </script>
+{% endif %}
 {% endblock %}

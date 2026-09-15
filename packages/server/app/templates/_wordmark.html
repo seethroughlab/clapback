@@ -1,0 +1,8 @@
+{#- The mark: a C with an echo stroke. One drawing, in currentColor, so the header,
+    the footer and the favicon/OG exports share it — `favicon.svg` and `og.svg`
+    carry the same two paths, and a test refuses drift. Chosen 2026-09-15 over two
+    alternatives; the echo carries the "back" in the name. -#}
+<svg class="mark" width="{{ size|default(24) }}" height="{{ size|default(24) }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" role="img" aria-label="clapback">
+  <path d="M17 6.5A7.5 7.5 0 1 0 17 17.5" stroke-width="3"/>
+  <path d="M20.5 8.5A11 11 0 0 1 20.5 15.5" stroke-width="1.6" opacity="0.6"/>
+</svg>

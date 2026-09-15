@@ -2,15 +2,61 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>{% block title %}clapback{% endblock %}</title>
+    <title>{% block title %}{{ site.name }}{% endblock %}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="{% block description %}{{ site.tagline }} {{ site.description }}{% endblock %}">
+    <meta name="color-scheme" content="dark light">
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#121019">
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#faf9fc">
+    {#- Link previews. The image is a static export of the same map the hero draws,
+        dark whatever the reader's theme, because scrapers do not ask. -#}
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="{{ site.name }}">
+    <meta property="og:title" content="{% block og_title %}{{ site.name }} — {{ site.tagline }}{% endblock %}">
+    <meta property="og:description" content="{{ site.description }}">
+    <meta property="og:url" content="{{ site.url }}{{ request.url.path if request else '/' }}">
+    <meta property="og:image" content="{{ site.url }}/static/img/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="icon" href="/static/img/favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="/static/img/favicon-32.png" sizes="32x32" type="image/png">
+    <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
     <link rel="stylesheet" href="{{ url_for('static', path='css/main.css') }}">
     {% block head_extra %}{% endblock %}
 </head>
 <body>
-    <div class="container">
-        {% block body %}{% endblock %}
+{% block site_header %}
+<header class="site-header">
+    <div class="container site-header__row">
+        <a class="wordmark" href="/">{% include "_wordmark.html" %}<span>{{ site.name }}</span></a>
+        <nav class="site-nav" aria-label="Site">
+            <a href="/#plug-in">Plug in</a>
+            <a href="/api">API</a>
+            <a href="/map">Explore</a>
+            <a href="https://github.com/seethroughlab/clapback">GitHub</a>
+        </nav>
     </div>
-    {% block scripts %}{% endblock %}
+</header>
+{% endblock %}
+<main class="container">
+{% block body %}{% endblock %}
+</main>
+{% block site_footer %}
+<footer class="site-footer">
+    <div class="container site-footer__row">
+        <div class="site-footer__mark">{% with size=18 %}{% include "_wordmark.html" %}{% endwith %}<span>{{ site.tagline }}</span></div>
+        <nav class="site-footer__links" aria-label="More">
+            <a href="/api">API</a>
+            <a href="/map">Explore</a>
+            <a href="/docs">OpenAPI</a>
+            <a href="https://github.com/seethroughlab/clapback">GitHub</a>
+            <a href="https://github.com/seethroughlab/clapback/tree/main/docs/decisions">Decisions</a>
+            <a href="/health/db">Health</a>
+        </nav>
+    </div>
+</footer>
+{% endblock %}
+{% block scripts %}{% endblock %}
 </body>
 </html>

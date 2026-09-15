@@ -1,26 +1,19 @@
 {% extends "base.html" %}
 
-{% block title %}API · clapback{% endblock %}
+{% block title %}API · {{ site.name }}{% endblock %}
+{% block description %}The clapback API: look up an embedding by fingerprint hash, ask what a vector is near, name a recording, contribute one. Reads need no key.{% endblock %}
+{% block og_title %}API · {{ site.name }}{% endblock %}
 
 {% block body %}
-<div class="header-links">
-    <a href="/">← clapback</a>
-    <a href="/map">Map</a>
-    <a href="https://github.com/seethroughlab/clapback">GitHub</a>
-</div>
-
-<h1>🎵 API</h1>
-<p class="tagline">
-    A public commons of CLAP audio embeddings. <strong>Reads need no key, no account and no
-    registration.</strong> Everything below works from a terminal right now.
-</p>
-<div class="header-links">
-    <a href="/docs">OpenAPI / Swagger</a>
-    <a href="https://pypi.org/project/clapback-client/">clapback-client on PyPI</a>
-    <a href="https://pypi.org/project/clapback-embed/">clapback-embed on PyPI</a>
-    <a href="https://github.com/seethroughlab/clapback">GitHub</a>
-    <a href="https://github.com/seethroughlab/clapback/tree/main/docs/decisions">Decisions</a>
-</div>
+<section class="explore-head">
+    <h1>The API</h1>
+    <p class="lede">
+        A public commons of CLAP audio embeddings. <strong>Reads need no key, no account and no
+        registration.</strong> Everything below works from a terminal right now; the schema is at
+        <a href="/docs">/docs</a>, and the contract as a package is
+        <a href="https://pypi.org/project/clapback-client/"><code>clapback-client</code></a>.
+    </p>
+</section>
 
 <div class="card">
     <h2>What is in here</h2>

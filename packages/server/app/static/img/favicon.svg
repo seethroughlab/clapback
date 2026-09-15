@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-linecap="round">
+  <style>
+    :root { color: #ece9f4; }
+    @media (prefers-color-scheme: light) { :root { color: #1c1830; } }
+  </style>
+  <rect width="24" height="24" rx="5" fill="#7c3aed"/>
+  <g stroke="#ffffff" transform="translate(12 12) scale(0.78) translate(-12 -12)">
+    <path d="M17 6.5A7.5 7.5 0 1 0 17 17.5" stroke-width="3"/>
+    <path d="M20.5 8.5A11 11 0 0 1 20.5 15.5" stroke-width="1.6" opacity="0.6"/>
+  </g>
+</svg>
