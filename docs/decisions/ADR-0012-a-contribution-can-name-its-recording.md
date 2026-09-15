@@ -35,9 +35,12 @@ Implementation:
   It was stopped at ~470, Familiar's #304 set the pace to 25/min, and the rerun was idempotent:
   every already-claimed row returned `201` again. A claim is a write and shares the write limit;
   a backfill script must pace under it, not at the rate the limit names.
-- **Still owed:** the AcoustID backfill for the 93% Familiar cannot name from its own tags
-  (`ADR-0102` point 5, never built). Until it runs, a second contributor's similarity results
-  will resolve for one row in fifteen of this corpus.
+- **The backfill ran** — Familiar's `ADR-0115`, built and enabled 2026-09-14, resolution complete
+  2026-09-15 08:48 UTC. Measured at 08:49 UTC: **23,196 of the corpus's 25,886 rows are named,
+  89.6%**, from 6.8% the day before; every claim still under one client id, so `recording_claims`
+  is 1 on all of them. 103 claims the corpus could not take are rows Familiar fingerprinted but
+  never contributed. A second contributor's similarity results now resolve for nine rows in ten
+  rather than one in fifteen, which is the state `ADR-0002` point 4 was waiting for.
 
 Answers [ADR-0001](ADR-0001-clapback-is-a-public-clap-embedding-commons.md) deferred item 4 — "the
 recording-id key, `ADR-0102`'s substance, and the reason other applications would query this at

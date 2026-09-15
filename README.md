@@ -66,9 +66,9 @@ for the cross-machine check.
 
 ## Where this actually stands
 
-Early, and worth being plain about. As of 2026-09-14:
+Early, and worth being plain about. As of 2026-09-15:
 
-- **25,515 embeddings, all from a single contributor.** Every row declares the pipeline
+- **25,886 embeddings, all from a single contributor.** Every row declares the pipeline
   that produced it and is keyed on a hash any client can reproduce from the audio —
   migration `011` removed the 47,486 rows that could not say what produced them, and
   [`ADR-0010`](docs/decisions/ADR-0010-the-corpus-key-is-a-function-of-the-audio.md)
@@ -76,12 +76,13 @@ Early, and worth being plain about. As of 2026-09-14:
   public API in front of it, and the honest description of the mechanism is that it is
   in place ahead of the evidence. **A second contributor is the single most valuable
   thing that could happen to this project** — four accepted decisions are waiting on one.
-- **1,745 of those rows name their recording — 6.8%.** A row is keyed on a one-way
+- **23,196 of those rows name their recording — 89.6%.** A row is keyed on a one-way
   hash, so similarity search used to return hashes nobody could resolve.
   [`ADR-0012`](docs/decisions/ADR-0012-a-contribution-can-name-its-recording.md) lets a
   client *claim* a MusicBrainz recording id for a row; a neighbour with a claim is a
-  recording you can look up, and one without is still a hash, shown as one. beets sends
-  `mb_trackid`; the rest of the coverage is a backfill that has not run.
+  recording you can look up, and one without is still a hash, shown as one. The coverage
+  came from one contributor resolving its library through AcoustID over thirty hours
+  (2026-09-14/15); beets and Picard send the id with every contribution from now on.
 - The `features` endpoints below still work and still serve the rows they hold.
   [`ADR-0001`](docs/decisions/ADR-0001-clapback-is-a-public-clap-embedding-commons.md)
   decided the commons carries **embeddings**, not the bpm/key/valence estimates that
