@@ -173,6 +173,30 @@ Implementation:
   chicken-and-egg problem this leaves — the second contributor was supposed to come from the
   listings — is now the open question, and the three other threads are where an answer would
   come from.
+- **KalinkaPlayer#128 got a yes-in-principle with six questions** (2026-09-15, 19:56 UTC) —
+  the first substantive reply from a prospective second contributor, and the questions were
+  better than the proposal. Three asked for things the corpus does not do: a key without a
+  fingerprint or an MBID, and contribution under an MBID alone (both `ADR-0010`-sized
+  decisions, not features); a measurement of cross-pipeline compatibility (never made). One
+  asked whether fingerprint hashes match across rips — they never do, by construction, which
+  `ADR-0008` already said. One asked about INT8-reconstructed vectors, which the identity
+  string already accommodates. And one asked how the service is sustained and whether the
+  data could be exported or self-hosted — the question this record had no answer to, which
+  became `ADR-0013` the same evening. The reply (23:14 UTC, written by Jeff from facts checked
+  against the repo, with the AI disclosure the beets thread taught) answered each as it stands,
+  offered openness on a second key type rather than a promise, pointed at the export that had
+  gone live an hour earlier rather than at an intention, and shared the one measurement that
+  matters to a 10-second-fragment pipeline — `ADR-0009`'s 0.950 lead-in result. **What it
+  committed to:** a PR against Kalinka's CONTRIBUTING flow, behind a default-off setting,
+  without per-commit AI attribution, if the maintainer says go.
+- **What the thread changed about this record's premise.** Point 5 assumed the value to a
+  plug-in was skipping the model run. The maintainer said outright that inference is not their
+  bottleneck — audio preparation and MusicBrainz's rate limit are — and that the interest is
+  similarity across installs and a lightweight way to take part. The exchange the commons offers
+  is therefore not "skip the recompute" for every tool; for a Pi it may be, for Kalinka it is
+  the shared corpus itself. `ADR-0001` point 8 said the tool must be worth running with the
+  corpus empty; the converse, that the corpus must be worth joining when your own compute is
+  cheap, is what this thread is testing.
 
 Extends [ADR-0001](ADR-0001-clapback-is-a-public-clap-embedding-commons.md) points 3 and 8, and
 [ADR-0005](ADR-0005-the-repository-is-a-workspace-of-peers.md), whose "published for others to
