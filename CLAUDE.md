@@ -150,14 +150,16 @@ being where the agreement threshold sits and what the corpus does with it.
 | 4 | The recording-id key | `ADR-0002` point 4 makes it a prerequisite: similarity search over a hash-keyed corpus returns hashes nobody can resolve |
 | 6 | The rename, and what the domain serves | Cheap, and last on purpose — nothing above depends on it |
 
-### What is actually running, as of 2026-09-13
+### What is actually running, as of 2026-09-15
 
 The commons is public at **https://clapback.seethroughlab.com** — one AWS instance, TLS via Caddy,
-nightly `pg_dump` to `s3://clapback-backup`, and a corpus of **25,515 rows, every one of which
+nightly `pg_dump` to `s3://clapback-backup`, and a corpus of **25,886 rows, every one of which
 declares the pipeline that produced it and is keyed on a hash any client can reproduce from the
-audio**. `clapback-embed` is on PyPI and the server is deployed. **The tool is not yet on PyPI** —
-`pip install clapback`, which the README said for a week, installs an unrelated 2018 clap-emoji
-package; it publishes as `clapback-cli` once PR #43 merges and a pending publisher is registered.
+audio — and 23,196 of which (89.6%) name their MusicBrainz recording**, up from 6.8% on
+2026-09-14, after Familiar's `ADR-0115` backfill. Four packages are on PyPI (`clapback-embed`,
+`clapback-client`, `clapback-cli`, `beets-clapback`) and the Picard plugin ships as a zip on a
+`picard-v*` release. The bare name `clapback` on PyPI belongs to an unrelated 2018 package; the
+CLI is `clapback-cli`.
 
 The corpus went 25,558 → 39,761 → 25,515 across 2026-09-08 to 09-13. The middle number is
 `ADR-0010`'s re-contribution; the net −43 is the duplicate collapse the encoding split had hidden.
@@ -187,13 +189,12 @@ green timer is evidence the check ran, not evidence anyone would hear it.**
 
 - **`ADR-0007`**, deliberately, until a second contributor exists.
 - **`ADR-0008`** — the corpus cannot yet tell anyone how corroborated a vector is.
-- **The tool on PyPI** — built, verified cold, and blocked on one PyPI-side step: registering a
-  pending publisher for `clapback-cli` before the first `cli-v*` tag. Until it ships, nobody who is
-  not already here can contribute.
+- **`ADR-0011` point 5's outreach** — dj-track-similarity and KalinkaPlayer. Every prerequisite it
+  named is now in place: the client package, both plug-ins, a resolvable corpus, and a site that
+  says the commons is what tools plug into.
 
-**The bottleneck is now a second contributor, not a decision.** With the key change deployed, the
-three records above are all blocked on the same thing, and `ADR-0009` point 6 is the only queued
-work that produces one. That is where effort buys the most.
+**The bottleneck is a second contributor, not a decision, and not a build.** Everything queued
+that this project can do alone is done; the next contributor comes from somebody else saying yes.
 
 **The pattern worth keeping.** For most of this project's life the decisions ran far ahead of the
 code, and the `Implementation:` block is the only thing that kept that legible. Write one the day
