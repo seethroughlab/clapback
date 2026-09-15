@@ -221,6 +221,14 @@ class TestTheExplorersRoutes:
         src = inspect.getsource(browse.recent)
         assert "min(limit, 100)" in src
 
+    def test_recent_is_declared_before_the_catch_all(self):
+        """`/browse/{fingerprint_hash}` matches "recent" if it is registered first —
+        which it was, on 2026-09-15, for the eight minutes between deploy and check."""
+        from app.api import browse
+
+        paths = [r.path for r in browse.browse_router.routes]
+        assert paths.index("/browse/recent") < paths.index("/browse/{fingerprint_hash}")
+
     def test_the_map_builder_filters_on_the_pipeline_identity(self):
         src = (SERVER / "scripts" / "build_map.py").read_text()
         assert "--pipeline-version" in src and "analysis_version = 7" not in src

@@ -211,6 +211,58 @@ async def map_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "map.html", {"map_meta": MAP_META})
 
 
+class HashResolution(BaseModel):
+    """What one point on the map is, once the visitor asks."""
+
+    fingerprint_hash: str
+    pipeline_version: str
+    contributor_count: int
+    recording_mbid: str | None
+    recording_claims: int
+
+
+class RecentRow(BaseModel):
+    fingerprint_hash: str
+    created_at: str
+    recording_mbid: str | None
+    recording_claims: int
+
+
+class RecentResponse(BaseModel):
+    rows: list[RecentRow]
+
+
+@browse_router.get("/browse/recent", response_model=RecentResponse)
+@limiter.limit(settings.lookup_rate_limit)
+async def recent(request: Request, db: DbSession, limit: int = 20) -> RecentResponse:
+    """The latest contributions, newest first, with the recording each resolves to.
+
+    The list half of browsing: a person with nothing to paste sees what arrived
+    most recently and can click into any of it. Names are the visitor's browser's
+    business, as everywhere on this site.
+    """
+    limit = max(1, min(limit, 100))
+    rows = (
+        await db.execute(
+            select(Embedding.fingerprint_hash, Embedding.created_at)
+            .order_by(Embedding.created_at.desc())
+            .limit(limit)
+        )
+    ).all()
+    recordings = await _recordings_for(db, [r.fingerprint_hash for r in rows])
+    return RecentResponse(
+        rows=[
+            RecentRow(
+                fingerprint_hash=r.fingerprint_hash,
+                created_at=r.created_at.isoformat(timespec="minutes") if r.created_at else "",
+                recording_mbid=recordings[r.fingerprint_hash][0] if r.fingerprint_hash in recordings else None,
+                recording_claims=recordings[r.fingerprint_hash][1] if r.fingerprint_hash in recordings else 0,
+            )
+            for r in rows
+        ]
+    )
+
+
 @browse_router.get("/browse/{fingerprint_hash}", response_class=HTMLResponse)
 @limiter.limit(settings.lookup_rate_limit)
 async def detail(
@@ -303,27 +355,6 @@ async def detail(
 # ---------- the explorer's JSON ----------
 
 
-class HashResolution(BaseModel):
-    """What one point on the map is, once the visitor asks."""
-
-    fingerprint_hash: str
-    pipeline_version: str
-    contributor_count: int
-    recording_mbid: str | None
-    recording_claims: int
-
-
-class RecentRow(BaseModel):
-    fingerprint_hash: str
-    created_at: str
-    recording_mbid: str | None
-    recording_claims: int
-
-
-class RecentResponse(BaseModel):
-    rows: list[RecentRow]
-
-
 @browse_router.get("/browse/hash/{prefix}", response_model=HashResolution)
 @limiter.limit(settings.lookup_rate_limit)
 async def resolve_prefix(request: Request, prefix: str, db: DbSession) -> HashResolution:
@@ -358,35 +389,4 @@ async def resolve_prefix(request: Request, prefix: str, db: DbSession) -> HashRe
         contributor_count=int(count or 1),
         recording_mbid=recording[0] if recording else None,
         recording_claims=recording[1] if recording else 0,
-    )
-
-
-@browse_router.get("/browse/recent", response_model=RecentResponse)
-@limiter.limit(settings.lookup_rate_limit)
-async def recent(request: Request, db: DbSession, limit: int = 20) -> RecentResponse:
-    """The latest contributions, newest first, with the recording each resolves to.
-
-    The list half of browsing: a person with nothing to paste sees what arrived
-    most recently and can click into any of it. Names are the visitor's browser's
-    business, as everywhere on this site.
-    """
-    limit = max(1, min(limit, 100))
-    rows = (
-        await db.execute(
-            select(Embedding.fingerprint_hash, Embedding.created_at)
-            .order_by(Embedding.created_at.desc())
-            .limit(limit)
-        )
-    ).all()
-    recordings = await _recordings_for(db, [r.fingerprint_hash for r in rows])
-    return RecentResponse(
-        rows=[
-            RecentRow(
-                fingerprint_hash=r.fingerprint_hash,
-                created_at=r.created_at.isoformat(timespec="minutes") if r.created_at else "",
-                recording_mbid=recordings[r.fingerprint_hash][0] if r.fingerprint_hash in recordings else None,
-                recording_claims=recordings[r.fingerprint_hash][1] if r.fingerprint_hash in recordings else 0,
-            )
-            for r in rows
-        ]
     )
