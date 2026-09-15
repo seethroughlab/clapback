@@ -140,7 +140,7 @@ assertions rather than trusting one. The identifier is the MusicBrainz **recordi
 6.8% of its library, unchanged since August. Ids will come from the plug-ins, and from a
 Familiar backfill through AcoustID once the claims endpoint exists to receive it.
 
-**`ADR-0013` was accepted 2026-09-15, the day it was proposed, and nothing in it is built.** It says the corpus is public *data*, not just
+**`ADR-0013` was accepted 2026-09-15, the day it was proposed, and points 1–6 were built, released and deployed the same day; only point 7's import script is owed.** It says the corpus is public *data*, not just
 a public endpoint: the rows are CC0 (as MusicBrainz's and AcousticBrainz's were), contribution is
 stated as a CC0 dedication where the switch is, a weekly export that is not the backup goes to a
 public bucket with `client_id` and every address stripped, and self-hosting from an export is the

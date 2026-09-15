@@ -57,6 +57,27 @@ Implementation:
   dates, never the backup bucket, and a writer policy with no delete. Not exercised: S3
   itself, `aws` was a stub writing to a directory. That is what the runbook's "download the
   manifest from somewhere that is not the instance" step is for.
+- **Points 3 to 6 are deployed and the first export is public** (2026-09-15, 23:03 UTC).
+  `s3://clapback-export` created with versioning, AES256, the 35-day lifecycle on `exports/` and
+  the public-read policy; the export write policy attached to the existing
+  `clapback-backup-writer` user rather than a second key on the box. The box pulled `02baa48`,
+  the api container restarted with the mount and the env, the timer is enabled for Sunday
+  05:12 UTC, and `export.sh` ran once by hand: **25,886 embeddings and 23,198 claim pairs in
+  73 seconds**, 64 MB gzipped. Verified from a laptop, not the instance: `/export/latest.json`
+  307s to the bucket, the manifest and the embeddings file download anonymously, the file has
+  25,886 rows and zero occurrences of the string `client`, `/export` shows the date, and the
+  dated and monthly copies both answer 200. And the writer key was asked to delete
+  `latest/manifest.json` and was refused — `AccessDenied` — which is the property the
+  Decision's retention point traded a pruning loop to keep.
+- **One thing the runbook did not say.** `docker compose up` created the `./exports` bind-mount
+  directory on the host, root-owned, before the script ever ran; the script writes there as
+  `ubuntu` and would have failed on its `cp`. `chown` fixed it and RUNBOOK section 10 now
+  creates the directory first.
+- **Point 2 is released** (2026-09-15): `clapback-client 0.2.2`, `clapback-cli 0.1.2` and
+  `beets-clapback 0.2.1` on PyPI, `picard-v0.1.2` with `clapback.zip`, in `ADR-0005`'s order,
+  each workflow green. Every contribution switch that ships now carries the sentence.
+- **Still owed:** point 7's `scripts/import_export.py`. The runbook carries the `COPY` SQL that
+  loads an embeddings file by hand in the meantime.
 
 Extends [ADR-0001](ADR-0001-clapback-is-a-public-clap-embedding-commons.md) point 1,
 [ADR-0003](ADR-0003-the-commons-runs-on-one-small-server.md) point 6 and

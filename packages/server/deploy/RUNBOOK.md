@@ -430,6 +430,7 @@ mounts `./exports` read-only, which is where the script leaves a copy of the
 manifest so `/export` can show the date without an outbound request.
 
 ```bash
+mkdir -p exports      # before compose creates it for you, root-owned, and the script's cp fails
 docker compose -f docker-compose.aws.yml up -d api        # picks up the env and the mount
 sudo cp deploy/clapback-export.service deploy/clapback-export.timer /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now clapback-export.timer
