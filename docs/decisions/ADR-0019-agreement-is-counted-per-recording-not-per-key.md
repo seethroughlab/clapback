@@ -19,7 +19,7 @@ Implementation:
   56 across `fpcalc` generations) and that a miss by hash does not mean the corpus lacks the
   recording. `/api`'s description of `GET /v1/recordings/{mbid}` no longer says "one per
   pipeline" — two rows under one pipeline there are one file keyed twice.
-- **Point 2 is built** (2026-09-16, undeployed). Migration `014_agreement_other_hash` adds
+- **Point 2 is built and deployed** (2026-09-16 ~01:45 UTC; box at `346f57c`, migration `014` applied, the one existing agreement backfilled, counts unchanged; every live read serves 0 / 0, which with one contributor is the truth). Migration `014_agreement_other_hash` adds
   `submission_agreement.other_hash` — the stored row a similarity was measured against, backfilled
   with the row's own hash for every existing agreement, which is what they were — and an index on
   `(other_hash, pipeline_version)`. `_contribute_one` gained `_record_cross_key_agreements`: a

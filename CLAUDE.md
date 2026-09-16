@@ -175,9 +175,12 @@ but agreement, independence and confirmation are counted per *recording* — acr
 `ADR-0012`'s claims; tools that hold an MBID look up by it first; similarity collapses rows
 sharing a recording; AcoustID track ids are admitted as a second claim type. Pinning `fpcalc`,
 keying on the AcoustID id, and server-side fuzzy matching are each rejected with reasons.
-**Points 1 and 3 are done (2026-09-16)** — the documentation, and `Corpus.lookup(recording_mbid=)`
-in the client; points 2, 4 and 6 are owed in that order, and the two plug-ins passing the id they
-hold is owed as one release each.
+**Points 1, 2 and 3 are built and deployed (2026-09-16)** — the documentation,
+`Corpus.lookup(recording_mbid=)` in the client, and the cross-key agreement: migration `014`, the
+comparison in `_contribute_one`, and `recording_confirmations` / `recording_contradictions` on every
+read that names a recording, backed by the suite's first database test (server CI now runs
+pgvector). Points 4 and 6 are owed in that order, and the two plug-ins passing the id they hold is
+owed as one release each.
 
 `ADR-0008` closes `ADR-0001` deferred item 2 — the part the cross-machine measurement did not answer,
 being where the agreement threshold sits and what the corpus does with it.
@@ -227,11 +230,12 @@ green timer is evidence the check ran, not evidence anyone would hear it.**
 **Still unbuilt:**
 
 - **`ADR-0007`**, deliberately, until a second contributor exists.
-- **`ADR-0008`** — the corpus cannot yet tell anyone how corroborated a vector is.
-- **`ADR-0019` points 2, 4 and 6** — cross-key agreement, collapsed similarity, the AcoustID claim.
+- **`ADR-0008`**, partly — confirmations and contradictions are served per recording since
+  2026-09-16; the worst similarity and point 7 are not.
+- **`ADR-0019` points 4 and 6** — collapsed similarity, the AcoustID claim.
 - **`ADR-0013` point 7** — the import script.
 
-**The commons box is at `215cd15` and migration `013` as of 2026-09-16 ~01:30 UTC.** The CLI
+**The commons box is at `346f57c` and migration `014` as of 2026-09-16 ~01:45 UTC.** The CLI
 (`<0.3`) and `beets-clapback` (`<0.3`) bound the client below 0.3.0; each widens the bound in the
 release that adopts `lookup_many` / `contribute_many`, and until then a fresh install of either
 resolves to client 0.2.2, which still works.

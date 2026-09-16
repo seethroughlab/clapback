@@ -18,7 +18,7 @@ and nothing else.
 Implementation:
 - Accepted 2026-09-04. Nothing is built.
 - **Points 2, 3, 4 and 6 are built, per recording rather than per key** (2026-09-16, by
-  `ADR-0019` point 2; undeployed at the time of writing). Every response that names a recording
+  `ADR-0019` point 2; deployed the same day, and every live read reports zero, which with one contributor is what this record said it would). Every response that names a recording
   serves `recording_confirmations` and `recording_contradictions` — distinct `client_id`s inside
   and outside the 0.999999 band, counted across every key the recording is held under, computed
   at read time. Point 1's third figure, the worst similarity, and point 7's re-description of
