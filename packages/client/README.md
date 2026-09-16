@@ -36,6 +36,15 @@ is those decisions as code so a tool does not have to reimplement them.
 1. **Fingerprint the audio and hash it canonically.** `hash_fingerprint` is SHA256 of the
    AcoustID fingerprint exactly as chromaprint returns it — not as your database happened to
    store it. That distinction split a corpus once; `canonical()` is the guard.
+   **The string is a function of the audio and of the fingerprinting path.** Measured
+   2026-09-16 on 56 FLACs: the `fpcalc` binary (what Picard and Familiar run) and pyacoustid's
+   library path (what beets runs) return the same string for 24 of them, and for 10 of the 24
+   CD-quality ones; two official `fpcalc` builds from different ffmpeg generations agree on 37.
+   The rest differ by a few bits of ~30,000 — which AcoustID's matcher absorbs and a SHA256
+   cannot. So the key is exact within one path and *may* differ across two, and **a miss on
+   `lookup` does not mean the corpus lacks the recording**. The fix is not a better hash: it is
+   the recording id, below, which is the same on every path
+   ([`ADR-0019`](../../docs/decisions/ADR-0019-agreement-is-counted-per-recording-not-per-key.md)).
 2. **Produce the vector through a declared pipeline.** This package never embeds. The reference
    pipeline is [`clapback-embed`](https://pypi.org/project/clapback-embed/), whose
    `PIPELINE_VERSION` is the identity to send. A tool with its own pipeline declares its own

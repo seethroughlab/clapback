@@ -71,7 +71,18 @@ row = Corpus().lookup(key, pipeline_version)       # None on a miss — then emb
     <p class="muted">
         Returns the vector, what produced it, how many submissions it has had, and its
         <code>recording_mbid</code> when anyone has claimed one. <code>404</code> if the corpus has
-        not seen that recording from that pipeline.
+        not seen that <em>hash</em> from that pipeline — which is not quite "that recording".
+    </p>
+    <p class="muted">
+        <strong>The fingerprint string depends on the path that computed it.</strong> Measured
+        2026-09-16 on 56 FLACs: the <code>fpcalc</code> binary and pyacoustid's library path agree
+        on 24, and on 10 of the 24 CD-quality ones; two official <code>fpcalc</code> builds from
+        different ffmpeg generations agree on 37. The rest differ by a few bits, which AcoustID's
+        matcher absorbs and a SHA256 cannot. The key is exact within one path and may differ
+        across two, so a miss here does not mean the corpus lacks the recording. A tool that holds
+        a MusicBrainz recording id should ask by it — <code>/v1/recordings/{mbid}</code>, below —
+        which is the same on every path. The measurement and the decision are
+        <a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0019-agreement-is-counted-per-recording-not-per-key.md">ADR-0019</a>.
     </p>
     <p class="muted">
         <strong>Ask by <code>pipeline_version</code> if you intend to use the vector.</strong> It is
@@ -177,8 +188,10 @@ query  = embed_text("dreamy ambient with piano")   # the same space</code></pre>
     </p>
     <pre><code>curl https://{{ host }}/v1/recordings/1c6da765-da50-476b-a000-61e7cf45ded8</code></pre>
     <p class="muted">
-        Goes the other way: every row claimed under that recording, one per pipeline, with its
-        vector. What does this recording sound like — without holding it.
+        Goes the other way: every row claimed under that recording, with its vector, most-claimed
+        first. What does this recording sound like — without holding it. It is also the lookup that
+        does not depend on the fingerprinting path: two rows under one pipeline here are one file
+        keyed twice, and a tool that holds the id finds both.
     </p>
 </div>
 
