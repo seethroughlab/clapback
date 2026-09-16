@@ -1,6 +1,6 @@
 # ADR-0017: The Client Fingerprints Audio the Tool Already Decoded
 
-Status: proposed
+Status: rejected — on its own measurement, 2026-09-16; see "The measurement, made" below
 
 Date: 2026-09-15
 
@@ -53,6 +53,37 @@ record's Status records that with the count. If (c) differs from (a), that is a 
 existing key regardless of this record, and it is filed against `ADR-0010` the same day.
 `chromaprint` was not installed on the machine that would run this when the record was written;
 the Implementation block will carry the result and its date.
+
+### The measurement, made — 2026-09-16, 56 FLACs (24 × 44.1 kHz/16-bit, 32 × 24-bit)
+
+`packages/embed/scripts/measure_fingerprint.py`, results beside it. Three fingerprints per file:
+the official static `fpcalc` 1.6.1 (ffmpeg decode); pyacoustid's library path on this Mac,
+which decodes through Core Audio; and libsndfile decoding to int16 at native rate — the best
+case for a tool's own PCM. (Chromaprint was installed for the purpose; `ADR-0010`'s
+"measured on one machine, one decoder" turned out to mean Core Audio, not ffmpeg.)
+
+| pairing | agree | of |
+|---|---|---|
+| `fpcalc` vs Core Audio | 24 | 56 |
+| `fpcalc` vs Core Audio, **16-bit files only** | 10 | 24 |
+| `fpcalc` vs libsndfile | 24 | 56 |
+| Core Audio vs libsndfile | 47 | 56 |
+| Core Audio vs libsndfile, 16-bit files only | 24 | 24 |
+| Core Audio vs the PCM path this record proposed (48 kHz float, resampled) | 29 | 56 |
+
+Where they differ, they differ by 1 to 17 bits of roughly 30,000. Two mechanisms, and the
+larger one is not the one this record anticipated. Between the two chromaprint front-ends —
+`fpcalc`, which resamples to 11,025 Hz in ffmpeg's swresample before chromaprint sees anything,
+and libchromaprint fed native-rate samples, which resamples internally — the last bit moves on
+more than half of 16-bit CD audio. Between two decoders feeding the *same* front-end, 16-bit
+sources agree exactly and 24-bit sources disagree on 9 of 32, from how each rounds 24 bits to 16.
+Resampling the PCM to 48 kHz first, which is the PCM a CLAP tool actually holds, loses more.
+
+**So point 1 is rejected, by the rule stated above:** the fingerprint of the PCM a tool already
+decoded is the file's fingerprint 29 times in 56. And the second finding is filed against
+`ADR-0010` the same day, as the section above said it would be: the key is not reproducible
+across the two fingerprinting paths the project's own clients use. The Decision below stands as
+what was proposed, so the reasoning is not re-derived; it is not to be built.
 
 ## Decision
 

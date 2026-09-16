@@ -159,6 +159,17 @@ PCM equal `fpcalc` of the file, on 56 FLACs); `ADR-0018` — the recording claim
 "which recording is this?", with the honest line that it is exact-hash and counted, not AcoustID.
 Order: 0017 → 0014 → 0015 + 0018 → 0016.
 
+**`ADR-0017` was rejected on 2026-09-16 by its own measurement, and the measurement found
+something bigger** — recorded in `ADR-0010`'s Implementation block: the AcoustID fingerprint
+*string* is not reproducible across fingerprinting paths. `fpcalc` and pyacoustid's library path
+agree on 24 of 56 FLACs (10 of 24 CD-quality ones); `fpcalc` 1.5.1 and 1.6.1 on 37 of 56. One bit
+is a new key, so a second client on another path lands on a different row more often than not,
+and no agreement is recorded. **`ADR-0019` is proposed to fix it**: the hash stays the row key,
+but agreement, independence and confirmation are counted per *recording* — across keys — through
+`ADR-0012`'s claims; tools that hold an MBID look up by it first; similarity collapses rows
+sharing a recording; AcoustID track ids are admitted as a second claim type. Pinning `fpcalc`,
+keying on the AcoustID id, and server-side fuzzy matching are each rejected with reasons.
+
 `ADR-0008` closes `ADR-0001` deferred item 2 — the part the cross-machine measurement did not answer,
 being where the agreement threshold sits and what the corpus does with it.
 

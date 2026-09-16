@@ -48,6 +48,36 @@ Implementation:
   a valid session; the fix is to send the cookie as a header. And a 14,000-request loop must run
   detached: the first attempt hung on the SSH hop before reaching the server, which looked identical
   to a slow deletion. Both are recorded in the script that ran it.
+- **The key is a function of the audio *and of the fingerprinting path*, and this record did
+  not know that until 2026-09-16.** The premise here is that two clients holding the same audio
+  compute the same key. Measured on 56 FLACs (`packages/embed/scripts/measure_fingerprint.py`,
+  results beside it; the measurement `ADR-0017` was written to make): the official `fpcalc`
+  binary and pyacoustid's library path — the two paths this project's own clients use, Familiar
+  and Picard on the first, beets-on-a-Mac on the second — produce **the same fingerprint string
+  on 24 of 56 files, and on 10 of the 24 sixteen-bit CD-quality ones.** The rest differ by 1 to
+  17 bits of ~30,000, because `fpcalc` resamples to 11,025 Hz in ffmpeg's swresample before
+  chromaprint runs and libchromaprint given native-rate audio resamples internally. A second,
+  smaller mechanism: two decoders feeding one front-end agree exactly on 16-bit sources and
+  disagree on 9 of 32 twenty-four-bit ones, from how each rounds 24 bits to 16. AcoustID never
+  cared, because AcoustID matches fingerprints fuzzily; this corpus hashes the string, so a bit
+  is a row. **The 99-of-99 figure above was one machine and one path** — Core Audio through
+  pyacoustid both times — and measured stability, not reproducibility. Nor is `fpcalc` a path
+  one can pin: the official 1.6.0 and 1.6.1 builds (both ffmpeg 8) agree on 56 of 56, but 1.5.1
+  (ffmpeg 4, 2021) agrees with 1.6.1 on **37 of 56**, every disagreement a 16-bit 44.1 kHz file
+  — the resampler moved between ffmpeg releases, and Picard bundles one `fpcalc` while every
+  Linux distribution ships another (`measure_fingerprint.versions-2026-09-16.csv`).
+- **What this does and does not break, as of 2026-09-16.** Every row in the corpus came from one
+  client on one path, so nothing in it is wrong. What cannot be relied on is the thing three
+  accepted records are built on: that a *second* client with the same file lands on the same
+  row. Across the two paths, on CD audio, that happens less than half the time; the other half,
+  the same recording becomes two rows with `contributor_count` 1 each, `ADR-0008` records no
+  agreement, `ADR-0004` counts no independence, and `ADR-0007`'s attestation would pass both.
+  Within one path it is fine — every beets install on macOS agrees with every other, every
+  Picard with every Picard. The decision that fixes this is not made here; it is proposed as
+  `ADR-0019`, the same day, with the options measured rather than assumed. Until it is decided,
+  the client's documentation says which path it uses and that another path may not confirm it.
+  The 2026-09-15 reply in KalinkaPlayer#128 said "two rips hash differently, by construction" and
+  was right for the wrong reason: two *decoders* of one rip do too.
 
 Extends [ADR-0006](ADR-0006-the-pipeline-identity-is-the-corpus-key.md), which made
 `(fingerprint_hash, pipeline_version)` the key and fixed the half of it that describes the pipeline.
