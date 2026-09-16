@@ -33,14 +33,16 @@ class FakeCorpus:
         self.holds: set[str] = set()
         self.contributed: list[dict] = []
 
-    def has(self, fingerprint_hash: str, pipeline_version: str) -> bool:
-        self.calls.append(("has", fingerprint_hash))
-        return fingerprint_hash in self.holds
+    def lookup_many(self, keys, pipeline_version=None, *, vectors=True):
+        for k in keys:
+            self.calls.append(("lookup", k))
+            yield k, ({"fingerprint_hash": k} if k in self.holds else None)
 
-    def contribute(self, **kw):
-        self.calls.append(("contribute", kw["fingerprint_hash"]))
-        self.contributed.append(kw)
-        return "contributed"
+    def contribute_many(self, rows):
+        for kw in rows:
+            self.calls.append(("contribute", kw["fingerprint_hash"]))
+            self.contributed.append(kw)
+            yield {"fingerprint_hash": kw["fingerprint_hash"], "status": "created", "code": 201}
 
 
 @pytest.fixture
@@ -82,7 +84,8 @@ class TestItDoesNotManufactureAgreement:
         `submission_agreement` row, so re-sending a library would be one install
         independently agreeing with itself — the measurement `ADR-0008` rests on."""
         cli.cmd_contribute(_args(tmp_path))
-        assert [k for k, _ in wired.calls] == ["has", "contribute", "has", "contribute"]
+        # The whole set is looked up before anything is offered (`ADR-0015`).
+        assert [k for k, _ in wired.calls] == ["lookup", "lookup", "contribute", "contribute"]
 
     def test_what_the_corpus_already_holds_is_not_resent(self, wired, store, tmp_path):
         cli.cmd_contribute(_args(tmp_path))

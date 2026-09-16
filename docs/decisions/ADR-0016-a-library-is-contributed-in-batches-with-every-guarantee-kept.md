@@ -36,9 +36,11 @@ Implementation:
   rows under its quota answered 46 confirmed then 14 refused with 429 and `retry_after`; the
   seventh hundred rows in a minute was a 429 with `Retry-After`. The record's "6 KB per row" was
   low: 512 floats as JSON text are ~11 KB, so a hundred is ~1.1 MB, still a tenth of the limit.
-- Owed: the CLI's `contribute` command and the beets plugin's whole-library pass moving to
-  `contribute_many` (Follow-up, each a release); the instance measurement after the first real
-  batch contributor. The deploy went in the order the block above says — image, migration,
+- **The CLI and beets moved to `contribute_many` on 2026-09-16** (`clapback-cli` 0.2.0,
+  `beets-clapback` 0.3.0): each applies the per-row result, and a refused row is that row's
+  status rather than the run's. Picard stays on the single call, as point 6 says. Still owed:
+  the instance measurement after the first real batch contributor. The deploy went in the
+  order the block above says — image, migration,
   then the client — and the live check spent 323 keys in a minute on the batch lookup and was
   refused at the 301st, which is point 3's limit binding on the instance.
 

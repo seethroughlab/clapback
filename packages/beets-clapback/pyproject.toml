@@ -1,6 +1,6 @@
 [project]
 name = "beets-clapback"
-version = "0.2.1"
+version = "0.3.0"
 description = "beets plugin: look up, embed, and contribute CLAP embeddings to the clapback commons — absubmit reborn"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -23,7 +23,7 @@ classifiers = [
 # embedder is not optional here — only its 614 MB of encoders are, at runtime.
 dependencies = [
     "beets>=2.0",
-    "clapback-client>=0.2.0,<0.3",
+    "clapback-client>=0.4.0,<0.5",
     "clapback-embed>=0.1.0,<0.2",
 ]
 

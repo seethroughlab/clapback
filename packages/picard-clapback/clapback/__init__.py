@@ -18,11 +18,12 @@ own vector — and says so rather than computing anything.
 <br/><br/>
 Nothing leaves the machine until <i>Contribute</i> is turned on in the options. Then,
 per file: a one-way fingerprint hash, a 512-float vector when one is computed here,
-and the MusicBrainz recording id. Never audio, never paths, never other tags.
+and the MusicBrainz recording id and AcoustID track id Picard knows. Never audio, never
+paths, never other tags.
 Everything sent is dedicated to the public domain under CC0 1.0, like every other row in the
 corpus, and may be republished in its public exports.
 """
-PLUGIN_VERSION = "0.1.2"
+PLUGIN_VERSION = "0.2.0"
 PLUGIN_API_VERSIONS = ["2.6", "2.7", "2.8", "2.9", "2.10", "2.11", "2.12", "2.13"]
 PLUGIN_LICENSE = "MIT"
 PLUGIN_LICENSE_URL = "https://opensource.org/license/mit"
@@ -38,13 +39,14 @@ from picard.ui.options import OptionsPage, register_options_page
 from picard.util import thread
 from PyQt5 import QtWidgets
 
-from ._core import Outcome, find_embedder, neighbour_html, neighbours, process
-from .clapback_client import DEFAULT_BASE_URL, Corpus, mint_client_id
+from ._core import UNSET, Outcome, best_key, find_embedder, neighbour_html, neighbours, process
+from .clapback_client import DEFAULT_BASE_URL, Corpus, CorpusError, mint_client_id
 
 # Hidden variables, so they show in the metadata panel and are usable in scripts
 # without ever being written to a tag.
 STATUS_VAR = "~clapback_status"
 NAMED_VAR = "~clapback_named"
+NAMED_ACOUSTID_VAR = "~clapback_named_acoustid"
 
 OPT_URL = "clapback_url"
 OPT_CONTRIBUTE = "clapback_contribute"
@@ -98,6 +100,9 @@ def _job(file) -> dict:
         "fingerprint": _fingerprint_of(file),
         "recording_mbid": file.metadata.get("musicbrainz_recordingid") or None,
         "already_named": file.metadata.get(NAMED_VAR) or None,
+        # Picard sets this after an AcoustID scan; `ADR-0019` point 6.
+        "acoustid_track_id": file.metadata.get("acoustid_id") or None,
+        "already_named_acoustid": file.metadata.get(NAMED_ACOUSTID_VAR) or None,
     }
 
 
@@ -163,6 +168,8 @@ def _apply(tagger, result=None, error=None):
         file.metadata[STATUS_VAR] = outcome.line
         if outcome.named:
             file.metadata[NAMED_VAR] = outcome.named
+        if outcome.named_acoustid:
+            file.metadata[NAMED_ACOUSTID_VAR] = outcome.named_acoustid
         file.update()
         counts[outcome.status] = counts.get(outcome.status, 0) + 1
     _status(tagger, "Clapback: " + " · ".join(f"{k} {v}" for k, v in sorted(counts.items())))
@@ -172,8 +179,27 @@ def _process_jobs(jobs: list[dict], contribute: bool, client_id: str) -> list[tu
     """Worker thread: the contract, per file, in order. No Qt here."""
     corpus = _corpus()
     embedder = find_embedder() if contribute else None
+    pipeline = embedder.PIPELINE_VERSION if embedder else None
+    # The whole selection in one go, a hundred keys a request (`ADR-0015`):
+    # each file by its recording id, else its AcoustID id, else its hash. A
+    # file whose id missed is then asked by hash inside `process`.
+    keys = {
+        i: best_key(
+            fingerprint=j["fingerprint"],
+            recording_mbid=j["recording_mbid"],
+            acoustid_track_id=j["acoustid_track_id"],
+        )
+        for i, j in enumerate(jobs)
+    }
+    prefetched: dict[int, object] = {}
+    try:
+        asked = [(i, k) for i, k in keys.items() if k is not None]
+        for (i, _), (_, row) in zip(asked, corpus.lookup_many([k for _, k in asked], pipeline)):
+            prefetched[i] = row
+    except CorpusError:
+        prefetched = {}  # `process` will ask, and report the corpus as unreachable itself
     out = []
-    for job in jobs:
+    for i, job in enumerate(jobs):
         outcome = process(
             corpus,
             fingerprint=job["fingerprint"],
@@ -183,6 +209,9 @@ def _process_jobs(jobs: list[dict], contribute: bool, client_id: str) -> list[tu
             client_id=lambda: client_id,
             embedder=embedder,
             already_named=job["already_named"],
+            acoustid_track_id=job["acoustid_track_id"],
+            already_named_acoustid=job["already_named_acoustid"],
+            prefetched=prefetched.get(i, UNSET),
         )
         out.append((job, outcome))
     return out
@@ -300,8 +329,10 @@ class ClapbackOptionsPage(OptionsPage):
         note = QtWidgets.QLabel(
             "<p><b>What leaves the machine, per file, only when Contribute is on:</b> a one-way "
             "SHA256 of the AcoustID fingerprint; a 512-float vector when one is computed here; "
-            "and the MusicBrainz recording id, which tells the commons which recording you hold. "
-            "Never audio, never paths, never other tags. Everything sent is dedicated to the "
+            "and the MusicBrainz recording id and AcoustID track id Picard knows, which tell the "
+            "commons which recording you hold — a recording id is a title and an artist one "
+            "public MusicBrainz call away. Never audio, never paths, never other tags. "
+            "Everything sent is dedicated to the "
             "public domain under CC0 1.0, like every other row in the corpus, and may be "
             "republished in its public exports.</p>"
             f"<p>{mode}</p>"

@@ -47,10 +47,30 @@ class Outcome:
     fingerprint_hash: str | None = None
     #: The recording id the commons now has from this install, if any.
     named: str | None = None
+    #: The AcoustID track id it now has from this install, if any (`ADR-0019` point 6).
+    named_acoustid: str | None = None
 
     @property
     def line(self) -> str:
         return f"{self.status} — {self.detail}" if self.detail else self.status
+
+
+#: `process(prefetched=...)`'s "nothing was prefetched; look it up yourself".
+UNSET = object()
+
+
+def best_key(*, fingerprint: str | None, recording_mbid: str | None, acoustid_track_id: str | None):
+    """The one key a file is asked for by in a batch lookup: its recording id if
+    it has one, else its AcoustID track id, else its fingerprint hash
+    (`ADR-0019` point 3 — the ids are the same on every fingerprinting path;
+    the hash may not be). `None` for a file with no fingerprint."""
+    mbid = (recording_mbid or "").strip().lower() or None
+    acoustid = (acoustid_track_id or "").strip().lower() or None
+    if mbid:
+        return mbid
+    if acoustid:
+        return ("acoustid", acoustid)
+    return hash_fingerprint(fingerprint) if fingerprint else None
 
 
 def process(
@@ -63,6 +83,9 @@ def process(
     client_id: Callable[[], str],
     embedder: Embedder | None,
     already_named: str | None = None,
+    acoustid_track_id: str | None = None,
+    already_named_acoustid: str | None = None,
+    prefetched: Any = UNSET,
 ) -> Outcome:
     """Look up; name if we can; embed and contribute only if asked and able.
 
@@ -72,6 +95,13 @@ def process(
     the one write that is safe to repeat — the endpoint is idempotent and touches
     no count — so a track the corpus already holds still gets named.
 
+    The lookup is by recording id first, then AcoustID track id, then the hash
+    (`ADR-0019` point 3): the ids are the same on every fingerprinting path and
+    the hash may not be, so a recording the commons holds under another install's
+    key is still found. `prefetched` is the batch's answer for this file's
+    `best_key` (`ADR-0015`), when the caller asked for the whole set at once; a
+    miss on an id still falls through to the hash.
+
     `client_id` is a callable so that an id is minted on the first contribution
     and never before (`ADR-0004` point 2): a user who only ever looks up is never
     assigned one.
@@ -80,26 +110,40 @@ def process(
         return Outcome("unfingerprinted", "scan the file first (Picard computes the fingerprint)")
     key = hash_fingerprint(fingerprint)
     mbid = (recording_mbid or "").strip().lower() or None
+    acoustid = (acoustid_track_id or "").strip().lower() or None
 
     pipeline = embedder.PIPELINE_VERSION if embedder else None
     try:
-        row = corpus.lookup(key, pipeline)
+        row = None if prefetched is UNSET else prefetched
+        if prefetched is UNSET:
+            if mbid:
+                row = corpus.lookup(recording_mbid=mbid, pipeline_version=pipeline)
+            if row is None and acoustid:
+                row = corpus.lookup(acoustid_track_id=acoustid, pipeline_version=pipeline)
+        if row is None and (mbid or acoustid or prefetched is UNSET):
+            row = corpus.lookup(key, pipeline)
     except CorpusError as exc:
         return Outcome("error", f"corpus unreachable: {exc}", key)
 
     if row is not None:
-        named = None
-        if contribute and mbid and already_named != mbid:
+        # The row may live under another path's key; the claim goes on it.
+        claim_mbid = mbid if contribute and mbid and already_named != mbid else None
+        claim_acoustid = acoustid if contribute and acoustid and already_named_acoustid != acoustid else None
+        if claim_mbid or claim_acoustid:
             try:
-                corpus.claim(fingerprint_hash=key, recording_mbid=mbid, client_id=client_id())
+                corpus.claim(
+                    fingerprint_hash=row.get("fingerprint_hash", key),
+                    client_id=client_id(),
+                    recording_mbid=claim_mbid,
+                    acoustid_track_id=claim_acoustid,
+                )
             except CorpusError as exc:
                 return Outcome("found", f"held by the commons; not named ({exc})", key)
-            named = mbid
         n = row.get("contributor_count", 1)
         detail = f"held by the commons, {n} contribution{'s' if n != 1 else ''}"
-        if named:
+        if claim_mbid or claim_acoustid:
             detail += "; named by you"
-        return Outcome("found", detail, key, named)
+        return Outcome("found", detail, key, claim_mbid, claim_acoustid)
 
     if not contribute:
         return Outcome("absent", "not in the commons; contribution is off", key)
@@ -120,10 +164,14 @@ def process(
             pipeline_version=embedder.PIPELINE_VERSION,
             client_id=client_id(),
             recording_mbid=mbid,
+            acoustid_track_id=acoustid,
         )
     except CorpusError as exc:
         return Outcome("error", f"computed, not contributed: {exc}", key)
-    return Outcome("contributed", "sent to the commons" + (" with its recording id" if mbid else ""), key, mbid)
+    ids = " with its " + " and ".join(
+        n for n, v in (("recording id", mbid), ("AcoustID id", acoustid)) if v
+    ) if (mbid or acoustid) else ""
+    return Outcome("contributed", "sent to the commons" + ids, key, mbid, acoustid)
 
 
 @dataclass(frozen=True)

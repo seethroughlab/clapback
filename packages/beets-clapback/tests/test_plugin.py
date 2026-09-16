@@ -65,20 +65,46 @@ class FakeCorpus:
     neighbours: list[dict] = []  # noqa: RUF012
     unreachable = False
 
+    #: What the corpus holds: (key, pipeline) -> vector, where a key is a hash,
+    #: an MBID, or ("acoustid", id). A row found by id reports the hash it lives
+    #: under, as the real corpus does (`ADR-0019` point 3).
+    def _row(self, k, pv):
+        if (k, pv) not in FakeCorpus.holds:
+            return None
+        v = FakeCorpus.holds[(k, pv)]
+        h = k if isinstance(k, str) and len(k) == 64 else FakeCorpus.hash_of.get(k, "ee" * 32)
+        return {"fingerprint_hash": h, "embedding": v}
+
+    hash_of: dict = {}  # noqa: RUF012 — id key -> the hash its row lives under
+
     def lookup(self, h, pv):
         FakeCorpus.log.append(("lookup", h, pv))
         if FakeCorpus.unreachable:
             raise plug.CorpusError("down")
-        return {"embedding": FakeCorpus.holds[(h, pv)]} if (h, pv) in FakeCorpus.holds else None
+        return self._row(h, pv)
+
+    def lookup_many(self, keys, pv=None, *, vectors=True):
+        if FakeCorpus.unreachable:
+            raise plug.CorpusError("down")
+        for k in keys:
+            FakeCorpus.log.append(("lookup", k, pv))
+            yield k, self._row(k, pv)
 
     def contribute(self, **kw):
         FakeCorpus.log.append(("contribute", kw["fingerprint_hash"], kw["pipeline_version"]))
         FakeCorpus.last_kw = kw
         return "contributed"
 
+    def contribute_many(self, rows):
+        for kw in rows:
+            if FakeCorpus.unreachable:
+                raise plug.CorpusError("down")
+            self.contribute(**kw)
+            yield {"fingerprint_hash": kw["fingerprint_hash"], "status": "created", "code": 201}
+
     def claim(self, **kw):
-        FakeCorpus.log.append(("claim", kw["fingerprint_hash"], kw["recording_mbid"]))
-        return {"status": "claimed", "recording_mbid": kw["recording_mbid"], "recording_claims": 1}
+        FakeCorpus.log.append(("claim", kw["fingerprint_hash"], kw.get("recording_mbid"), kw.get("acoustid_track_id")))
+        return {"status": "claimed", "recording_mbid": kw.get("recording_mbid"), "recording_claims": 1}
 
     def similar(self, vector, *, limit=10, pipeline_version=None):
         FakeCorpus.log.append(("similar", limit, pipeline_version))
@@ -97,6 +123,7 @@ class ClapbackHarness(PluginTestHelper):
         # one after beets is up and before it is torn down.
         self.embed = FakeEmbed()
         FakeCorpus.holds, FakeCorpus.log, FakeCorpus.unreachable = {}, [], False
+        FakeCorpus.hash_of = {}
         FakeCorpus.neighbours = []
         monkeypatch.setattr(plug, "_embedder", lambda: self.embed)
         monkeypatch.setattr(plug, "Corpus", FakeCorpus)
@@ -272,7 +299,10 @@ class TestNamingTheRecording(ClapbackHarness):
         FakeCorpus.holds[(plug.hash_fingerprint(RAW_FP), PIPELINE)] = _unit(3)
         self._run(contribute=True)
         t.load()
-        assert self._kinds() == ["lookup", "claim"]
+        # By id first (`ADR-0019` point 3), which nobody has claimed; then by
+        # hash, which hits; then the claim on the row that was found.
+        assert self._kinds() == ["lookup", "lookup", "claim"]
+        assert [k for _, k, *_ in FakeCorpus.log[:2]] == [MBID, plug.hash_fingerprint(RAW_FP)]
         assert "contribute" not in self._kinds()
         assert t.clapback_named == MBID
         assert self.embed.calls == []
@@ -300,6 +330,59 @@ class TestNamingTheRecording(ClapbackHarness):
         self._run(contribute=True)
         assert FakeCorpus.log == [], "named once; a second run has nothing to say"
 
+
+
+class TestTheIdsATrackHolds(ClapbackHarness):
+    """`ADR-0019` points 3 and 6: a track that carries a recording id or an
+    AcoustID track id is looked up by that first, and both go out with the
+    vector or as claims."""
+
+    ACOUSTID = "9ff43b6a-4f16-427c-93c2-92307ca505e0"
+
+    def test_a_recording_id_finds_a_row_keyed_by_another_path(self):
+        """The corpus holds this recording under a hash that is not ours — the
+        other fingerprinting path's — and the id finds it anyway."""
+        t = self._track("theirs", mb_trackid=MBID)
+        FakeCorpus.holds[(MBID, PIPELINE)] = _unit(3)
+        FakeCorpus.hash_of[MBID] = "ab" * 32
+        self._run()
+        t.load()
+        assert t.clapback_status == "found"
+        assert self._kinds() == ["lookup"] and FakeCorpus.log[0][1] == MBID
+        assert self.embed.calls == []
+        assert t.clapback_hash == plug.hash_fingerprint(RAW_FP)  # our key, not theirs
+
+    def test_the_acoustid_id_is_the_key_when_there_is_no_mbid(self):
+        t = self._track("t", acoustid_id=self.ACOUSTID)
+        self._run()
+        t.load()
+        assert FakeCorpus.log[0][1] == ("acoustid", self.ACOUSTID)
+        assert t.clapback_status == "local"
+
+    def test_both_ids_go_out_with_the_vector_and_are_remembered(self):
+        t = self._track("t", mb_trackid=MBID, acoustid_id=self.ACOUSTID)
+        self._run(contribute=True)
+        t.load()
+        kw = FakeCorpus.last_kw
+        assert (kw["recording_mbid"], kw["acoustid_track_id"]) == (MBID, self.ACOUSTID)
+        assert (t.clapback_named, t.clapback_named_acoustid) == (MBID, self.ACOUSTID)
+
+    def test_a_hit_is_claimed_with_both_ids_on_the_row_that_was_found(self):
+        t = self._track("theirs", mb_trackid=MBID, acoustid_id=self.ACOUSTID)
+        FakeCorpus.holds[(MBID, PIPELINE)] = _unit(3)
+        FakeCorpus.hash_of[MBID] = "ab" * 32
+        self._run(contribute=True)
+        t.load()
+        claim = next(e for e in FakeCorpus.log if e[0] == "claim")
+        assert claim == ("claim", "ab" * 32, MBID, self.ACOUSTID)
+        assert t.clapback_named_acoustid == self.ACOUSTID
+
+    def test_a_library_is_contributed_by_the_hundred(self):
+        for i in range(130):
+            self._track(f"t{i}", fp=RAW_FP + str(i))
+        self._run(contribute=True)
+        assert self._kinds().count("contribute") == 130
+        assert all(t.clapback_status == "contributed" for t in self.lib.items())
 
 
 class TestWhatSoundsLikeThis(ClapbackHarness):

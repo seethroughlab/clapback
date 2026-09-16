@@ -89,9 +89,15 @@ Implementation:
   or neither. It is `GET /v1/recordings/{mbid}` — no server change. The rule "by recording if
   you hold one, by hash otherwise, contribute under your hash either way" is in the docstring,
   the README and the module docstring, and a test pins the wording. The Picard copy is synced.
-  **Owed:** the two plug-ins passing the id they already hold, each a release — beets'
-  `mb_trackid` at `beetsplug/clapback.py`, Picard's `musicbrainz_recordingid` in `_core.py` —
-  batched with their `ADR-0015` `lookup_many` adoption so each is one release, not two.
+  **The plug-ins followed on 2026-09-16** (`beets-clapback` 0.3.0, Picard plugin 0.2.0): both
+  look up by the MusicBrainz recording id first, then the AcoustID track id, then the hash
+  (`best_key` in Picard's `_core.py`; the key list in beets' `_process`), both send both ids
+  with a contribution and claim both on a row found under another path's key, and both
+  remember the AcoustID claim beside the MBID one (`clapback_named_acoustid`,
+  `~clapback_named_acoustid`). A whole selection is looked up through `lookup_many`; a file
+  whose id missed is asked by hash alone, one cheap request. beets contributes through
+  `contribute_many`; Picard, which contributes as it scans, stays on the single call as
+  `ADR-0016` point 6 says. The CLI, which holds no ids, moved to both batch calls (0.2.0).
 
 Extends [ADR-0010](ADR-0010-the-corpus-key-is-a-function-of-the-audio.md),
 [ADR-0008](ADR-0008-the-corpus-serves-agreement-not-a-verdict.md) and

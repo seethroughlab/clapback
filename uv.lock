@@ -206,7 +206,7 @@ wheels = [
 
 [[package]]
 name = "beets-clapback"
-version = "0.2.1"
+version = "0.3.0"
 source = { editable = "packages/beets-clapback" }
 dependencies = [
     { name = "beets" },
@@ -488,7 +488,7 @@ wheels = [
 
 [[package]]
 name = "clapback-cli"
-version = "0.1.2"
+version = "0.2.0"
 source = { editable = "packages/cli" }
 dependencies = [
     { name = "clapback-client" },

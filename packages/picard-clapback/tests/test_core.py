@@ -27,18 +27,31 @@ class ScriptedCorpus:
         self.lookups: list[tuple[str, str | None]] = []
         self.similar_calls: list[dict] = []
 
-    def lookup(self, key, pipeline=None):
+    def lookup(self, key=None, pipeline=None, *, recording_mbid=None, acoustid_track_id=None, pipeline_version=None):
+        """Rows are keyed by hash, by MBID, or by ("acoustid", id), as the real
+        corpus answers each kind of key (`ADR-0019` points 3 and 6)."""
         from picard.plugins.clapback.clapback_client import CorpusError
 
         if self.down:
             raise CorpusError("https://corpus.invalid is unreachable")
-        self.lookups.append((key, pipeline))
-        row = self.rows.get(key)
+        pipeline = pipeline if pipeline is not None else pipeline_version
+        k = recording_mbid or (("acoustid", acoustid_track_id) if acoustid_track_id else key)
+        self.lookups.append((k, pipeline))
+        row = self.rows.get(k)
         if row is None:
             return None
         if pipeline is not None and row.get("pipeline_version") != pipeline:
             return None
         return row
+
+    def lookup_many(self, keys, pipeline=None, *, vectors=True):
+        for k in keys:
+            if isinstance(k, tuple):
+                yield k, self.lookup(acoustid_track_id=k[1], pipeline=pipeline)
+            elif len(k) == 36:
+                yield k, self.lookup(recording_mbid=k, pipeline=pipeline)
+            else:
+                yield k, self.lookup(k, pipeline)
 
     def claim(self, **kw):
         self.claims.append(kw)
@@ -92,12 +105,12 @@ class TestLookupFirst:
     def test_lookup_only_mode_asks_by_any_pipeline(self, core, key):
         c = ScriptedCorpus({key: {"embedding": [0.1] * 512, "contributor_count": 1, "pipeline_version": "other"}})
         assert run(core, c).status == "found"
-        assert c.lookups == [(key, None)]
+        assert c.lookups == [(MBID, None), (key, None)]  # by id first, then by hash
 
     def test_with_an_embedder_the_lookup_is_by_its_pipeline(self, core, key):
         c = ScriptedCorpus()
         run(core, c, embedder=FakeEmbedder(), contribute=True)
-        assert c.lookups == [(key, PIPELINE)]
+        assert c.lookups == [(MBID, PIPELINE), (key, PIPELINE)]
 
     def test_no_fingerprint_means_nothing_is_asked(self, core):
         c = ScriptedCorpus()
@@ -113,7 +126,9 @@ class TestNaming:
     def test_a_held_row_is_named_under_contribute(self, core, key):
         c = ScriptedCorpus({key: {"embedding": [], "contributor_count": 1, "pipeline_version": PIPELINE}})
         out = run(core, c, contribute=True)
-        assert c.claims == [{"fingerprint_hash": key, "recording_mbid": MBID, "client_id": "install-1"}]
+        assert c.claims == [
+            {"fingerprint_hash": key, "recording_mbid": MBID, "acoustid_track_id": None, "client_id": "install-1"}
+        ]
         assert out.named == MBID and "named by you" in out.detail
         assert c.contributions == []
 
@@ -179,6 +194,58 @@ class TestContributing:
 
         out = run(core, ScriptedCorpus(), contribute=True, embedder=Bad())
         assert out.status == "error" and "decode failed" in out.detail
+
+
+class TestTheIdsAFileHolds:
+    """`ADR-0019` points 3 and 6: by recording id first, then AcoustID id, then
+    hash; both ids sent; a batch's prefetched answer used when given."""
+
+    ACOUSTID = "9ff43b6a-4f16-427c-93c2-92307ca505e0"
+
+    def test_a_recording_id_finds_a_row_under_another_paths_key(self, core, key):
+        theirs = "ab" * 32
+        row = {"fingerprint_hash": theirs, "embedding": [], "contributor_count": 1, "pipeline_version": PIPELINE}
+        c = ScriptedCorpus({MBID: row})
+        out = run(core, c, contribute=True)
+        assert out.status == "found" and out.fingerprint_hash == key  # our key in the outcome...
+        assert c.claims[0]["fingerprint_hash"] == theirs  # ...their row gets the claim
+        assert c.lookups == [(MBID, None)]
+
+    def test_the_acoustid_id_is_asked_after_the_mbid_and_before_the_hash(self, core, key):
+        c = ScriptedCorpus()
+        run(core, c, acoustid_track_id=self.ACOUSTID)
+        assert c.lookups == [(MBID, None), (("acoustid", self.ACOUSTID), None), (key, None)]
+
+    def test_both_ids_go_out_with_the_vector(self, core, key):
+        c, e = ScriptedCorpus(), FakeEmbedder()
+        out = run(core, c, contribute=True, embedder=e, acoustid_track_id=self.ACOUSTID)
+        (sent,) = c.contributions
+        assert (sent["recording_mbid"], sent["acoustid_track_id"]) == (MBID, self.ACOUSTID)
+        assert (out.named, out.named_acoustid) == (MBID, self.ACOUSTID)
+        assert "recording id and AcoustID id" in out.detail
+
+    def test_a_prefetched_hit_is_used_without_asking_again(self, core, key):
+        c = ScriptedCorpus()
+        row = {"fingerprint_hash": key, "embedding": [], "contributor_count": 2, "pipeline_version": PIPELINE}
+        out = run(core, c, prefetched=row)
+        assert out.status == "found" and c.lookups == []
+
+    def test_a_prefetched_miss_on_an_id_still_asks_by_hash(self, core, key):
+        c = ScriptedCorpus({key: {"embedding": [], "contributor_count": 1, "pipeline_version": PIPELINE}})
+        out = run(core, c, prefetched=None)
+        assert out.status == "found" and c.lookups == [(key, None)]
+
+    def test_a_prefetched_miss_on_a_hash_key_is_final(self, core, key):
+        c = ScriptedCorpus()
+        out = run(core, c, recording_mbid=None, prefetched=None)
+        assert out.status == "absent" and c.lookups == []
+
+    def test_best_key_prefers_the_ids(self, core, key):
+        assert core.best_key(fingerprint=FP, recording_mbid=MBID, acoustid_track_id=self.ACOUSTID) == MBID
+        by_acoustid = core.best_key(fingerprint=FP, recording_mbid=None, acoustid_track_id=self.ACOUSTID)
+        assert by_acoustid == ("acoustid", self.ACOUSTID)
+        assert core.best_key(fingerprint=FP, recording_mbid=None, acoustid_track_id=None) == key
+        assert core.best_key(fingerprint=None, recording_mbid=None, acoustid_track_id=None) is None
 
 
 class TestNeighbours:

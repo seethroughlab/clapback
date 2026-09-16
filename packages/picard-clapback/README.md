@@ -19,10 +19,13 @@ holds `clapback/__init__.py`.
 
 Select tracks or files, right-click:
 
-- **Clapback: look up in the commons…** — per file: does the commons hold this recording? The
-  answer lands in the metadata panel as `~clapback_status`. With *Contribute* on, a held
-  recording is **named** with its MusicBrainz recording id, and one the commons lacks is embedded
-  here and sent — if `clapback-embed` is installed.
+- **Clapback: look up in the commons…** — for the selection, a hundred files a request: does
+  the commons hold this recording? A file is asked for by its MusicBrainz recording id first, then
+  its AcoustID track id, then its fingerprint hash — the ids are the same on every fingerprinting
+  path and the hash is not, so a recording the commons holds under another install's key is still
+  found. The answer lands in the metadata panel as `~clapback_status`. With *Contribute* on, a held
+  recording is **named** with the ids Picard knows (`~clapback_named`, `~clapback_named_acoustid`),
+  and one the commons lacks is embedded here and sent — if `clapback-embed` is installed.
 - **Clapback: what sounds like this…** — the nearest recordings in the commons, across every
   library it holds. A named neighbour is a MusicBrainz link; one nobody has named yet is shown as
   a hash, because it is one.
@@ -49,10 +52,11 @@ reference pipeline identity. The options page says which mode you are in.
 ## What leaves the machine
 
 Nothing until *Contribute* is on. Then, per file: a **one-way SHA256 of the AcoustID fingerprint**;
-a **512-float vector** when one is computed here; and the **MusicBrainz recording id**, which tells
-the commons which recording you hold. Never audio, never paths, never other tags. The id goes out
-under the same switch as the vector because it is the larger disclosure of the two, and the
-options page says so where the switch is. Everything sent is dedicated to the public domain under CC0 1.0, like every other row in the corpus, and may be republished in its public exports.
+a **512-float vector** when one is computed here; and the **MusicBrainz recording id** and
+**AcoustID track id** Picard knows, which tell the commons which recording you hold — a recording
+id is a title and an artist one public MusicBrainz call away, so a named row is not anonymous.
+Never audio, never paths, never other tags. The ids go out under the same switch as the vector
+because they are the larger disclosure, and the options page says so where the switch is. Everything sent is dedicated to the public domain under CC0 1.0, like every other row in the corpus, and may be republished in its public exports.
 
 The first contribution mints a random client id — a UUID, derived from nothing about you or your
 machine — and keeps it in Picard's settings. It lets the commons tell two contributions apart from

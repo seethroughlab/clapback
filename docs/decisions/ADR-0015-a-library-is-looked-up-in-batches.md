@@ -32,9 +32,14 @@ Implementation:
   vectors=True)` types keys by shape (64 hex or a UUID), chunks at 100, honours `Retry-After`
   (capped at 120 s) before the fixed delays, and refuses a short answer as an error. Client
   0.3.0. `tests/test_batch_lookup.py` on the server, `TestLookingUpALibrary` in the client.
-- Owed: the plug-ins' whole-library passes moving to `lookup_many` (Follow-up; batched with
-  their `ADR-0019` point 3 id lookups, one release each), and the post-deploy load measurement
-  the Tradeoff asks for.
+- **The plug-ins adopted it on 2026-09-16** (`beets-clapback` 0.3.0, Picard 0.2.0,
+  `clapback-cli` 0.2.0), one key per track — the recording id, else the AcoustID id, else
+  the hash — with a per-track hash lookup only for an id that missed. **One key per track,
+  deliberately:** at 300 keys a minute, sending every key a track holds would make the batch
+  slower than the single route it replaces, because the single route's window is per URL and
+  a scan never reaches it (above). Which raises the question this record's point 3 did not
+  foresee: the batch limit is now the *stricter* read path. It is left at 300 pending the
+  post-deploy load measurement the Tradeoff asks for, which is still owed.
 
 Extends [ADR-0009](ADR-0009-the-tool-is-useful-before-the-corpus-is.md) point 6 and
 [ADR-0011](ADR-0011-the-commons-is-what-other-tools-plug-into.md) point 2. One of the five records

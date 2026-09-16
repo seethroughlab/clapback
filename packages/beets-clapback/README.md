@@ -32,13 +32,20 @@ if so take it — the model does not run. If not, embed locally with
 [`clapback-embed`](https://pypi.org/project/clapback-embed/), keep the vector, and contribute it
 back only when `contribute: yes`.
 
-Two flexible attributes land on each item, so you can query them like anything else:
+The asking is done for the whole library at once, a hundred tracks a request, and a track that
+carries a MusicBrainz recording id (`mb_trackid`) or an AcoustID track id (`acoustid_id`) is asked
+for by that first: the fingerprint hash differs between fingerprinting paths on about half of CD
+audio, and the id does not, so a recording the commons holds under somebody else's key is still
+found. Contributions go out a hundred at a time too, every guarantee per row.
+
+Flexible attributes land on each item, so you can query them like anything else:
 
 | field | values |
 |---|---|
 | `clapback_hash` | the corpus key — SHA256 of the fingerprint |
 | `clapback_status` | `found` · `contributed` · `local` · `unfingerprinted` · `unembedded` |
 | `clapback_named` | the MusicBrainz recording id this install has told the commons about |
+| `clapback_named_acoustid` | the AcoustID track id it has told the commons about, when `chroma` stored one |
 
 ```bash
 beet ls clapback_status:local        # embedded here, not yet in the commons
@@ -78,12 +85,15 @@ rather than hidden. The more people contribute with `mb_trackid`, the fewer of t
 ## What leaves the machine
 
 Nothing until `contribute: yes`. Then, per track: a 512-float vector and a one-way hash for
-recordings the commons did not already hold, and — when the track has one — its **MusicBrainz
-recording id** (`mb_trackid`), for every track. **Never audio, never paths, never other tags.**
-The hash cannot be reversed into the fingerprint, and the fingerprint is not the audio.
+recordings the commons did not already hold, and — when the track has them — its **MusicBrainz
+recording id** (`mb_trackid`) and its **AcoustID track id** (`acoustid_id`), for every track.
+**Never audio, never paths, never other tags.** The hash cannot be reversed into the fingerprint,
+and the fingerprint is not the audio.
 
-The recording id is what lets the commons tell somebody else what their nearest neighbour is
-called. It also tells the commons operator which recordings you hold. That is why it goes out
+The ids are what let the commons tell somebody else what their nearest neighbour is called, and
+what let it recognise your recording under another install's key. A recording id is a title and
+an artist one public MusicBrainz call away, so a named row is not anonymous: it tells the commons
+operator, and anyone reading the public export, which recordings you hold. That is why it goes out
 under the same switch as the vector and not silently — turning `contribute` on is the consent for
 both, and this paragraph is where that is said. Everything sent is dedicated to the public domain under CC0 1.0, like every other row in the corpus, and may be republished in its public exports.
 
@@ -99,7 +109,7 @@ clapback:
   url: https://clapback.seethroughlab.com
   contribute: no     # send vectors the commons lacks
   auto: no           # run on every import (embedding is minutes per album; off by default)
-  pace: 0.15         # seconds between contributions
+  pace: 0.15         # seconds between batches of contributions
 ```
 
 ## Why this exists

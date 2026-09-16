@@ -134,7 +134,7 @@ def cmd_duplicates(args: argparse.Namespace) -> int:
 
 #: How long to wait between writes. The server rate-limits contributions and the
 #: client backs off on 429; pacing just means it rarely has to.
-CONTRIBUTE_PACE_SECONDS = 0.15
+CONTRIBUTE_PACE_SECONDS = 0.15  # between batches of a hundred, since `ADR-0016`
 
 
 def cmd_contribute(args: argparse.Namespace) -> int:
@@ -193,14 +193,17 @@ def cmd_contribute(args: argparse.Namespace) -> int:
     client_id = store.ensure_client_id()
     print(f"client:   {client_id}\n")
 
-    sent = present = unfingerprintable = missing = 0
+    sent = present = refused = unfingerprintable = missing = 0
     try:
+        # 1. Every key first — fingerprints cost a subprocess each and are
+        #    cached on the entry, so an interrupted run keeps them.
+        #
         # `entries` is a prefix of `store.entries`, so the loop index addresses
         # the matching row of `store.vectors` directly. Looking the entry up by
         # value instead would be quadratic, and would pick the wrong vector for
         # two entries that happen to compare equal.
+        keyed: list[int] = []
         for idx, entry in enumerate(entries):
-            n = idx + 1
             if not entry.fingerprint_hash:
                 if not Path(entry.path).exists():
                     missing += 1
@@ -216,33 +219,57 @@ def cmd_contribute(args: argparse.Namespace) -> int:
                         sys.exit(f"\n{exc}")
                     unfingerprintable += 1
                     continue
+                if (idx + 1) % 25 == 0:
+                    store.save()
+            keyed.append(idx)
+        store.save()
 
-            try:
-                if corpus.has(entry.fingerprint_hash, pipeline_version):
-                    present += 1
-                    continue
-                corpus.contribute(
-                    fingerprint_hash=entry.fingerprint_hash,
-                    embedding=[float(x) for x in store.vectors[idx]],
-                    pipeline_version=pipeline_version,
-                    client_id=client_id,
+        # 2. Look the whole set up, a hundred keys a request (`ADR-0015`), and
+        #    offer only what the corpus lacks: a repeat POST is recorded as
+        #    agreement, and a library re-sent would be one install agreeing
+        #    with itself — the measurement `ADR-0008` rests on.
+        try:
+            held = {
+                key
+                for key, row in corpus.lookup_many(
+                    (entries[i].fingerprint_hash for i in keyed), pipeline_version, vectors=False
                 )
-                sent += 1
-                time.sleep(CONTRIBUTE_PACE_SECONDS)
-            except CorpusError as exc:
-                store.save()
-                sys.exit(f"\nstopped at {n:,}: {exc}")
+                if row is not None
+            }
+        except CorpusError as exc:
+            sys.exit(f"\nstopped before sending anything: {exc}")
+        to_send = [i for i in keyed if entries[i].fingerprint_hash not in held]
+        present = len(keyed) - len(to_send)
 
-            if n % 25 == 0:
-                # Save as we go: fingerprints cost a subprocess each, and an
-                # interrupted run must not throw that away.
-                store.save()
-                print(f"  {n:,}/{len(entries):,} · contributed {sent:,} · already there {present:,}")
+        # 3. Contribute by the hundred (`ADR-0016`): every guarantee per row, the
+        #    result per row, a refusal one row's result rather than the run's.
+        def rows():
+            for i in to_send:
+                yield {
+                    "fingerprint_hash": entries[i].fingerprint_hash,
+                    "embedding": [float(x) for x in store.vectors[i]],
+                    "pipeline_version": pipeline_version,
+                    "client_id": client_id,
+                }
+
+        try:
+            for n, result in enumerate(corpus.contribute_many(rows()), start=1):
+                if result.get("status") in ("created", "confirmed"):
+                    sent += 1
+                else:
+                    refused += 1
+                    print(f"  refused {result.get('fingerprint_hash', '')[:12]}: {result.get('detail')}")
+                if n % 100 == 0:
+                    print(f"  {n:,}/{len(to_send):,} · contributed {sent:,} · already there {present:,}")
+                    time.sleep(CONTRIBUTE_PACE_SECONDS)
+        except CorpusError as exc:
+            store.save()
+            sys.exit(f"\nstopped after {sent:,} contributed: {exc}")
     finally:
         store.save()
 
     print(
-        f"\ncontributed {sent:,} · already in corpus {present:,} · "
+        f"\ncontributed {sent:,} · already in corpus {present:,} · refused {refused:,} · "
         f"no fingerprint {unfingerprintable:,} · file gone {missing:,}"
     )
     return 0

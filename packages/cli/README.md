@@ -33,13 +33,19 @@ clapback contribute
 
 This sends the vectors — never your audio, never filenames, never your library's
 contents. A recording is identified by the SHA256 of its AcoustID fingerprint,
-which is one-way: the corpus learns that somebody has a recording without learning
-which recording it is. Everything sent is dedicated to the public domain under CC0 1.0, like every other row in the corpus, and may be republished in its public exports.
+which is one-way, and this tool sends no recording id. Be clear about what that
+does and does not hide: the corpus cannot recover a title from the hash, but if
+another contributor has already named that same hash — 89.6% of rows are named —
+the corpus knows which recording your row is. Everything sent is dedicated to the
+public domain under CC0 1.0, like every other row in the corpus, and may be
+republished in its public exports.
 
-Every track is looked up before it is offered, so re-running contributes only
-what is new. That is not politeness about bandwidth — a repeat submission is
-recorded as agreement, and one install agreeing with itself would corrupt the one
-measurement the commons exists to make.
+The whole library is looked up before anything is offered — a hundred tracks a
+request — so re-running contributes only what is new. That is not politeness about
+bandwidth: a repeat submission is recorded as agreement, and one install agreeing
+with itself would corrupt the one measurement the commons exists to make.
+Contributions go out a hundred at a time too, every guarantee per row, and a
+refused row is that row's result rather than the run's.
 
 Contributing needs `chromaprint`, and only contributing does:
 
