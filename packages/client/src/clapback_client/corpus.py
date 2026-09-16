@@ -37,6 +37,9 @@ _RETRY_DELAYS = (2.0, 5.0, 15.0)
 #: 422, not a partial answer, so the client never sends more.
 LOOKUP_BATCH = 100
 
+#: `ADR-0016` point 1: the most rows one batch contribution may carry.
+CONTRIBUTE_BATCH = 100
+
 #: The longest a `Retry-After` is honoured for. A window is a minute; anything
 #: far past that is a server telling us something other than "wait".
 _MAX_RETRY_AFTER = 120.0
@@ -325,6 +328,93 @@ class Corpus:
                 # working, not failing — stop rather than hammering it.
                 raise CorpusError("the corpus is full and is refusing writes (ADR-0004 point 9)")
             raise CorpusError(f"contribute returned {status}: {payload}")
+        raise CorpusError("rate limited repeatedly; try again later")
+
+    def contribute_many(self, rows: Iterable[dict]) -> Iterator[dict]:
+        """Contribute a library: one result per row, in order.
+
+        `ADR-0016`. Each row is the keyword arguments `contribute` takes —
+        `fingerprint_hash`, `embedding`, `pipeline_version`, `client_id`, and
+        optionally `recording_mbid`, `clap_model_version`, `analysis_version` —
+        and `client_id` is required on every one: a contribution nobody can
+        confirm is admissible one at a time and not by the hundred (point 5).
+        Sent in batches of 100 to `POST /v1/embeddings/batch`, which runs every
+        per-row guarantee per row in the same code the single endpoint uses.
+
+        **Look up first, as with `contribute`.** A batch does not change the
+        rule: a row the corpus already holds from this pipeline is recorded as
+        agreement, and a library re-sent by the hundred manufactures a hundred
+        agreements of one install with itself. `lookup_many` is the check.
+
+        Each result is `{"fingerprint_hash", "status", "code", ...}`: status
+        `created` or `confirmed` with `contributor_count`, or `refused` with the
+        `code` and `detail` the row would have got alone — 507 at the corpus
+        ceiling, 429 at this client's daily quota with `retry_after` in seconds.
+        A batch is not atomic (point 4): 97 created, 2 confirmed and 1 refused
+        is 99 rows contributed, and the client retries a refused row on its own
+        result, not the batch. A 429 for the *batch* — the per-minute row limit
+        — is waited out here, honouring `Retry-After`.
+        """
+        batch: list[dict] = []
+        for row in rows:
+            batch.append(row)
+            if len(batch) == CONTRIBUTE_BATCH:
+                yield from self._contribute_batch(batch)
+                batch = []
+        if batch:
+            yield from self._contribute_batch(batch)
+
+    def _contribute_batch(self, rows: list[dict]) -> Iterator[dict]:
+        contributions = []
+        for row in rows:
+            if not row.get("client_id"):
+                raise ValueError(
+                    "client_id is required on every row of contribute_many (ADR-0016 point 5)"
+                )
+            pipeline = row["pipeline_version"]
+            contributions.append(
+                {
+                    "fingerprint_hash": row["fingerprint_hash"],
+                    "embedding": row["embedding"],
+                    "pipeline_version": pipeline,
+                    "clap_model_version": row.get("clap_model_version") or pipeline.split("+")[0],
+                    "analysis_version": row.get("analysis_version", 1),
+                    "client_id": row["client_id"],
+                    **(
+                        {"recording_mbid": row["recording_mbid"]}
+                        if row.get("recording_mbid")
+                        else {}
+                    ),
+                }
+            )
+        body = {"contributions": contributions}
+        for delay in (*_RETRY_DELAYS, None):
+            status, payload, headers = self._request_with_headers(
+                "POST", "/v1/embeddings/batch", body
+            )
+            if status == 200:
+                results = (payload or {}).get("results", [])
+                if len(results) != len(rows):
+                    raise CorpusError(
+                        f"batch contribute answered {len(results)} of {len(rows)} rows"
+                    )
+                yield from results
+                return
+            if status == 429:
+                wait = _retry_after(headers, delay)
+                if wait is None:
+                    break
+                time.sleep(wait)
+                continue
+            if status == 422:
+                raise CorpusError(
+                    f"the corpus refused the batch as malformed: {(payload or {}).get('detail')}"
+                )
+            if status == 413:
+                raise CorpusError(
+                    "the corpus refused the batch as too large; send fewer rows per batch"
+                )
+            raise CorpusError(f"batch contribute returned {status}: {payload}")
         raise CorpusError("rate limited repeatedly; try again later")
 
     def claim(self, *, fingerprint_hash: str, recording_mbid: str, client_id: str) -> dict:

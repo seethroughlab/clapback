@@ -2,11 +2,11 @@
 
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator, model_validator
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.api.deps import DbSession
@@ -344,6 +344,59 @@ async def lookup_embedding(
     )
 
 
+_QUOTA_WINDOW = text("interval '24 hours'")
+
+
+async def _client_quota_used(db, client_id: str) -> tuple[int, datetime | None]:
+    """Rows this identifier wrote in the last 24 hours, and the oldest of them.
+
+    Created rows from `embeddings`, confirmed ones from `submission_agreement`;
+    both carry the `client_id` and both are writes. The oldest is what says
+    when the window next frees a row, for `Retry-After`.
+    """
+    since = func.now() - _QUOTA_WINDOW
+    created = await db.execute(
+        select(func.count(), func.min(Embedding.created_at)).where(
+            Embedding.client_id == client_id, Embedding.created_at > since
+        )
+    )
+    confirmed = await db.execute(
+        select(func.count(), func.min(SubmissionAgreement.recorded_at)).where(
+            SubmissionAgreement.client_id == client_id, SubmissionAgreement.recorded_at > since
+        )
+    )
+    n1, t1 = created.one()
+    n2, t2 = confirmed.one()
+    oldest = min((t for t in (t1, t2) if t is not None), default=None)
+    return int(n1 or 0) + int(n2 or 0), oldest
+
+
+async def _check_client_quota(db, client_id: str) -> None:
+    """Refuse the write with a 429 and `Retry-After` when the identifier has
+    reached `client_quota_rows_per_day` in the rolling window. Per row: a batch
+    that crosses the line is accepted up to it and refused past it."""
+    limit = settings.client_quota_rows_per_day
+    if not limit:
+        return
+    used, oldest = await _client_quota_used(db, client_id)
+    if used < limit:
+        return
+    retry_after = 3600
+    if oldest is not None:
+        now = (await db.execute(select(func.now()))).scalar_one()
+        # Both naive UTC from the database's clock; the difference is real.
+        remaining = (oldest + timedelta(hours=24)) - now.replace(tzinfo=None)
+        retry_after = max(1, int(remaining.total_seconds()) + 1)
+    raise HTTPException(
+        status_code=429,
+        detail=(
+            f"This client_id has written {used} rows in the last 24 hours, its quota of "
+            f"{limit} (ADR-0016 point 7; ADR-0004 point 9). Lookups are unaffected."
+        ),
+        headers={"Retry-After": str(retry_after)},
+    )
+
+
 async def _contribute_one(db, req: EmbeddingRequest) -> ContributeResponse:
     """One contribution, every guarantee — the unit the write path is built from.
 
@@ -371,6 +424,16 @@ async def _contribute_one(db, req: EmbeddingRequest) -> ContributeResponse:
             status_code=422,
             detail="recording_mbid needs a client_id: a claim must be attributable (ADR-0012)",
         )
+
+    # **The quota is checked before anything is written, for creations and
+    # confirmations alike.** `ADR-0004` point 9's third bound, built by
+    # `ADR-0016` point 7: a batch endpoint without it is a faster way for one
+    # identifier to reach the ceiling alone. A confirmation counts because it is
+    # a write — an agreement row and a count — and because the manufactured
+    # agreement `ADR-0008` guards against is exactly a client confirming by the
+    # ten thousand. Unattributed contributions cannot be counted and are not.
+    if req.client_id:
+        await _check_client_quota(db, req.client_id)
 
     result = await db.execute(
         select(Embedding).where(
@@ -478,6 +541,127 @@ async def contribute_embedding(
     If the embedding already exists, increments the contributor count.
     """
     return await _contribute_one(db, req)
+
+
+# --- Batch contribute: a library is contributed in batches (`ADR-0016`) ---
+
+
+#: `ADR-0016` point 1's ceiling. Over it is a 422, not a partial answer.
+CONTRIBUTE_BATCH_MAX = 100
+
+#: A hundred contributions is ~1 MB of JSON. The body limit admits that and
+#: refuses ten times it (`ADR-0016`, Consequences), in `app.middleware`.
+CONTRIBUTE_BATCH_MAX_BYTES = 10 * 1024 * 1024
+
+
+class ContributeBatchRequest(BaseModel):
+    #: Each entry is exactly an `EmbeddingRequest`. The batch is a container;
+    #: the row is the unit.
+    contributions: list[EmbeddingRequest] = Field(
+        ..., min_length=1, max_length=CONTRIBUTE_BATCH_MAX
+    )
+
+    @field_validator("contributions")
+    @classmethod
+    def _every_row_is_attributed(cls, rows: list[EmbeddingRequest]) -> list[EmbeddingRequest]:
+        # Point 5: `client_id` is required here. The single endpoint accepts a
+        # contribution without one because clients predate the field; no
+        # client predates this endpoint. A contribution nobody can confirm is
+        # admissible one at a time and not by the hundred.
+        missing = [i for i, r in enumerate(rows) if not r.client_id]
+        if missing:
+            raise ValueError(
+                f"client_id is required on every batch contribution (ADR-0016 point 5); "
+                f"missing at {missing[:5]}{'...' if len(missing) > 5 else ''}"
+            )
+        return rows
+
+
+class ContributeResult(BaseModel):
+    """One row's outcome, in the order sent: a `ContributeResponse` when the row
+    was created or confirmed, or the refusal it would have been alone."""
+
+    fingerprint_hash: str
+    status: str
+    contributor_count: int | None = None
+    #: The HTTP status the row would have got alone — 201, 429, 507, 422 — so
+    #: a client retries per row on the row's result, exactly as if it had sent
+    #: it alone.
+    code: int
+    detail: str | None = None
+    retry_after: int | None = None
+
+
+class ContributeBatchResponse(BaseModel):
+    results: list[ContributeResult]
+    created: int
+    confirmed: int
+    refused: int
+
+
+@router.post("/embeddings/batch", response_model=ContributeBatchResponse)
+async def contribute_batch(
+    request: Request, req: ContributeBatchRequest, db: DbSession
+) -> ContributeBatchResponse:
+    """Contribute up to a hundred rows in one request — `ADR-0016`.
+
+    **Every per-row guarantee runs per row, in the same code** (point 2): each
+    entry goes through `_contribute_one`, the function the single endpoint is,
+    in its own transaction. Agreement is recorded per row with the submitter's
+    `client_id`; `contributor_count` moves per row; the ceiling and the
+    per-client quota are checked per row, so a batch that crosses either is
+    accepted up to the line and refused past it, row by row, with the refusal
+    in the result. No new write code touches the tables.
+
+    **Not atomic, and says so** (point 4). A hundred rows that come back 97
+    created, 2 confirmed and 1 refused have contributed 99 rows. Rolling back
+    correct confirmations because a later row hit a bound would be evidence
+    thrown away. Retry per row, on the row's result.
+
+    **The rate limit counts rows** (point 3): a batch of a hundred spends a
+    hundred of this route's 600 per minute per address, charged after parsing.
+    """
+    charge(request, settings.contribute_batch_rate_limit, len(req.contributions), unit="row")
+    results: list[ContributeResult] = []
+    for row in req.contributions:
+        try:
+            outcome = await _contribute_one(db, row)
+            results.append(
+                ContributeResult(
+                    fingerprint_hash=row.fingerprint_hash,
+                    status=outcome.status,
+                    contributor_count=outcome.contributor_count,
+                    code=201,
+                )
+            )
+        except HTTPException as exc:
+            await db.rollback()
+            retry = (exc.headers or {}).get("Retry-After")
+            results.append(
+                ContributeResult(
+                    fingerprint_hash=row.fingerprint_hash,
+                    status="refused",
+                    code=exc.status_code,
+                    detail=str(exc.detail),
+                    retry_after=int(retry) if retry else None,
+                )
+            )
+        except Exception as exc:  # one row's failure is that row's result, not the batch's
+            await db.rollback()
+            results.append(
+                ContributeResult(
+                    fingerprint_hash=row.fingerprint_hash,
+                    status="refused",
+                    code=500,
+                    detail=f"{type(exc).__name__}: {exc}"[:200],
+                )
+            )
+    return ContributeBatchResponse(
+        results=results,
+        created=sum(r.status == "created" for r in results),
+        confirmed=sum(r.status == "confirmed" for r in results),
+        refused=sum(r.status == "refused" for r in results),
+    )
 
 
 @router.post("/similar", response_model=SimilarResponse)

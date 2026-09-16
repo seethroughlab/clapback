@@ -5,6 +5,7 @@ Revises:
 Create Date: 2026-01-15
 
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -29,20 +30,12 @@ def upgrade() -> None:
         sa.Column("analysis_version", sa.Integer(), nullable=False),
         sa.Column("clap_model_version", sa.String(100), nullable=False),
         sa.Column("embedding", Vector(512), nullable=False),
+        sa.Column("contributor_count", sa.Integer(), nullable=False, server_default="1"),
+        sa.Column("created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
         sa.Column(
-            "contributor_count", sa.Integer(), nullable=False, server_default="1"
+            "last_accessed_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
         ),
-        sa.Column(
-            "created_at", sa.DateTime(), server_default=sa.text("now()"),
-            nullable=False
-        ),
-        sa.Column(
-            "last_accessed_at", sa.DateTime(), server_default=sa.text("now()"),
-            nullable=False
-        ),
-        sa.PrimaryKeyConstraint(
-            "fingerprint_hash", "analysis_version", "clap_model_version"
-        ),
+        sa.PrimaryKeyConstraint("fingerprint_hash", "analysis_version", "clap_model_version"),
     )
 
     # Create index on last_accessed_at for cleanup queries

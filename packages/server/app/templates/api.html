@@ -285,6 +285,31 @@ query  = embed_text("dreamy ambient with piano")   # the same space</code></pre>
         which are the realistic failures; it is not a defence against a contributor who lies, and
         nothing here should be read as if it were.
     </p>
+    <pre><code>curl -X POST https://{{ host }}/v1/embeddings/batch \
+  -H 'Content-Type: application/json' \
+  -d '{"contributions": [ { ...exactly the body above... }, ... ]}'</code></pre>
+    <p class="muted">
+        <strong>A library, by the hundred.</strong> Up to 100 contributions, each exactly the
+        single body, answered one result per row in order — <code>created</code> or
+        <code>confirmed</code> with its count, or <code>refused</code> with the code and detail the
+        row would have got alone. Every guarantee runs per row in the same code the single
+        endpoint is: agreement recorded per row, the ceiling and the quota checked per row, so a
+        batch that crosses either is accepted up to the line and refused past it. <strong>Not
+        atomic</strong>, on purpose — 97 created, 2 confirmed and 1 refused is 99 rows contributed,
+        and you retry a refused row on its own result. <code>client_id</code> is required on every
+        row here: a vector nobody can confirm is admissible one at a time and not by the hundred.
+        600 rows per minute per address, counted per row; a body over 10&nbsp;MB is a
+        <code>413</code>
+        (<a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0016-a-library-is-contributed-in-batches-with-every-guarantee-kept.md">ADR-0016</a>).
+    </p>
+    <p class="muted">
+        <strong>One identifier may write 50,000 rows in a rolling 24 hours</strong> — created or
+        confirmed — which is ten percent of the corpus ceiling, so no single install can reach it
+        in a day. Past that, each write is a <code>429</code> with <code>Retry-After</code>, and
+        lookups are unaffected
+        (<a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0004-contributors-are-identified-but-not-accounts.md">ADR-0004</a>
+        point 9's third bound, built 2026-09-16).
+    </p>
 </div>
 
 <div class="card">
@@ -302,6 +327,7 @@ query  = embed_text("dreamy ambient with piano")   # the same space</code></pre>
         <tr><td><code>GET</code></td><td><code>/v1/analysis-detail/{hash}</code></td><td>open · legacy</td></tr>
         <tr><td><code>GET</code></td><td><code>/health</code>, <code>/health/db</code></td><td>open</td></tr>
         <tr><td><code>POST</code></td><td><code>/v1/embeddings</code></td><td><strong>open</strong></td></tr>
+        <tr><td><code>POST</code></td><td><code>/v1/embeddings/batch</code></td><td><strong>open</strong> · limit per row · <code>client_id</code> required</td></tr>
     </table>
     <p class="muted">
         <strong>Contribution is open.</strong> It was refused until the corpus had a way to retract a
@@ -323,9 +349,11 @@ query  = embed_text("dreamy ambient with piano")   # the same space</code></pre>
         route — a claim is a write. Measured 2026-09-16: a route with the key in its path, such as
         <code>/v1/embeddings/{hash}</code>, has one window per key, so the read limit bounds
         repeats of one key and a scan of many is bounded by round trips instead; the batch lookup
-        counts its 300 per key. Pace a backfill under the write limit, not at it: the client
-        retries three times and then gives up, and a run at the limit loses submissions silently.
-        There is no key to obtain and no plan to buy.
+        counts its 300 per key, and the batch contribute its 600 per row. Pace a single-row
+        backfill under the write limit, not at it: the client retries three times and then gives
+        up, and a run at the limit loses submissions silently; the batch calls honour
+        <code>Retry-After</code> instead. One identifier may write 50,000 rows a day. There is no
+        key to obtain and no plan to buy.
         If you need more, the corpus is a few hundred megabytes and open source — run your own.
     </p>
 </div>

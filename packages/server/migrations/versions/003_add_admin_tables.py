@@ -5,6 +5,7 @@ Revises: 002_features
 Create Date: 2026-01-16
 
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -23,10 +24,7 @@ def upgrade() -> None:
         "banned_ips",
         sa.Column("ip_address", sa.String(45), nullable=False),  # IPv6 max length
         sa.Column("reason", sa.Text(), nullable=True),
-        sa.Column(
-            "banned_at", sa.DateTime(), server_default=sa.text("now()"),
-            nullable=False
-        ),
+        sa.Column("banned_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
         sa.Column("banned_by", sa.String(100), nullable=True),
         sa.Column("is_active", sa.Boolean(), server_default="true", nullable=False),
         sa.PrimaryKeyConstraint("ip_address"),
@@ -42,14 +40,8 @@ def upgrade() -> None:
         sa.Column("lookup_hits", sa.Integer(), server_default="0", nullable=False),
         sa.Column("lookup_misses", sa.Integer(), server_default="0", nullable=False),
         # Timestamps
-        sa.Column(
-            "first_seen", sa.DateTime(), server_default=sa.text("now()"),
-            nullable=False
-        ),
-        sa.Column(
-            "last_seen", sa.DateTime(), server_default=sa.text("now()"),
-            nullable=False
-        ),
+        sa.Column("first_seen", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
+        sa.Column("last_seen", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
         # Flags
         sa.Column("flagged", sa.Boolean(), server_default="false", nullable=False),
         sa.Column("flag_reason", sa.Text(), nullable=True),

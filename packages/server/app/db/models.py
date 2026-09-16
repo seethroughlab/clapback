@@ -36,6 +36,8 @@ class Embedding(Base):
         Index("ix_embeddings_pipeline_version", "pipeline_version"),
         # A filter on the read path now rather than a key component.
         Index("ix_embeddings_analysis_version", "analysis_version"),
+        # `ADR-0016` point 7: what one identifier wrote in the last day.
+        Index("ix_embeddings_client_created", "client_id", "created_at"),
     )
 
     # The key: a recording, and what produced the vector for it.
@@ -138,6 +140,8 @@ class SubmissionAgreement(Base):
             "fingerprint_hash",
             "pipeline_version",
         ),
+        # `ADR-0016` point 7: a confirmation is a write the quota counts too.
+        Index("ix_submission_agreement_client_recorded", "client_id", "recorded_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

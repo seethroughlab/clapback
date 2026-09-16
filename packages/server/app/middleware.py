@@ -104,3 +104,31 @@ class IPBanMiddleware(BaseHTTPMiddleware):
             )
             await db.execute(stmt)
             await db.commit()
+
+
+class BodySizeLimitMiddleware(BaseHTTPMiddleware):
+    """Refuse a request body past a per-path ceiling before reading it.
+
+    `ADR-0016`'s Consequences: a hundred contributions is ~1 MB of JSON, and the
+    server must admit that and refuse ten times it. Checked on `Content-Length`
+    so an oversized batch costs a header read rather than a parse; a chunked
+    body with no length is left to the model's `max_length`, which bounds what
+    is *accepted* even if not what is *read*.
+    """
+
+    def __init__(self, app, limits: dict[str, int]) -> None:
+        super().__init__(app)
+        self._limits = limits
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        limit = self._limits.get(request.url.path)
+        if limit is not None:
+            length = request.headers.get("content-length")
+            if length is not None and length.isdigit() and int(length) > limit:
+                return JSONResponse(
+                    status_code=413,
+                    content={
+                        "detail": f"Request body over {limit} bytes; send fewer rows per batch"
+                    },
+                )
+        return await call_next(request)

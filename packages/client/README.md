@@ -97,6 +97,30 @@ a large library will be told to wait part-way; `lookup_many` honours `Retry-Afte
 and one call walks the whole library. If you want the *whole* corpus rather than your library's
 slice of it, the weekly export is the right download, not this.
 
+## Contributing a whole library
+
+`contribute` is one row per request at the commons's write limit of 30 a minute, which is the
+right pace for a tool that contributes as it analyses and five and a half hours for a library of
+10,000 vectors already computed
+([`ADR-0016`](../../docs/decisions/ADR-0016-a-library-is-contributed-in-batches-with-every-guarantee-kept.md)).
+
+```python
+for result in corpus.contribute_many(rows):     # rows: dicts of contribute()'s keyword arguments
+    if result["status"] == "refused":
+        ...   # result["code"] and result["detail"] are what the row would have got alone
+```
+
+Batches of 100 go to `POST /v1/embeddings/batch`, 600 rows a minute. **Every guarantee runs per
+row, in the same code the single endpoint uses** — agreement recorded, contributor count moved,
+the ceiling and the daily quota checked — so a batch that crosses a bound is accepted up to the
+line and refused past it, row by row. A batch is **not atomic**: 97 created, 2 confirmed and 1
+refused is 99 rows contributed, and you retry a refused row on its own result. `client_id` is
+required on every row. And **look up first, as always** — `lookup_many` is the check — because a
+library re-sent by the hundred manufactures a hundred agreements of one install with itself.
+
+One `client_id` may write 50,000 rows — created or confirmed — in a rolling 24 hours, ten percent
+of the corpus ceiling; past that each row is refused with a `retry_after`.
+
 ## Which recording is this?
 
 Every `lookup` result carries `recording_mbid` — the MusicBrainz recording id the most independent

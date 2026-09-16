@@ -125,15 +125,11 @@ def upgrade() -> None:
     # separately let two fields disagree about one fact; the client's counter is
     # useful provenance and was never a statement about comparability.
     op.drop_constraint("embeddings_pkey", "embeddings", type_="primary")
-    op.create_primary_key(
-        "embeddings_pkey", "embeddings", ["fingerprint_hash", "pipeline_version"]
-    )
+    op.create_primary_key("embeddings_pkey", "embeddings", ["fingerprint_hash", "pipeline_version"])
 
     # `analysis_version` and `clap_model_version` are now filters on the read path
     # rather than key components, and the lookup still accepts both.
-    op.create_index(
-        "ix_embeddings_analysis_version", "embeddings", ["analysis_version"]
-    )
+    op.create_index("ix_embeddings_analysis_version", "embeddings", ["analysis_version"])
 
     # `submission_agreement` records against the same identity. Point 7 already
     # guarantees a row here compares two vectors claiming one pipeline, so that is

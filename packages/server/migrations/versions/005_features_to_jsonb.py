@@ -23,13 +23,34 @@ depends_on: str | Sequence[str] | None = None
 
 # The 28 typed columns being replaced
 _FEATURE_COLUMNS = [
-    "bpm", "key", "energy", "danceability", "valence", "acousticness",
-    "instrumentalness", "speechiness", "liveness", "loudness",
-    "harmonic_complexity", "key_stability", "modal_character", "modal_confidence",
-    "swing_ratio", "syncopation", "tempo_character", "brightness",
-    "dynamic_range_db", "energy_shape", "section_count", "form_string",
-    "avg_section_length", "replaygain_track_gain", "track_peak",
-    "note_density", "interval_character", "pitch_range",
+    "bpm",
+    "key",
+    "energy",
+    "danceability",
+    "valence",
+    "acousticness",
+    "instrumentalness",
+    "speechiness",
+    "liveness",
+    "loudness",
+    "harmonic_complexity",
+    "key_stability",
+    "modal_character",
+    "modal_confidence",
+    "swing_ratio",
+    "syncopation",
+    "tempo_character",
+    "brightness",
+    "dynamic_range_db",
+    "energy_shape",
+    "section_count",
+    "form_string",
+    "avg_section_length",
+    "replaygain_track_gain",
+    "track_peak",
+    "note_density",
+    "interval_character",
+    "pitch_range",
 ]
 
 
@@ -43,17 +64,14 @@ def upgrade() -> None:
     # 2. Pack existing typed columns into the JSONB blob using a single SQL
     #    UPDATE.  build_object pairs are (key_literal, column_ref, ...).
     #    We use jsonb_strip_nulls to omit columns that were NULL.
-    pairs = ", ".join(
-        f"'{col}', {col}" for col in _FEATURE_COLUMNS
-    )
-    op.execute(
-        f"UPDATE features SET features = jsonb_strip_nulls(jsonb_build_object({pairs}))"
-    )
+    pairs = ", ".join(f"'{col}', {col}" for col in _FEATURE_COLUMNS)
+    op.execute(f"UPDATE features SET features = jsonb_strip_nulls(jsonb_build_object({pairs}))")
 
     # 3. Rows with all-NULL features end up as '{}' — that's fine.
     #    Set NOT NULL + default now that every row has a value.
     op.alter_column(
-        "features", "features",
+        "features",
+        "features",
         nullable=False,
         server_default=sa.text("'{}'::jsonb"),
     )

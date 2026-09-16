@@ -11,7 +11,7 @@ from slowapi.util import get_remote_address
 limiter = Limiter(key_func=get_remote_address)
 
 
-def charge(request: Request, limit_value: str, cost: int) -> None:
+def charge(request: Request, limit_value: str, cost: int, *, unit: str = "key") -> None:
     """Spend `cost` of a per-address limit in one go — `ADR-0015` point 3.
 
     A batch of a hundred keys spends a hundred of the lookup limit, so the limit
@@ -47,6 +47,6 @@ def charge(request: Request, limit_value: str, cost: int) -> None:
     retry_after = max(1, int(stats.reset_time - time.time()) + 1)
     raise HTTPException(
         status_code=429,
-        detail=f"Rate limit exceeded: {limit_value}, counted per key",
+        detail=f"Rate limit exceeded: {limit_value}, counted per {unit}",
         headers={"Retry-After": str(retry_after)},
     )

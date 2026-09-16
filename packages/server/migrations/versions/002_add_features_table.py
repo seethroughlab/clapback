@@ -5,6 +5,7 @@ Revises: 001_initial
 Create Date: 2026-01-15
 
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -35,16 +36,10 @@ def upgrade() -> None:
         sa.Column("liveness", sa.Float(), nullable=True),
         sa.Column("loudness", sa.Float(), nullable=True),
         # Metadata
+        sa.Column("contributor_count", sa.Integer(), nullable=False, server_default="1"),
+        sa.Column("created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False),
         sa.Column(
-            "contributor_count", sa.Integer(), nullable=False, server_default="1"
-        ),
-        sa.Column(
-            "created_at", sa.DateTime(), server_default=sa.text("now()"),
-            nullable=False
-        ),
-        sa.Column(
-            "last_accessed_at", sa.DateTime(), server_default=sa.text("now()"),
-            nullable=False
+            "last_accessed_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
         ),
         sa.PrimaryKeyConstraint("fingerprint_hash", "analysis_version"),
     )

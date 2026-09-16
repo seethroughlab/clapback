@@ -460,6 +460,83 @@ class TestLookingUpALibrary:
             list(Corpus("https://x.invalid").lookup_many(["not-a-key"]))
 
 
+class TestContributingALibrary:
+    """`ADR-0016`: contributed in batches of 100, every guarantee per row, not
+    atomic, `client_id` required, the result per row."""
+
+    def _row(self, i, **kw):
+        return {
+            "fingerprint_hash": f"{i:064x}",
+            "embedding": VECTOR,
+            "pipeline_version": PIPELINE,
+            "client_id": "c1",
+            **kw,
+        }
+
+    def test_rows_go_to_the_batch_route_shaped_like_single_contributions(self, wire):
+        wire.answer(
+            200,
+            {
+                "results": [
+                    {
+                        "fingerprint_hash": f"{0:064x}",
+                        "status": "created",
+                        "contributor_count": 1,
+                        "code": 201,
+                    },
+                    {
+                        "fingerprint_hash": f"{1:064x}",
+                        "status": "refused",
+                        "code": 507,
+                        "detail": "ceiling",
+                    },
+                ],
+                "created": 1,
+                "confirmed": 0,
+                "refused": 1,
+            },
+        )
+        got = list(
+            Corpus("https://x.invalid").contribute_many(
+                [self._row(0, recording_mbid=MBID), self._row(1)]
+            )
+        )
+        assert urlsplit(wire.requests[-1].full_url).path == "/v1/embeddings/batch"
+        sent = json.loads(wire.requests[-1].data)["contributions"]
+        assert sent[0]["clap_model_version"] == PIPELINE.split("+")[0]
+        assert sent[0]["recording_mbid"] == MBID and "recording_mbid" not in sent[1]
+        assert [r["status"] for r in got] == ["created", "refused"]
+        assert got[1]["code"] == 507
+
+    def test_a_library_is_chunked_at_one_hundred(self, wire):
+        for n in (100, 50):
+            wire.answer(
+                200, {"results": [{"fingerprint_hash": "x", "status": "created", "code": 201}] * n}
+            )
+        got = list(Corpus("https://x.invalid").contribute_many(self._row(i) for i in range(150)))
+        assert len(got) == 150
+        assert [len(json.loads(r.data)["contributions"]) for r in wire.requests] == [100, 50]
+
+    def test_client_id_is_required_before_anything_is_sent(self, wire):
+        with pytest.raises(ValueError):
+            list(Corpus("https://x.invalid").contribute_many([{**self._row(0), "client_id": None}]))
+        assert wire.requests == []
+
+    def test_a_batch_429_is_waited_out_by_retry_after(self, wire):
+        wire.answer(429, {"detail": "counted per row"}, {"Retry-After": "44"})
+        wire.answer(200, {"results": [{"fingerprint_hash": "x", "status": "created", "code": 201}]})
+        got = list(Corpus("https://x.invalid").contribute_many([self._row(0)]))
+        assert got[0]["status"] == "created"
+        assert ("slept", 44.0) in wire.requests
+
+    def test_the_docstring_says_look_up_first_and_not_atomic(self):
+        import inspect
+
+        doc = " ".join((inspect.getdoc(Corpus.contribute_many) or "").split()).lower()
+        assert "look up first" in doc
+        assert "not atomic" in doc
+
+
 class TestWhichRecordingIsThis:
     """`ADR-0018`: the claims are served as an answer, with the honest line, and
     a claim learned here is never re-contributed."""

@@ -34,6 +34,20 @@ class Settings(BaseSettings):
     # 0 disables it. The default is `ADR-0003` point 11's stated comfortable limit.
     max_embeddings: int = 500_000
 
+    # `ADR-0004` point 9's third bound, built by `ADR-0016` point 7: rows one
+    # `client_id` may write — created or confirmed — in a rolling 24 hours.
+    # Generous enough for any library and tight enough that the ceiling cannot
+    # be reached by one install in one day: ten percent of it. Reached, the
+    # write is a 429 with `Retry-After`, per row. 0 disables it. Only an
+    # identified contribution can be counted, so an unattributed one is bounded
+    # by the ceiling and the rate alone, as before.
+    client_quota_rows_per_day: int = 50_000
+
+    # `ADR-0016` point 3: the batch contribute route's own per-address limit,
+    # counted per row. A starting figure with a rationale, to be measured
+    # against the instance after the first real batch contributor.
+    contribute_batch_rate_limit: str = "600/minute"
+
     # `ADR-0013` point 5: where the weekly public export is served from. The base
     # URL of the export bucket; /export/latest.json redirects into it. Blank
     # means no export is published yet, and /export says so rather than 404ing.

@@ -37,13 +37,9 @@ def upgrade() -> None:
         # Nullable: existing clients do not send one and must keep working. Without
         # it, a "second submission" may just be one client retrying.
         sa.Column("client_id", sa.String(64), nullable=True),
-        sa.Column(
-            "recorded_at", sa.DateTime(), nullable=False, server_default=sa.func.now()
-        ),
+        sa.Column("recorded_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
     )
-    op.create_index(
-        "ix_submission_agreement_recorded_at", "submission_agreement", ["recorded_at"]
-    )
+    op.create_index("ix_submission_agreement_recorded_at", "submission_agreement", ["recorded_at"])
     op.create_index(
         "ix_submission_agreement_key",
         "submission_agreement",
@@ -53,7 +49,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index("ix_submission_agreement_key", table_name="submission_agreement")
-    op.drop_index(
-        "ix_submission_agreement_recorded_at", table_name="submission_agreement"
-    )
+    op.drop_index("ix_submission_agreement_recorded_at", table_name="submission_agreement")
     op.drop_table("submission_agreement")

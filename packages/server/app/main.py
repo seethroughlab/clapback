@@ -12,9 +12,9 @@ from slowapi.errors import RateLimitExceeded
 
 from app.api.admin import admin_router
 from app.api.browse import browse_router
-from app.api.routes import router
+from app.api.routes import CONTRIBUTE_BATCH_MAX_BYTES, router
 from app.limiter import limiter
-from app.middleware import IPBanMiddleware
+from app.middleware import BodySizeLimitMiddleware, IPBanMiddleware
 from app.templates import SITE
 
 
@@ -39,6 +39,10 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # IP ban middleware (must be added before CORS)
 app.add_middleware(IPBanMiddleware)
+# `ADR-0016`: a batch of a hundred contributions is admitted; ten times it is not.
+app.add_middleware(
+    BodySizeLimitMiddleware, limits={"/v1/embeddings/batch": CONTRIBUTE_BATCH_MAX_BYTES}
+)
 
 # CORS - allow all origins for now (embeddings are not sensitive)
 app.add_middleware(

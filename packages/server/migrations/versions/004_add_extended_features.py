@@ -5,6 +5,7 @@ Revises: 003_admin
 Create Date: 2026-02-20
 
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -51,11 +52,15 @@ def upgrade() -> None:
         sa.Column("detail", JSONB(), nullable=False),
         sa.Column("contributor_count", sa.Integer(), server_default="1", nullable=False),
         sa.Column(
-            "created_at", sa.DateTime(), server_default=sa.text("now()"),
+            "created_at",
+            sa.DateTime(),
+            server_default=sa.text("now()"),
             nullable=False,
         ),
         sa.Column(
-            "last_accessed_at", sa.DateTime(), server_default=sa.text("now()"),
+            "last_accessed_at",
+            sa.DateTime(),
+            server_default=sa.text("now()"),
             nullable=False,
         ),
         sa.PrimaryKeyConstraint("fingerprint_hash", "analysis_version"),

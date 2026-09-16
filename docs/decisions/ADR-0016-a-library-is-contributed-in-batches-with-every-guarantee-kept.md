@@ -11,6 +11,35 @@ Implementation:
   function must pass the existing tests unchanged before the batch handler exists. `ADR-0019`
   point 2's cross-key agreement, when built, lands inside that shared function, so a batch
   row gets it without this record changing.
+- **Built 2026-09-16, undeployed and unreleased**, in the order the record asks. First the
+  refactor: `contribute_embedding` became a call to `_contribute_one`, and the suite passed
+  unchanged in substance — ten source-inspection tests were re-pointed at the function that now
+  holds the code, with their assertions untouched (`5ca2ff6`). Then point 7, the quota:
+  `client_quota_rows_per_day = 50_000` (ten percent of `max_embeddings`, asserted by a test),
+  counted per `client_id` over a rolling 24 hours as `embeddings` rows created plus
+  `submission_agreement` rows recorded, checked in `_contribute_one` before any write, for
+  creations and confirmations alike; a refusal is a 429 with `Retry-After` computed from the
+  oldest row in the window. Migration `013_client_quota_indexes` adds `(client_id, created_at)`
+  and `(client_id, recorded_at)`; **it is a manual `alembic upgrade head` on deploy** (runbook
+  section 4). Exercised locally with a quota of three: two creations and one confirmation, then
+  a 429 for a creation and for a confirmation, another identifier unaffected, an unattributed
+  contribution uncounted. Then points 1–5: `POST /v1/embeddings/batch`, `ContributeBatchRequest`
+  of up to 100 `EmbeddingRequest`s with `client_id` validated on every row, one
+  `ContributeResult` per row carrying the code it would have got alone, `_contribute_one` per row
+  with a rollback between refusals; `contribute_batch_rate_limit = "600/minute"` charged per row
+  on the route's own window; `BodySizeLimitMiddleware` answers 413 on `Content-Length` over
+  10 MB before reading. Point 6: `Corpus.contribute_many(rows)`, chunking at 100, honouring
+  `Retry-After`. Client 0.3.0.
+- **Measured locally 2026-09-16** (a laptop, not the instance — the Tradeoff's measurement is
+  still owed): a batch of 100 new rows is **1.15 MB of JSON and 358 ms**; a batch of 100 across
+  a ceiling of 112 answered 4 created, 2 confirmed, 94 refused with 507, in order; a client 46
+  rows under its quota answered 46 confirmed then 14 refused with 429 and `retry_after`; the
+  seventh hundred rows in a minute was a 429 with `Retry-After`. The record's "6 KB per row" was
+  low: 512 floats as JSON text are ~11 KB, so a hundred is ~1.1 MB, still a tenth of the limit.
+- Owed: the CLI's `contribute` command and the beets plugin's whole-library pass moving to
+  `contribute_many` (Follow-up, each a release); the instance measurement after the first real
+  batch contributor; and deploying — server image, migration `013`, then `clapback-client`
+  0.3.0 to PyPI, in that order, because the client's new calls 404 against the running server.
 
 Extends [ADR-0004](ADR-0004-contributors-are-identified-but-not-accounts.md) points 4 and 9,
 [ADR-0008](ADR-0008-the-corpus-serves-agreement-not-a-verdict.md) and
