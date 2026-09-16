@@ -19,6 +19,32 @@ Implementation:
   56 across `fpcalc` generations) and that a miss by hash does not mean the corpus lacks the
   recording. `/api`'s description of `GET /v1/recordings/{mbid}` no longer says "one per
   pipeline" — two rows under one pipeline there are one file keyed twice.
+- **Point 2 is built** (2026-09-16, undeployed). Migration `014_agreement_other_hash` adds
+  `submission_agreement.other_hash` — the stored row a similarity was measured against, backfilled
+  with the row's own hash for every existing agreement, which is what they were — and an index on
+  `(other_hash, pipeline_version)`. `_contribute_one` gained `_record_cross_key_agreements`: a
+  contribution that names its recording is compared with every row under its pipeline that any
+  client has claimed under that id, other than the row under its own key, and each comparison
+  is an agreement naming the other row; it runs in the created branch as well as the confirmed
+  one, because the created branch is the second-client-on-another-path case. The served figures
+  are `recording_confirmations` and `recording_contradictions`, computed at read time as
+  `ADR-0008` point 6 requires (`_recording_agreements_for`), on every response that carries a
+  `recording_mbid` — the single lookup, neighbours, the recording route, and the batch lookup.
+  A confirmation is a distinct `client_id` inside `ADR-0008`'s band against any of the
+  recording's rows under the pipeline; a contradiction is one outside it; a client is never
+  counted against a row it contributed, and a submission without an id is not counted at all.
+  The test point 8 demands is `tests/test_cross_key_agreement.py`, the suite's first against a
+  real database: one recording, two keys, two clients, one confirmation — served by hash, by
+  id, in a batch, and as a neighbour — plus the contradiction, the self-agreement, the
+  unattributed submission, the batch path, and the column's meaning. Server CI gained a
+  pgvector service for it; without `CACHE_TEST_DATABASE_URL` the six tests skip.
+- **A consequence the record did not spell out.** `ADR-0008`'s Context said two rips of one
+  recording "cannot reach a shared key" and so land in different rows rather than disagreeing in
+  one. Through the recording id they now can: a second install's different rip, claimed under the
+  same MBID, lands 3e-04 to 3e-03 outside the band and is served as a contradiction. That is
+  `ADR-0008` point 4 working as written — disagreement served, not hidden — and it means a
+  contradiction count is not by itself evidence of a wrong pipeline. The band is unchanged; the
+  figure is labelled for what it is on `/api`.
 - **Point 3 is built in the client** (2026-09-16, `clapback-client` 0.3.0, on PyPI the same day):
   `Corpus.lookup(recording_mbid=, pipeline_version=)` returns the most-claimed row under the id
   in the shape a hash lookup returns, `None` when nobody has claimed it, and refuses both keys

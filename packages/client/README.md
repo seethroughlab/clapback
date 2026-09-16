@@ -72,8 +72,14 @@ is those decisions as code so a tool does not have to reimplement them.
   the commons holds, each with a `recording_mbid` when anyone has claimed one — a MusicBrainz
   recording a person can look up — and a bare hash when nobody has. `recording(mbid)` goes the
   other way: what does recording X sound like, without holding X.
-- **Confirmation** — whether your vector for a recording agrees with others' independently
-  computed one.
+- **Confirmation** — every result that names a recording carries `recording_confirmations`
+  and `recording_contradictions`: how many independent installs sent a vector for that recording,
+  under that pipeline, inside the `identical` band (cosine ≥ 0.999999), and how many sent one
+  outside it. Counted across every key the recording is held under, so two fingerprinting paths
+  are one population; by distinct `client_id`; never counting an install for agreeing with its own
+  row. No verdict — the corpus reports what happened and you decide
+  ([`ADR-0008`](../../docs/decisions/ADR-0008-the-corpus-serves-agreement-not-a-verdict.md),
+  [`ADR-0019`](../../docs/decisions/ADR-0019-agreement-is-counted-per-recording-not-per-key.md)).
 
 ## Looking up a whole library
 

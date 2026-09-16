@@ -90,6 +90,111 @@ def _canonical_mbid(value: str) -> str:
     return v
 
 
+#: `ADR-0008` point 3: the `identical` band. A submission whose cosine against a
+#: stored vector is inside it confirms that vector; outside, it contradicts it.
+#: Measured, not chosen — the table in that record is its justification.
+AGREEMENT_BAND = 0.999999
+
+
+async def _recording_agreements_for(
+    db, keys: list[tuple[str, str]]
+) -> dict[tuple[str, str], tuple[int, int]]:
+    """Per `(recording_mbid, pipeline_version)`: how many independent installs
+    confirmed the recording's vector, and how many contradicted it.
+
+    `ADR-0019` point 2, computed at read time as `ADR-0008` point 6 requires.
+    Counted across every row claimed under the recording, so two fingerprinting
+    paths that keyed one file twice are one population. A confirmation is a
+    distinct `client_id` with an agreement inside `AGREEMENT_BAND` against any
+    of those rows under this pipeline; a contradiction is one outside it —
+    served, not hidden (`ADR-0008` point 4). A client is never counted for
+    agreeing with a row it contributed, and a submission without a `client_id`
+    is evidence but not independence (`ADR-0004` point 3).
+    """
+    if not keys:
+        return {}
+    mbids = sorted({m for m, _ in keys})
+    pipelines = sorted({p for _, p in keys})
+    claimed = (
+        select(RecordingClaim.recording_mbid, RecordingClaim.fingerprint_hash)
+        .where(RecordingClaim.recording_mbid.in_(mbids))
+        .distinct()
+        .subquery()
+    )
+    a = SubmissionAgreement
+    independent = a.client_id.is_not(None) & (
+        Embedding.client_id.is_(None) | (Embedding.client_id != a.client_id)
+    )
+    stmt = (
+        select(
+            claimed.c.recording_mbid,
+            a.pipeline_version,
+            func.count(func.distinct(a.client_id))
+            .filter(a.similarity >= AGREEMENT_BAND)
+            .label("confirmed"),
+            func.count(func.distinct(a.client_id))
+            .filter(a.similarity < AGREEMENT_BAND)
+            .label("contradicted"),
+        )
+        .select_from(claimed)
+        .join(a, a.other_hash == claimed.c.fingerprint_hash)
+        .join(
+            Embedding,
+            (Embedding.fingerprint_hash == a.other_hash)
+            & (Embedding.pipeline_version == a.pipeline_version),
+        )
+        .where(a.pipeline_version.in_(pipelines), independent)
+        .group_by(claimed.c.recording_mbid, a.pipeline_version)
+    )
+    return {(m, pv): (int(c), int(d)) for m, pv, c, d in (await db.execute(stmt)).all()}
+
+
+async def _record_cross_key_agreements(db, req: "EmbeddingRequest") -> int:
+    """Compare a submission that names its recording with every row under the
+    same pipeline that any client has claimed under that recording — `ADR-0019`
+    point 2 — and record each comparison as a `SubmissionAgreement` naming the
+    row it was measured against. The row under the submission's own key is
+    excluded: the same-key path already compared it. Returns how many rows were
+    compared. Does not commit."""
+    claimed = (
+        select(RecordingClaim.fingerprint_hash)
+        .where(RecordingClaim.recording_mbid == req.recording_mbid)
+        .distinct()
+        .scalar_subquery()
+    )
+    rows = (
+        (
+            await db.execute(
+                select(Embedding).where(
+                    Embedding.fingerprint_hash.in_(claimed),
+                    Embedding.pipeline_version == req.pipeline_version,
+                    Embedding.fingerprint_hash != req.fingerprint_hash,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    compared = 0
+    for row in rows:
+        similarity = _cosine_similarity(req.embedding, list(row.embedding))
+        if similarity is None:
+            continue
+        db.add(
+            SubmissionAgreement(
+                fingerprint_hash=req.fingerprint_hash,
+                other_hash=row.fingerprint_hash,
+                analysis_version=req.analysis_version,
+                clap_model_version=req.clap_model_version,
+                pipeline_version=req.pipeline_version,
+                similarity=similarity,
+                client_id=req.client_id,
+            )
+        )
+        compared += 1
+    return compared
+
+
 async def _recordings_for(db, hashes: list[str]) -> dict[str, tuple[str, int]]:
     """The recording each hash resolves to, and how many distinct clients say so.
 
@@ -169,6 +274,13 @@ class Neighbour(BaseModel):
     #: know that rather than be handed a blank.
     recording_mbid: str | None = None
     recording_claims: int = 0
+    #: `ADR-0019` point 2, served as `ADR-0008` decides: independent installs
+    #: whose vector for this recording, under this pipeline, agreed to the
+    #: `identical` band — counted across every key the recording is held under —
+    #: and how many disagreed. Both 0 when nobody has named the row, or nobody
+    #: else has sent a vector for it. Not a verdict; the caller decides.
+    recording_confirmations: int = 0
+    recording_contradictions: int = 0
 
 
 class SimilarResponse(BaseModel):
@@ -233,6 +345,13 @@ class EmbeddingResponse(BaseModel):
     #: `ADR-0012` point 5, as on `Neighbour`.
     recording_mbid: str | None = None
     recording_claims: int = 0
+    #: `ADR-0019` point 2, served as `ADR-0008` decides: independent installs
+    #: whose vector for this recording, under this pipeline, agreed to the
+    #: `identical` band — counted across every key the recording is held under —
+    #: and how many disagreed. Both 0 when nobody has named the row, or nobody
+    #: else has sent a vector for it. Not a verdict; the caller decides.
+    recording_confirmations: int = 0
+    recording_contradictions: int = 0
 
 
 class ContributeResponse(BaseModel):
@@ -332,6 +451,10 @@ async def lookup_embedding(
     await db.commit()
 
     recording = (await _recordings_for(db, [emb.fingerprint_hash])).get(emb.fingerprint_hash)
+    agreement = (0, 0)
+    if recording:
+        key = (recording[0], emb.pipeline_version)
+        agreement = (await _recording_agreements_for(db, [key])).get(key, (0, 0))
     return EmbeddingResponse(
         fingerprint_hash=emb.fingerprint_hash,
         embedding=list(emb.embedding),
@@ -341,6 +464,8 @@ async def lookup_embedding(
         contributor_count=emb.contributor_count,
         recording_mbid=recording[0] if recording else None,
         recording_claims=recording[1] if recording else 0,
+        recording_confirmations=agreement[0],
+        recording_contradictions=agreement[1],
     )
 
 
@@ -467,6 +592,7 @@ async def _contribute_one(db, req: EmbeddingRequest) -> ContributeResponse:
             db.add(
                 SubmissionAgreement(
                     fingerprint_hash=req.fingerprint_hash,
+                    other_hash=req.fingerprint_hash,
                     analysis_version=req.analysis_version,
                     clap_model_version=req.clap_model_version,
                     pipeline_version=req.pipeline_version,
@@ -480,6 +606,10 @@ async def _contribute_one(db, req: EmbeddingRequest) -> ContributeResponse:
         # in. `ADR-0006` point 5 is discharged rather than ongoing.
         existing.contributor_count += 1
         if req.recording_mbid:
+            # `ADR-0019` point 2: the recording joins what the key could not —
+            # a row for this recording under another fingerprinting path is
+            # compared too, and the agreement is counted per recording.
+            await _record_cross_key_agreements(db, req)
             await _record_claim(db, req.fingerprint_hash, req.recording_mbid, req.client_id)
         await db.commit()
         return ContributeResponse(
@@ -523,6 +653,10 @@ async def _contribute_one(db, req: EmbeddingRequest) -> ContributeResponse:
     )
     db.add(emb)
     if req.recording_mbid:
+        # `ADR-0019` point 2, and this is the branch that matters: a second
+        # client on another fingerprinting path lands here, under a new key,
+        # and without this its vector would agree with nothing.
+        await _record_cross_key_agreements(db, req)
         await _record_claim(db, req.fingerprint_hash, req.recording_mbid, req.client_id)
     await db.commit()
 
@@ -719,6 +853,19 @@ async def similar(
     # `ADR-0012` point 5: a neighbour with a recording is a title and a page; one
     # without is still a hash, and the response says which is which.
     recordings = await _recordings_for(db, [r.fingerprint_hash for r in rows])
+    agreements = await _recording_agreements_for(
+        db,
+        [
+            (recordings[r.fingerprint_hash][0], r.pipeline_version)
+            for r in rows
+            if r.fingerprint_hash in recordings
+        ],
+    )
+
+    def _agreement(r) -> tuple[int, int]:
+        rec = recordings.get(r.fingerprint_hash)
+        return agreements.get((rec[0], r.pipeline_version), (0, 0)) if rec else (0, 0)
+
     return SimilarResponse(
         neighbours=[
             Neighbour(
@@ -733,6 +880,8 @@ async def similar(
                 recording_claims=recordings[r.fingerprint_hash][1]
                 if r.fingerprint_hash in recordings
                 else 0,
+                recording_confirmations=_agreement(r)[0],
+                recording_contradictions=_agreement(r)[1],
             )
             for r in rows
         ],
@@ -780,6 +929,10 @@ class RecordingEmbedding(BaseModel):
     contributor_count: int
     #: How many distinct clients claim *this hash* is this recording.
     recording_claims: int
+    #: `ADR-0019` point 2: agreement across every key of the recording, under
+    #: this row's pipeline — the same figures a lookup serves.
+    recording_confirmations: int = 0
+    recording_contradictions: int = 0
 
 
 class RecordingResponse(BaseModel):
@@ -862,6 +1015,7 @@ async def recording(
     rows = (await db.execute(stmt)).all()
     if not rows:
         raise HTTPException(status_code=404, detail="No embedding claimed under that recording")
+    agreements = await _recording_agreements_for(db, [(mbid, e.pipeline_version) for e, _ in rows])
     return RecordingResponse(
         recording_mbid=mbid,
         embeddings=[
@@ -871,6 +1025,8 @@ async def recording(
                 embedding=list(e.embedding),
                 contributor_count=e.contributor_count,
                 recording_claims=int(n),
+                recording_confirmations=agreements.get((mbid, e.pipeline_version), (0, 0))[0],
+                recording_contradictions=agreements.get((mbid, e.pipeline_version), (0, 0))[1],
             )
             for e, n in rows
         ],
@@ -931,7 +1087,13 @@ class LookupBatchResponse(BaseModel):
     results: list[LookupResult]
 
 
-def _row_for(emb: Embedding, recording: tuple[str, int] | None, *, vectors: bool) -> LookupRow:
+def _row_for(
+    emb: Embedding,
+    recording: tuple[str, int] | None,
+    agreement: tuple[int, int],
+    *,
+    vectors: bool,
+) -> LookupRow:
     fields: dict = {
         "fingerprint_hash": emb.fingerprint_hash,
         "analysis_version": emb.analysis_version,
@@ -940,6 +1102,8 @@ def _row_for(emb: Embedding, recording: tuple[str, int] | None, *, vectors: bool
         "contributor_count": emb.contributor_count,
         "recording_mbid": recording[0] if recording else None,
         "recording_claims": recording[1] if recording else 0,
+        "recording_confirmations": agreement[0],
+        "recording_contradictions": agreement[1],
     }
     if vectors:
         fields["embedding"] = list(emb.embedding)
@@ -1025,6 +1189,16 @@ async def lookup_batch(
 
     found = list(by_hash.values()) + list(by_mbid.values())
     recordings = await _recordings_for(db, sorted({e.fingerprint_hash for e in found}))
+    agreements = await _recording_agreements_for(
+        db,
+        sorted(
+            {
+                (recordings[e.fingerprint_hash][0], e.pipeline_version)
+                for e in found
+                if e.fingerprint_hash in recordings
+            }
+        ),
+    )
     if found:
         now = datetime.utcnow()
         for emb in found:
@@ -1038,11 +1212,11 @@ async def lookup_batch(
             if key.fingerprint_hash
             else by_mbid.get(key.recording_mbid)
         )
-        row = (
-            _row_for(emb, recordings.get(emb.fingerprint_hash), vectors=req.vectors)
-            if emb
-            else None
-        )
+        row = None
+        if emb:
+            rec = recordings.get(emb.fingerprint_hash)
+            agreement = agreements.get((rec[0], emb.pipeline_version), (0, 0)) if rec else (0, 0)
+            row = _row_for(emb, rec, agreement, vectors=req.vectors)
         results.append(LookupResult(key=key, row=row))
     return LookupBatchResponse(results=results)
 

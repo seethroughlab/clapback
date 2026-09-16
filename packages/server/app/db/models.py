@@ -142,12 +142,20 @@ class SubmissionAgreement(Base):
         ),
         # `ADR-0016` point 7: a confirmation is a write the quota counts too.
         Index("ix_submission_agreement_client_recorded", "client_id", "recorded_at"),
+        # `ADR-0019` point 2: what was measured against this row, under this pipeline.
+        Index("ix_submission_agreement_other", "other_hash", "pipeline_version"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
-    # Which stored embedding this submission was compared against.
+    # The submitted key — the hash the submission arrived under.
     fingerprint_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    #: The stored row the similarity was measured against. Equal to
+    #: `fingerprint_hash` for a submission compared with the row under its own
+    #: key — every row before migration `014` — and a different hash for
+    #: `ADR-0019` point 2's comparison across keys, where two fingerprinting
+    #: paths keyed one recording twice and the recording id joined them.
+    other_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     analysis_version: Mapped[int] = mapped_column(Integer, nullable=False)
     clap_model_version: Mapped[str] = mapped_column(String(100), nullable=False)
 

@@ -1,0 +1,155 @@
+"""Agreement is counted per recording, not per key — `ADR-0019` point 2.
+
+The measurement in `ADR-0010`'s Implementation block: two fingerprinting paths
+key one file differently more often than not on CD audio, so a second client
+on another path lands on a new row, and under the old write path its vector
+agreed with nothing. Point 2 says the recording id joins what the key could
+not: a contribution that names its recording is compared with every row under
+the same pipeline claimed under that recording, the comparison is recorded
+naming the row it was measured against, and confirmation is counted by
+distinct `client_id` across all of the recording's rows.
+
+This is the test the record's point 8 demands, and it is the suite's first
+against a real database — see `conftest.py`. Against Postgres, over HTTP, the
+whole write path and every read that serves the figure.
+"""
+
+from __future__ import annotations
+
+import math
+
+
+from tests.conftest import needs_db
+
+pytestmark = needs_db
+
+PIPELINE = "laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32"
+MBID = "1c6da765-da50-476b-a000-61e7cf45ded8"
+H1, H2, H3, H4 = ("a1" * 32, "b2" * 32, "c3" * 32, "d4" * 32)
+
+
+def _unit(seed: int) -> list[float]:
+    v = [math.sin(seed * 7.0 + i * 0.37) for i in range(512)]
+    n = math.sqrt(sum(x * x for x in v))
+    return [x / n for x in v]
+
+
+def _contribution(fingerprint_hash, client_id, vector, mbid=MBID):
+    body = {
+        "fingerprint_hash": fingerprint_hash,
+        "embedding": vector,
+        "analysis_version": 1,
+        "clap_model_version": "x",
+        "pipeline_version": PIPELINE,
+    }
+    if client_id:
+        body["client_id"] = client_id
+    if mbid:
+        body["recording_mbid"] = mbid
+    return body
+
+
+async def _figures(client, path):
+    r = await client.get(path)
+    assert r.status_code == 200, r.text
+    b = r.json()
+    b = b["embeddings"][0] if "embeddings" in b else b
+    return b["recording_confirmations"], b["recording_contradictions"]
+
+
+class TestOneRecordingTwoKeysTwoClients:
+    async def test_the_second_client_confirms_across_keys(self, db_client):
+        """Client A holds the recording under H1; client B, on another
+        fingerprinting path, holds the same audio under H2. B's contribution is
+        a new row — and one confirmation of the recording."""
+        v = _unit(1)
+        r = await db_client.post("/v1/embeddings", json=_contribution(H1, "client-a", v))
+        assert r.status_code == 201 and r.json()["status"] == "created"
+        assert await _figures(db_client, f"/v1/embeddings/{H1}") == (0, 0)
+
+        r = await db_client.post("/v1/embeddings", json=_contribution(H2, "client-b", v))
+        assert r.status_code == 201 and r.json()["status"] == "created", r.text
+
+        # Served everywhere the recording is: by either key, by id, in a batch, as a neighbour.
+        assert await _figures(db_client, f"/v1/embeddings/{H1}") == (1, 0)
+        assert await _figures(db_client, f"/v1/embeddings/{H2}") == (1, 0)
+        assert await _figures(db_client, f"/v1/recordings/{MBID}") == (1, 0)
+        r = await db_client.post(
+            "/v1/embeddings/lookup", json={"keys": [{"recording_mbid": MBID}], "vectors": False}
+        )
+        assert (
+            r.json()["results"][0]["row"]["recording_confirmations"],
+            r.json()["results"][0]["row"]["recording_contradictions"],
+        ) == (1, 0)
+        r = await db_client.post(
+            "/v1/similar", json={"embedding": v, "limit": 2, "pipeline_version": PIPELINE}
+        )
+        assert {n["recording_confirmations"] for n in r.json()["neighbours"]} == {1}
+
+    async def test_a_third_client_with_a_different_vector_contradicts(self, db_client):
+        """`ADR-0008` point 4: disagreement is served, not hidden. A different
+        rip, or a different pipeline wearing the same identity, lands outside
+        the `identical` band and is counted as a contradiction beside the
+        confirmation, never averaged into it."""
+        await db_client.post("/v1/embeddings", json=_contribution(H1, "client-a", _unit(1)))
+        await db_client.post("/v1/embeddings", json=_contribution(H2, "client-b", _unit(1)))
+        r = await db_client.post("/v1/embeddings", json=_contribution(H3, "client-c", _unit(2)))
+        assert r.status_code == 201
+        assert await _figures(db_client, f"/v1/recordings/{MBID}") == (1, 1)
+
+    async def test_a_client_never_confirms_its_own_row(self, db_client):
+        """`ADR-0004` point 4: independence is distinct clients. A re-sent
+        library agrees with itself and must not read as a confirmation."""
+        v = _unit(1)
+        await db_client.post("/v1/embeddings", json=_contribution(H1, "client-a", v))
+        r = await db_client.post("/v1/embeddings", json=_contribution(H1, "client-a", v))
+        assert r.json()["status"] == "confirmed"  # the key-level count moves...
+        assert await _figures(db_client, f"/v1/embeddings/{H1}") == (
+            0,
+            0,
+        )  # ...the recording's does not
+        # Nor by re-fingerprinting on another path: A under H2 is still A.
+        await db_client.post("/v1/embeddings", json=_contribution(H2, "client-a", v))
+        assert await _figures(db_client, f"/v1/embeddings/{H1}") == (0, 0)
+
+    async def test_an_unattributed_contribution_is_evidence_but_not_independence(self, db_client):
+        """`ADR-0004` point 3. It is compared and recorded; it confirms nothing."""
+        v = _unit(1)
+        await db_client.post("/v1/embeddings", json=_contribution(H1, "client-a", v))
+        r = await db_client.post("/v1/embeddings", json=_contribution(H4, None, v, mbid=None))
+        assert r.status_code == 201
+        assert await _figures(db_client, f"/v1/embeddings/{H1}") == (0, 0)
+
+    async def test_the_agreement_names_the_row_it_was_measured_against(self, db_client):
+        """The new column: `fingerprint_hash` is the submitted key, `other_hash`
+        the stored row. A same-key agreement names its own row; a cross-key one
+        names the other."""
+        from sqlalchemy import select
+
+        from app.db.models import SubmissionAgreement
+        from app.db.session import async_session_maker
+
+        v = _unit(1)
+        await db_client.post("/v1/embeddings", json=_contribution(H1, "client-a", v))
+        await db_client.post("/v1/embeddings", json=_contribution(H2, "client-b", v))
+        await db_client.post("/v1/embeddings", json=_contribution(H1, "client-b", v))
+        async with async_session_maker() as db:
+            rows = (await db.execute(select(SubmissionAgreement))).scalars().all()
+        pairs = sorted((r.fingerprint_hash[:2], r.other_hash[:2], r.client_id) for r in rows)
+        assert pairs == [
+            ("a1", "a1", "client-b"),
+            ("a1", "b2", "client-b"),
+            ("b2", "a1", "client-b"),
+        ]
+        assert all(r.similarity >= 0.999999 for r in rows)
+
+    async def test_a_batch_row_gets_the_same_comparison(self, db_client):
+        """`ADR-0016` point 2 made the batch call `_contribute_one`; this is
+        what that bought — cross-key agreement without the batch changing."""
+        v = _unit(1)
+        await db_client.post("/v1/embeddings", json=_contribution(H1, "client-a", v))
+        r = await db_client.post(
+            "/v1/embeddings/batch", json={"contributions": [_contribution(H2, "client-b", v)]}
+        )
+        assert r.status_code == 200 and r.json()["created"] == 1
+        assert await _figures(db_client, f"/v1/recordings/{MBID}") == (1, 0)

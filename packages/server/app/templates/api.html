@@ -69,8 +69,10 @@ row = Corpus().lookup(key, pipeline_version)       # None on a miss — then emb
     <h2>Get an embedding</h2>
     <pre><code>curl "https://{{ host }}/v1/embeddings/{fingerprint_hash}?pipeline_version=laion%2Fclap-htsat-unfused%2Bfrontend1%2Bartifact1%2Bpool1%2Bfp32"</code></pre>
     <p class="muted">
-        Returns the vector, what produced it, how many submissions it has had, and its
-        <code>recording_mbid</code> when anyone has claimed one. <code>404</code> if the corpus has
+        Returns the vector, what produced it, how many submissions it has had, its
+        <code>recording_mbid</code> when anyone has claimed one, and — when it has — how many
+        independent installs confirmed or contradicted the recording's vector, across every key it
+        is held under (below, "How close is close"). <code>404</code> if the corpus has
         not seen that <em>hash</em> from that pipeline — which is not quite "that recording".
     </p>
     <p class="muted">
@@ -182,6 +184,20 @@ query  = embed_text("dreamy ambient with piano")   # the same space</code></pre>
         Honest computation agrees about a thousand times more tightly than two rips of the same CD
         differ. That gap is what makes near-duplicate detection across formats and masters work, and
         what a consensus scheme can eventually stand on.
+    </p>
+    <p class="muted">
+        <strong>And now it is stood on, per recording.</strong> Every result that names a recording
+        carries <code>recording_confirmations</code> and <code>recording_contradictions</code>: how
+        many independent installs sent a vector for that recording, under that pipeline, inside the
+        <code>identical</code> band of 0.999999, and how many sent one outside it. Counted across
+        every key the recording is held under — two fingerprinting paths that keyed one file twice
+        are one population, joined by the recording id — by distinct <code>client_id</code>, never
+        counting a client for agreeing with its own row, and never counting a submission that sent
+        no id. A contradiction is served, not averaged away: a different rip of the same recording
+        lands outside the band, and that is worth seeing. There is no verdict and no
+        <code>confirmed: true</code>; the corpus reports what happened and the caller decides
+        (<a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0008-the-corpus-serves-agreement-not-a-verdict.md">ADR-0008</a>,
+        <a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0019-agreement-is-counted-per-recording-not-per-key.md">ADR-0019</a>).
     </p>
 </div>
 
