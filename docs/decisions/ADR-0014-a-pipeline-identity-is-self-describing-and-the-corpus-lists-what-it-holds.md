@@ -9,7 +9,7 @@ Implementation:
   built. `ADR-0017`, first in point 6's order, was rejected on 2026-09-16 by its own
   measurement, so the order is now this record → `ADR-0015` and `ADR-0018` together →
   `ADR-0016`. Point 6's Decision text is left as written; this line is the correction.
-- **Built 2026-09-16, undeployed and unreleased.** Point 3: `GET /v1/pipelines`
+- **Built 2026-09-16.** **Deployed 2026-09-16 ~01:30 UTC** (box at `215cd15`, migration `013` applied, counts unchanged at 25,886 / 23,198 claims) and `clapback-client` 0.3.0 on PyPI the same hour, verified cold. Point 3: `GET /v1/pipelines`
   (`packages/server/app/api/routes.py`, `_fetch_pipelines`), one grouped scan, on the lookup
   limit, in `stats_cache` for 60 s; exercised against a local Postgres with three rows across
   two identities (rows 2/1, named 1/1) and pinned by `tests/test_pipelines.py`. Point 4:

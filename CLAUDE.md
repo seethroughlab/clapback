@@ -149,8 +149,8 @@ in KalinkaPlayer#128, whether the data would outlive the box. Its point 8 has th
 the licence sentence goes first.
 
 **`ADR-0014`, `ADR-0015`, `ADR-0016` and `ADR-0018` were accepted 2026-09-16 and built the same
-day; `ADR-0017` was rejected (below). All four are undeployed and the client that carries them
-(`clapback-client` 0.3.0) is unreleased.** Five records from the first prospective second
+day, and deployed with `clapback-client` 0.3.0 on PyPI by ~01:30 UTC; `ADR-0017` was rejected
+(below).** Five records from the first prospective second
 contributor's six questions (KalinkaPlayer#128), in three groups. *Pipelines are legible:*
 `ADR-0014` — an identity string's five tokens, and `GET /v1/pipelines`; its Implementation block
 records that `artifact1` in the reference string is the ONNX export version, not the windowing
@@ -189,14 +189,14 @@ being where the agreement threshold sits and what the corpus does with it.
 | 4 | The recording-id key | `ADR-0002` point 4 makes it a prerequisite: similarity search over a hash-keyed corpus returns hashes nobody can resolve |
 | 6 | The rename, and what the domain serves | Cheap, and last on purpose — nothing above depends on it |
 
-### What is actually running, as of 2026-09-15
+### What is actually running, as of 2026-09-16
 
 The commons is public at **https://clapback.seethroughlab.com** — one AWS instance, TLS via Caddy,
 nightly `pg_dump` to `s3://clapback-backup`, and a corpus of **25,886 rows, every one of which
 declares the pipeline that produced it and is keyed on a hash any client can reproduce from the
 audio — and 23,196 of which (89.6%) name their MusicBrainz recording**, up from 6.8% on
-2026-09-14, after Familiar's `ADR-0115` backfill. Four packages are on PyPI (`clapback-embed`,
-`clapback-client`, `clapback-cli`, `beets-clapback`) and the Picard plugin ships as a zip on a
+2026-09-14, after Familiar's `ADR-0115` backfill. Four packages are on PyPI (`clapback-embed` 0.1.0,
+`clapback-client` 0.3.0, `clapback-cli` 0.1.1, `beets-clapback` 0.2.0) and the Picard plugin ships as a zip on a
 `picard-v*` release. The bare name `clapback` on PyPI belongs to an unrelated 2018 package; the
 CLI is `clapback-cli`.
 
@@ -231,9 +231,10 @@ green timer is evidence the check ran, not evidence anyone would hear it.**
 - **`ADR-0019` points 2, 4 and 6** — cross-key agreement, collapsed similarity, the AcoustID claim.
 - **`ADR-0013` point 7** — the import script.
 
-**Built and not deployed, as of 2026-09-16** — one deploy, in this order: the server image (`ADR-0014`,
-`0015`, `0016`, `0018`), then `alembic upgrade head` for migration `013` (runbook section 4),
-then `clapback-client` 0.3.0 to PyPI, whose new calls 404 against the running server until then.
+**The commons box is at `215cd15` and migration `013` as of 2026-09-16 ~01:30 UTC.** The CLI
+(`<0.3`) and `beets-clapback` (`<0.3`) bound the client below 0.3.0; each widens the bound in the
+release that adopts `lookup_many` / `contribute_many`, and until then a fresh install of either
+resolves to client 0.2.2, which still works.
 
 **`ADR-0011` point 5's outreach went out 2026-09-15** — beets#7032 and picard-plugins#436 (the
 listings), dj-track-similarity#2 and KalinkaPlayer#128 (proposals, PR offered). Its

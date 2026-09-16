@@ -12,7 +12,7 @@ Implementation:
   admits a second claim type (the AcoustID track id) later, so the by-hash response carries a
   claim `type` from the first version, with `musicbrainz_recording` the only value until then.
   Nothing is built.
-- **Built 2026-09-16, undeployed and unreleased.** Point 1: "Which recording is this?" in
+- **Built 2026-09-16.** **Deployed 2026-09-16 ~01:30 UTC** (box at `215cd15`, migration `013` applied, counts unchanged at 25,886 / 23,198 claims) and `clapback-client` 0.3.0 on PyPI the same hour, verified cold. Point 1: "Which recording is this?" in
   `packages/client/README.md` and on `/api`, with the four statements in the record's order.
   Point 2: `GET /v1/recordings/by-hash/{fingerprint_hash}` returns `{type, id, clients}` per
   claim, most-supported first, ties on the id, no vector; 404 for a row the corpus does not

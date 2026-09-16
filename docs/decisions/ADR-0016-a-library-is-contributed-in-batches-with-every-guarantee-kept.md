@@ -11,7 +11,7 @@ Implementation:
   function must pass the existing tests unchanged before the batch handler exists. `ADR-0019`
   point 2's cross-key agreement, when built, lands inside that shared function, so a batch
   row gets it without this record changing.
-- **Built 2026-09-16, undeployed and unreleased**, in the order the record asks. First the
+- **Built 2026-09-16**, in the order the record asks. **Deployed 2026-09-16 ~01:30 UTC** (box at `215cd15`, migration `013` applied, counts unchanged at 25,886 / 23,198 claims) and `clapback-client` 0.3.0 on PyPI the same hour, verified cold. First the
   refactor: `contribute_embedding` became a call to `_contribute_one`, and the suite passed
   unchanged in substance — ten source-inspection tests were re-pointed at the function that now
   holds the code, with their assertions untouched (`5ca2ff6`). Then point 7, the quota:
@@ -38,8 +38,9 @@ Implementation:
   low: 512 floats as JSON text are ~11 KB, so a hundred is ~1.1 MB, still a tenth of the limit.
 - Owed: the CLI's `contribute` command and the beets plugin's whole-library pass moving to
   `contribute_many` (Follow-up, each a release); the instance measurement after the first real
-  batch contributor; and deploying — server image, migration `013`, then `clapback-client`
-  0.3.0 to PyPI, in that order, because the client's new calls 404 against the running server.
+  batch contributor. The deploy went in the order the block above says — image, migration,
+  then the client — and the live check spent 323 keys in a minute on the batch lookup and was
+  refused at the 301st, which is point 3's limit binding on the instance.
 
 Extends [ADR-0004](ADR-0004-contributors-are-identified-but-not-accounts.md) points 4 and 9,
 [ADR-0008](ADR-0008-the-corpus-serves-agreement-not-a-verdict.md) and

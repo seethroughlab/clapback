@@ -19,7 +19,7 @@ Implementation:
   56 across `fpcalc` generations) and that a miss by hash does not mean the corpus lacks the
   recording. `/api`'s description of `GET /v1/recordings/{mbid}` no longer says "one per
   pipeline" — two rows under one pipeline there are one file keyed twice.
-- **Point 3 is built in the client** (2026-09-16, `clapback-client` 0.3.0, unreleased):
+- **Point 3 is built in the client** (2026-09-16, `clapback-client` 0.3.0, on PyPI the same day):
   `Corpus.lookup(recording_mbid=, pipeline_version=)` returns the most-claimed row under the id
   in the shape a hash lookup returns, `None` when nobody has claimed it, and refuses both keys
   or neither. It is `GET /v1/recordings/{mbid}` — no server change. The rule "by recording if

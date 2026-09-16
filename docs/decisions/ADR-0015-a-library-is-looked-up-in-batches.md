@@ -20,7 +20,7 @@ Implementation:
   tracks, an hour for 50,000. The decision stands on its own Alternatives paragraph, which said
   the round trip was the shape and the limit was not the bottleneck; the headline number was
   wrong by a factor of three and is corrected here, not in the Context.
-- **Built 2026-09-16, undeployed and unreleased.** Points 1–3 as amended: `POST
+- **Built 2026-09-16.** **Deployed 2026-09-16 ~01:30 UTC** (box at `215cd15`, migration `013` applied, counts unchanged at 25,886 / 23,198 claims) and `clapback-client` 0.3.0 on PyPI the same hour, verified cold. Points 1–3 as amended: `POST
   /v1/embeddings/lookup` takes up to 100 `{fingerprint_hash}` or `{recording_mbid}` keys,
   answers in order with the key echoed, a hash by its own row and an id by the row most clients
   have claimed under it; `vectors: false` drops the floats. Measured locally, 100 held keys:
