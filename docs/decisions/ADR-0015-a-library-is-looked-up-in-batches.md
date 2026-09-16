@@ -1,8 +1,18 @@
 # ADR-0015: A Library Is Looked Up in Batches
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-15
+
+Implementation:
+- **Accepted 2026-09-16**, with one amendment from a record accepted in between: `ADR-0019`
+  point 3 says the batch endpoint accepts a mix of fingerprint hashes and recording MBIDs, and
+  a tool that holds an id looks up by it first. Point 1 is built that way — each entry in the
+  request names which kind of key it is, and each entry in the answer says which key it
+  answered — rather than as hashes-only with ids added later. Nothing is built.
+- Owed: `POST /v1/embeddings/lookup` (points 1–3, as amended), `Corpus.lookup_many` (point 4),
+  and the plug-in adoptions (Follow-up). Point 3's per-hash cost is not what `slowapi`'s
+  decorator counts; the handler charges the limiter per entry after parsing the body.
 
 Extends [ADR-0009](ADR-0009-the-tool-is-useful-before-the-corpus-is.md) point 6 and
 [ADR-0011](ADR-0011-the-commons-is-what-other-tools-plug-into.md) point 2. One of the five records

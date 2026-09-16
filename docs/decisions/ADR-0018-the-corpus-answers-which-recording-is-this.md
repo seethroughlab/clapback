@@ -1,8 +1,19 @@
 # ADR-0018: The Corpus Answers "Which Recording Is This?"
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-15
+
+Implementation:
+- **Accepted 2026-09-16**, with one amendment from a record accepted in between: `ADR-0019`
+  makes point 2's `GET /v1/recordings/by-hash/{fingerprint_hash}` the read side of its
+  cross-key join — a tool that learns the recording a hash is claimed under can find every
+  other key the corpus holds for it through `GET /v1/recordings/{mbid}`. `ADR-0019` point 6
+  admits a second claim type (the AcoustID track id) later, so the by-hash response carries a
+  claim `type` from the first version, with `musicbrainz_recording` the only value until then.
+  Nothing is built.
+- Owed: the "which recording is this?" section on `/api` and in the client README (points 1,
+  3, 4), the by-hash route (point 2), and the `Corpus.claim` docstring line (point 4).
 
 Extends [ADR-0012](ADR-0012-a-contribution-can-name-its-recording.md) points 1, 5 and 8, and
 [ADR-0015](ADR-0015-a-library-is-looked-up-in-batches.md). One of the five records proposed

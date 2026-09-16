@@ -1,8 +1,17 @@
 # ADR-0014: A Pipeline Identity Is Self-Describing, and the Corpus Lists What It Holds
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-15
+
+Implementation:
+- **Accepted 2026-09-16** as written, on the day's second walk-through of the set. Nothing is
+  built. `ADR-0017`, first in point 6's order, was rejected on 2026-09-16 by its own
+  measurement, so the order is now this record → `ADR-0015` and `ADR-0018` together →
+  `ADR-0016`. Point 6's Decision text is left as written; this line is the correction.
+- Owed: the convention section in `packages/client/README.md` with ours and Kalinka's strings
+  as the worked examples (point 4), the `contribute` docstring pointer (point 4), and
+  `GET /v1/pipelines` (point 3).
 
 Extends [ADR-0006](ADR-0006-the-pipeline-identity-is-the-corpus-key.md) and
 [ADR-0011](ADR-0011-the-commons-is-what-other-tools-plug-into.md) point 3. One of five records

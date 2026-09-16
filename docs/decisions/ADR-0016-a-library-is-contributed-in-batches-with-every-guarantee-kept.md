@@ -1,8 +1,16 @@
 # ADR-0016: A Library Is Contributed in Batches, With Every Guarantee Kept
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-15
+
+Implementation:
+- **Accepted 2026-09-16** as written, last in the set's order on purpose. Nothing is built.
+  Point 7's per-client quota — `ADR-0004` point 9's third bound, owed since 2026-09-04 — is
+  built before the endpoint is public. The single-endpoint refactor into a shared per-row
+  function must pass the existing tests unchanged before the batch handler exists. `ADR-0019`
+  point 2's cross-key agreement, when built, lands inside that shared function, so a batch
+  row gets it without this record changing.
 
 Extends [ADR-0004](ADR-0004-contributors-are-identified-but-not-accounts.md) points 4 and 9,
 [ADR-0008](ADR-0008-the-corpus-serves-agreement-not-a-verdict.md) and

@@ -148,16 +148,18 @@ one sanctioned direct-database write. Prompted by the first prospective second c
 in KalinkaPlayer#128, whether the data would outlive the box. Its point 8 has the execution order;
 the licence sentence goes first.
 
-**`ADR-0014`–`ADR-0018` are proposed (2026-09-15), none accepted.** Five records from the first
+**`ADR-0014`, `ADR-0015`, `ADR-0016` and `ADR-0018` were accepted 2026-09-16; `ADR-0017` was
+rejected the same day (below). Nothing in the four is built.** Five records from the first
 prospective second contributor's six questions (KalinkaPlayer#128), in three groups. *Pipelines
 are legible:* `ADR-0014` — an identity string's five tokens, and `GET /v1/pipelines`. *Library
-scale:* `ADR-0015` batch lookup (100 hashes, rate limit per hash) and `ADR-0016` batch contribute
-(same per-row code, non-atomic, `client_id` required, and `ADR-0004` point 9's per-client quota
-built first). *What a tool brings and gets back:* `ADR-0017` — `fingerprint_pcm()` from audio the
-tool already decoded, **conditional on a measurement not yet made** (does chromaprint of decoded
-PCM equal `fpcalc` of the file, on 56 FLACs); `ADR-0018` — the recording claims served as
-"which recording is this?", with the honest line that it is exact-hash and counted, not AcoustID.
-Order: 0017 → 0014 → 0015 + 0018 → 0016.
+scale:* `ADR-0015` batch lookup (100 keys, rate limit per key — **hashes or recording MBIDs
+mixed, by `ADR-0019` point 3**) and `ADR-0016` batch contribute (same per-row code, non-atomic,
+`client_id` required, and `ADR-0004` point 9's per-client quota built first). *What a tool
+brings and gets back:* `ADR-0017` — `fingerprint_pcm()` from audio the tool already decoded,
+conditional on a measurement; `ADR-0018` — the recording claims served as "which recording is
+this?", with the honest line that it is exact-hash and counted, not AcoustID, and its by-hash
+route serving `ADR-0019`'s cross-key join. Build order: 0014 → 0015 + 0018 → 0016, after
+`ADR-0019` points 1 and 3.
 
 **`ADR-0017` was rejected on 2026-09-16 by its own measurement, and the measurement found
 something bigger** — recorded in `ADR-0010`'s Implementation block: the AcoustID fingerprint
