@@ -54,6 +54,18 @@ Implementation:
   `tests/test_cross_key_agreement.py`: two keys one neighbour, the nearer rip is the one kept,
   unnamed rows untouched, and the window widening past eight rows of one recording. With one
   contributor every live search collapses nothing, and `collapsed` says 0.
+- **Deploying point 4 found a bug older than it** (2026-09-16). The first live check with
+  `limit: 100` returned 39 neighbours and `collapsed: 0`. pgvector's HNSW returns at most
+  `hnsw.ef_search` candidates — 40 by default — whatever the `LIMIT`: on the instance, a
+  `LIMIT 200` ANN query answered 40 rows. So `/v1/similar` had silently truncated every `limit`
+  above 40 since migration `009` built the index, and point 4's over-fetch window could never
+  have widened past it. `_collapse_by_recording` now runs `SET LOCAL hnsw.ef_search` to its
+  window before each fetch. The test that pins it had to switch off sequential scans and drop
+  the pipeline filter to make sixty rows reach the index at all — with the filter, the planner
+  takes the btree and sorts exactly, which is why the suite never saw it. Also noticed, not
+  fixed: the instance carries two HNSW indexes on the same column (`ix_embeddings_hnsw_cosine`
+  with `m=16, ef_construction=64`, and migration `009`'s `ix_embeddings_vector_cosine`), which
+  is one index of RAM for nothing; `ADR-0003` point 11's budget should know.
 - **Point 3 is built in the client** (2026-09-16, `clapback-client` 0.3.0, on PyPI the same day):
   `Corpus.lookup(recording_mbid=, pipeline_version=)` returns the most-claimed row under the id
   in the shape a hash lookup returns, `None` when nobody has claimed it, and refuses both keys

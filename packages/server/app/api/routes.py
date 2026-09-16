@@ -815,6 +815,12 @@ async def _collapse_by_recording(db, ranked, limit: int):
     them, and how many rows were folded away. See `similar` for why."""
     window = limit * 2
     while True:
+        # **HNSW returns at most `hnsw.ef_search` candidates, whatever the LIMIT.**
+        # pgvector's default is 40, and measured on the instance 2026-09-16 a
+        # `LIMIT 200` came back with 40 rows — which means `limit` above 40 had
+        # been silently truncated since the index was built, and any window
+        # here would be. Set it to the window, for this transaction only.
+        await db.execute(text(f"SET LOCAL hnsw.ef_search = {min(window, _COLLAPSE_MAX_WINDOW)}"))
         rows = (await db.execute(ranked.limit(window))).all()
         recordings = await _recordings_for(db, [r.fingerprint_hash for r in rows])
         kept, seen, collapsed = [], set(), 0

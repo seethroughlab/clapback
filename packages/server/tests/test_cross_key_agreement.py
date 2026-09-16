@@ -212,3 +212,33 @@ class TestSimilarityCollapsesRowsSharingARecording:
         )
         assert [n["recording_mbid"] for n in r.json()["neighbours"]] == [MBID, other]
         assert r.json()["collapsed"] == 7
+
+
+class TestTheIndexAnswersTheWholeWindow:
+    async def test_a_limit_above_forty_is_not_truncated(self, db_client):
+        """pgvector's HNSW returns at most `hnsw.ef_search` rows — 40 by default —
+        whatever the LIMIT; measured on the instance 2026-09-16. `similar` sets it
+        to its window per query. Sixty rows would be sequentially scanned, which
+        answers the whole LIMIT and proves nothing, so the planner is told to use
+        the index for the duration — the way the instance, at 25,886 rows, does."""
+        from sqlalchemy import text
+
+        from app.db.session import engine
+
+        for i in range(60):
+            await db_client.post(
+                "/v1/embeddings",
+                json=_contribution(f"{i:02x}" * 32, f"c{i}", _unit(i + 100), mbid=None),
+            )
+        async with engine.begin() as conn:
+            await conn.execute(text("ALTER DATABASE cache SET enable_seqscan = off"))
+        await engine.dispose()  # new connections pick the setting up
+        try:
+            # Unfiltered: with a `pipeline_version` filter on sixty rows the planner
+            # takes the btree and sorts exactly, and HNSW is never asked.
+            r = await db_client.post("/v1/similar", json={"embedding": _unit(100), "limit": 50})
+            assert len(r.json()["neighbours"]) == 50
+        finally:
+            async with engine.begin() as conn:
+                await conn.execute(text("ALTER DATABASE cache RESET enable_seqscan"))
+            await engine.dispose()
