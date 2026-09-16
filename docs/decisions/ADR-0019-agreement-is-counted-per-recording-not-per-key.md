@@ -45,7 +45,7 @@ Implementation:
   `ADR-0008` point 4 working as written — disagreement served, not hidden — and it means a
   contradiction count is not by itself evidence of a wrong pipeline. The band is unchanged; the
   figure is labelled for what it is on `/api`.
-- **Point 4 is built** (2026-09-16, undeployed). `/v1/similar` ranks as before, then
+- **Point 4 is built and deployed** (2026-09-16 ~02:10 UTC; box at `f801ce3`, no migration; live `limit: 100` answers 100 neighbours and `collapsed: 0`). `/v1/similar` ranks as before, then
   `_collapse_by_recording` over-fetches — a window of twice `limit`, doubling to a ceiling of
   1,000 — resolves each row's recording through the claims, and keeps the first row seen per
   (recording, pipeline), which is the nearest, until `limit` survive or the corpus runs out.

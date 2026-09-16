@@ -179,8 +179,10 @@ keying on the AcoustID id, and server-side fuzzy matching are each rejected with
 `Corpus.lookup(recording_mbid=)` in the client, and the cross-key agreement: migration `014`, the
 comparison in `_contribute_one`, and `recording_confirmations` / `recording_contradictions` on every
 read that names a recording, backed by the suite's first database test (server CI now runs
-pgvector). Points 4 and 6 are owed in that order, and the two plug-ins passing the id they hold is
-owed as one release each.
+pgvector). **Point 4 too** (same day): `/v1/similar` folds named rows sharing a recording into the
+nearest and reports `collapsed` — and deploying it exposed that HNSW had capped every `limit` above
+40 at 40 since the index was built (`hnsw.ef_search`, now set per query). Point 6 is owed, and the
+two plug-ins passing the id they hold is owed as one release each.
 
 `ADR-0008` closes `ADR-0001` deferred item 2 — the part the cross-machine measurement did not answer,
 being where the agreement threshold sits and what the corpus does with it.
@@ -232,10 +234,10 @@ green timer is evidence the check ran, not evidence anyone would hear it.**
 - **`ADR-0007`**, deliberately, until a second contributor exists.
 - **`ADR-0008`**, partly — confirmations and contradictions are served per recording since
   2026-09-16; the worst similarity and point 7 are not.
-- **`ADR-0019` points 4 and 6** — collapsed similarity, the AcoustID claim.
+- **`ADR-0019` point 6** — the AcoustID track id as a second claim type.
 - **`ADR-0013` point 7** — the import script.
 
-**The commons box is at `346f57c` and migration `014` as of 2026-09-16 ~01:45 UTC.** The CLI
+**The commons box is at `f801ce3` and migration `014` as of 2026-09-16 ~02:10 UTC.** The CLI
 (`<0.3`) and `beets-clapback` (`<0.3`) bound the client below 0.3.0; each widens the bound in the
 release that adopts `lookup_many` / `contribute_many`, and until then a fresh install of either
 resolves to client 0.2.2, which still works.
