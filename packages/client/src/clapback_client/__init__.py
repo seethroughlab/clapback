@@ -9,6 +9,8 @@ an earlier record, and this package is those obligations as code:
    package never embeds. `clapback-embed` is the reference pipeline, and a tool
    with its own declares its own identity.
 3. Look up before contributing — `Corpus.has`, `Corpus.lookup`. `ADR-0008`.
+   By recording id if you hold one, by hash otherwise: the hash may differ
+   across fingerprinting paths and the id does not. `ADR-0019`.
 4. Send `client_id` and `pipeline_version` — `Corpus.contribute`, `identity`.
    `ADR-0004`, `ADR-0006`.
 

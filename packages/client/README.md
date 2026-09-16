@@ -14,7 +14,7 @@ from clapback_client import Corpus, fingerprint_file, hash_fingerprint
 key = hash_fingerprint(fingerprint_file("track.flac"))
 corpus = Corpus()
 
-row = corpus.lookup(key, pipeline_version)
+row = corpus.lookup(key, pipeline_version)   # or lookup(recording_mbid=mbid, ...) if you hold one
 if row is not None:
     vector = row["embedding"]          # the commons already had it — skip the model
 else:
@@ -49,9 +49,12 @@ is those decisions as code so a tool does not have to reimplement them.
    pipeline is [`clapback-embed`](https://pypi.org/project/clapback-embed/), whose
    `PIPELINE_VERSION` is the identity to send. A tool with its own pipeline declares its own
    identity, and its vectors are comparable with each other rather than with the reference's.
-3. **Look up before contributing.** `Corpus.has` or `Corpus.lookup`. A repeat submission is
-   recorded as *agreement*, so a tool that re-sent its library would manufacture evidence of one
-   install agreeing with itself — the one measurement the commons exists to make honestly.
+3. **Look up before contributing — by recording if you hold an id, by hash otherwise.**
+   `Corpus.lookup(recording_mbid=mbid, pipeline_version=...)` finds the recording whichever path
+   keyed it; `Corpus.lookup(key, ...)` finds your path's row. Contribute under your hash either
+   way. A repeat submission is recorded as *agreement*, so a tool that re-sent its library would
+   manufacture evidence of one install agreeing with itself — the one measurement the commons
+   exists to make honestly.
 4. **Send `client_id` and `pipeline_version`.** Both are required by `Corpus.contribute` and have
    no defaults. `client_id` is a random UUID minted once per install — `identity.mint_client_id`
    — on the first contribution, never on install, and stored where the user can find and delete

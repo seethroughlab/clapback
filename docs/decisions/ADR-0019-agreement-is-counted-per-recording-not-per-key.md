@@ -12,6 +12,22 @@ Implementation:
   the AcoustID claim type (point 6); point 5 waits on `ADR-0007`. `ADR-0015` and `ADR-0018`,
   still proposed, each gain a point if accepted: batch lookup takes ids, and the by-hash claims
   route serves the join.
+- **`ADR-0014`, `ADR-0015`, `ADR-0016` and `ADR-0018` were accepted 2026-09-16**, `ADR-0015`
+  and `ADR-0018` with the amendments above written into their Implementation blocks.
+- **Point 1 is done** (2026-09-16, `e6124da`): the client README's first obligation and `/api`'s
+  "Get an embedding" section state the measured figures (24 of 56, 10 of 24 CD-quality, 37 of
+  56 across `fpcalc` generations) and that a miss by hash does not mean the corpus lacks the
+  recording. `/api`'s description of `GET /v1/recordings/{mbid}` no longer says "one per
+  pipeline" — two rows under one pipeline there are one file keyed twice.
+- **Point 3 is built in the client** (2026-09-16, `clapback-client` 0.3.0, unreleased):
+  `Corpus.lookup(recording_mbid=, pipeline_version=)` returns the most-claimed row under the id
+  in the shape a hash lookup returns, `None` when nobody has claimed it, and refuses both keys
+  or neither. It is `GET /v1/recordings/{mbid}` — no server change. The rule "by recording if
+  you hold one, by hash otherwise, contribute under your hash either way" is in the docstring,
+  the README and the module docstring, and a test pins the wording. The Picard copy is synced.
+  **Owed:** the two plug-ins passing the id they already hold, each a release — beets'
+  `mb_trackid` at `beetsplug/clapback.py`, Picard's `musicbrainz_recordingid` in `_core.py` —
+  batched with their `ADR-0015` `lookup_many` adoption so each is one release, not two.
 
 Extends [ADR-0010](ADR-0010-the-corpus-key-is-a-function-of-the-audio.md),
 [ADR-0008](ADR-0008-the-corpus-serves-agreement-not-a-verdict.md) and

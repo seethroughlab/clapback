@@ -265,6 +265,46 @@ class TestSimilarAndRecording:
         assert Corpus("https://x.invalid").recording(MBID) == []
 
 
+class TestLookupByRecording:
+    """`ADR-0019` point 3: the hash is exact within a fingerprinting path and may
+    differ across two, so a tool that holds a MusicBrainz recording id asks by it
+    first. The id is the same on every path."""
+
+    def test_by_recording_goes_to_the_recording_route_and_returns_one_row(self, wire):
+        wire.answer(200, {"recording_mbid": MBID, "embeddings": [
+            {"fingerprint_hash": HASH, "pipeline_version": PIPELINE, "embedding": VECTOR,
+             "contributor_count": 2, "recording_claims": 3},
+            {"fingerprint_hash": "e2" * 32, "pipeline_version": PIPELINE, "embedding": VECTOR,
+             "contributor_count": 1, "recording_claims": 1},
+        ]})
+        row = Corpus("https://x.invalid").lookup(recording_mbid=MBID, pipeline_version=PIPELINE)
+        url = urlsplit(wire.requests[-1].full_url)
+        assert url.path == f"/v1/recordings/{MBID}"
+        assert parse_qs(url.query)["pipeline_version"] == [PIPELINE]
+        # The most-claimed row, in the shape a hash lookup returns.
+        assert row["fingerprint_hash"] == HASH
+        assert row["embedding"] == VECTOR
+        assert row["recording_mbid"] == MBID
+        assert row["recording_claims"] == 3
+
+    def test_an_unclaimed_recording_is_none_like_a_missing_hash(self, wire):
+        wire.answer(404)
+        assert Corpus("https://x.invalid").lookup(recording_mbid=MBID) is None
+
+    def test_exactly_one_key(self):
+        c = Corpus("https://x.invalid")
+        with pytest.raises(ValueError):
+            c.lookup()
+        with pytest.raises(ValueError):
+            c.lookup(HASH, recording_mbid=MBID)
+
+    def test_the_docstring_states_the_rule(self):
+        import inspect
+        doc = " ".join((inspect.getdoc(Corpus.lookup) or "").split()).lower()
+        assert "by `recording_mbid=` if you hold one, by hash otherwise" in doc
+        assert "contribute under your hash either way" in doc
+
+
 class TestLookupWithoutAPipeline:
     """0.2.1: the filter became optional for a tool with no embedder at all —
     Picard's plugin in lookup-only mode — which wants the corpus's own row and

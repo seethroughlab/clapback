@@ -76,13 +76,30 @@ class Corpus:
         status, _ = self._request("GET", "/health")
         return status == 200
 
-    def lookup(self, fingerprint_hash: str, pipeline_version: str | None = None) -> dict | None:
+    def lookup(
+        self,
+        fingerprint_hash: str | None = None,
+        pipeline_version: str | None = None,
+        *,
+        recording_mbid: str | None = None,
+    ) -> dict | None:
         """The corpus's row for this recording from this pipeline, or None.
 
         The row carries `embedding` (512 floats), `contributor_count`, and the
         pipeline it was produced by. A tool that gets a row back here does not
         need to run the model: that is the whole exchange a plug-in makes, and
         on a Raspberry Pi it is minutes per track.
+
+        **Look up by `recording_mbid=` if you hold one, by hash otherwise, and
+        contribute under your hash either way** (`ADR-0019` point 3). The hash is
+        exact within one fingerprinting path and may differ across two — the
+        `fpcalc` binary and pyacoustid's library agree on 24 of 56 FLACs,
+        measured 2026-09-16 — so a miss by hash does not mean the corpus lacks
+        the recording. A MusicBrainz recording id is the same on every path.
+        Asked by id, this returns the row most clients have claimed under it
+        (then the most-confirmed), in the same shape a hash lookup returns, with
+        `recording_mbid` set to the id you asked by. Exactly one of the two keys
+        must be given.
 
         With `pipeline_version`, only a row from the *same* pipeline is returned.
         Two vectors are comparable exactly when their pipeline identities match
@@ -101,6 +118,14 @@ class Corpus:
         # string. `ADR-0006`'s Implementation block records what an unescaped one
         # costs: a 404 that looks exactly like the recording being absent.
         from urllib.parse import quote
+
+        if (fingerprint_hash is None) == (recording_mbid is None):
+            raise ValueError("lookup takes a fingerprint_hash or a recording_mbid, not both or neither")
+        if recording_mbid is not None:
+            rows = self.recording(recording_mbid, pipeline_version=pipeline_version)
+            if not rows:
+                return None
+            return {**rows[0], "recording_mbid": recording_mbid}
 
         path = f"/v1/embeddings/{fingerprint_hash}"
         if pipeline_version is not None:
@@ -237,8 +262,10 @@ class Corpus:
         """What does recording X sound like — without holding X.
 
         `ADR-0012` point 5's third read. Every row any client has claimed under
-        this id, one per pipeline, each with its vector. Empty when nobody has
-        claimed it.
+        this id, each with its vector, most-claimed first. Empty when nobody has
+        claimed it. Two rows under one pipeline are one file keyed twice by two
+        fingerprinting paths (`ADR-0019`); `lookup(recording_mbid=)` picks the
+        first for a tool that wants one.
         """
         from urllib.parse import quote
 
