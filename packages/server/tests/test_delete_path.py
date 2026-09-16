@@ -127,5 +127,5 @@ class TestRevocationCanActuallySelectRows:
     def test_the_contribute_path_records_it(self):
         from app.api import routes
 
-        body = inspect.getsource(routes.contribute_embedding)
+        body = inspect.getsource(routes._contribute_one)
         assert "client_id=req.client_id" in body

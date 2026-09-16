@@ -98,13 +98,13 @@ class TestContributingWithAnId:
     def test_an_id_without_a_client_is_refused(self):
         """Point 1: a claim is keyed by the client that made it. Unattributable,
         it could be neither revoked nor counted."""
-        body = inspect.getsource(routes.contribute_embedding)
+        body = inspect.getsource(routes._contribute_one)
         assert "req.recording_mbid and not req.client_id" in body
         assert "422" in body
 
     def test_both_branches_record_the_claim(self):
         """A contribution that confirms an existing row can still name it."""
-        body = inspect.getsource(routes.contribute_embedding)
+        body = inspect.getsource(routes._contribute_one)
         assert body.count("_record_claim(") == 2
 
 

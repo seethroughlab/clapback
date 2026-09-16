@@ -344,16 +344,15 @@ async def lookup_embedding(
     )
 
 
-@router.post("/embeddings", status_code=201, response_model=ContributeResponse)
-@limiter.limit(settings.contribute_rate_limit)
-async def contribute_embedding(
-    request: Request,
-    req: EmbeddingRequest,
-    db: DbSession,
-) -> ContributeResponse:
-    """Contribute an embedding to the cache.
+async def _contribute_one(db, req: EmbeddingRequest) -> ContributeResponse:
+    """One contribution, every guarantee — the unit the write path is built from.
 
-    If the embedding already exists, increments the contributor count.
+    `ADR-0016` point 2: the single endpoint and the batch endpoint both call
+    this, once per row, so a row contributed by the hundred gets exactly what a
+    row contributed alone gets — the claim check, the agreement record, the
+    contributor count, the ceiling, the quota — from the same lines. Raises
+    `HTTPException` for a refusal; the caller decides whether that is the
+    response or one entry in a list of them. Commits.
     """
     # **The key, since `ADR-0006` phase 4.** A submission confirms an existing row
     # exactly when it is for the same recording from the same pipeline, which is
@@ -465,6 +464,20 @@ async def contribute_embedding(
     await db.commit()
 
     return ContributeResponse(status="created", contributor_count=1)
+
+
+@router.post("/embeddings", status_code=201, response_model=ContributeResponse)
+@limiter.limit(settings.contribute_rate_limit)
+async def contribute_embedding(
+    request: Request,
+    req: EmbeddingRequest,
+    db: DbSession,
+) -> ContributeResponse:
+    """Contribute an embedding to the cache.
+
+    If the embedding already exists, increments the contributor count.
+    """
+    return await _contribute_one(db, req)
 
 
 @router.post("/similar", response_model=SimilarResponse)

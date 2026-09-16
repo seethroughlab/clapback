@@ -139,7 +139,7 @@ class TestAMismatchIsNeverRecordedAsDisagreement:
     computes the wrong thing."""
 
     def test_the_guard_exists_and_gates_the_write(self):
-        body = inspect.getsource(routes.contribute_embedding)
+        body = inspect.getsource(routes._contribute_one)
         assert "comparable" in body, "no pipeline comparison at all"
         assert "if similarity is not None and comparable:" in body, (
             "the agreement row must be gated on comparability, not merely computed"
@@ -147,7 +147,7 @@ class TestAMismatchIsNeverRecordedAsDisagreement:
 
     def test_agreement_rows_record_which_pipeline_agreed(self):
         assert "pipeline_version" in SubmissionAgreement.__table__.columns
-        body = inspect.getsource(routes.contribute_embedding)
+        body = inspect.getsource(routes._contribute_one)
         assert "pipeline_version=req.pipeline_version" in body
 
     @pytest.mark.parametrize(
@@ -182,7 +182,7 @@ class TestStoredRowsAreNotRelabelled:
     on a vector nobody can vouch for, exactly the claim phase 4 is built to trust."""
 
     def test_the_confirmation_path_never_assigns_to_the_stored_row(self):
-        body = inspect.getsource(routes.contribute_embedding)
+        body = inspect.getsource(routes._contribute_one)
         assert "existing.pipeline_version =" not in body
         assert "existing.pipeline_version=" not in body
 
@@ -196,7 +196,7 @@ class TestItIsStoredAndReported:
     def test_the_creation_path_stores_it(self):
         """Phase 4 can only promote this to the key if the rows contributed
         between now and then carry it."""
-        body = inspect.getsource(routes.contribute_embedding)
+        body = inspect.getsource(routes._contribute_one)
         assert "pipeline_version=req.pipeline_version" in body
 
     def test_a_lookup_reports_it(self):

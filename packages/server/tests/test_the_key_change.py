@@ -171,7 +171,7 @@ class TestAnUndeclaredContributionIsRejected:
         is not a contribution, so the check belongs where the shape is defined —
         and a branch could be reordered behind a database write."""
         assert EmbeddingRequest.model_fields["pipeline_version"].is_required()
-        body = inspect.getsource(routes.contribute_embedding)
+        body = inspect.getsource(routes._contribute_one)
         assert "if not req.pipeline_version" not in body
 
 
@@ -182,7 +182,7 @@ class TestAnUndeclaredContributionIsRejected:
 
 class TestTheWritePathKeysOnThePipeline:
     def test_an_existing_row_is_found_by_recording_and_pipeline(self):
-        body = inspect.getsource(routes.contribute_embedding)
+        body = inspect.getsource(routes._contribute_one)
         lookup = body[body.index("select(Embedding).where") : body.index("existing = result")]
         assert "Embedding.pipeline_version == req.pipeline_version" in lookup
         assert "Embedding.analysis_version" not in lookup
@@ -193,7 +193,7 @@ class TestTheWritePathKeysOnThePipeline:
         is now always true. Kept because the guarantee moved into the shape of a
         query several lines away, and a change to that query would take the
         guarantee with it silently."""
-        body = inspect.getsource(routes.contribute_embedding)
+        body = inspect.getsource(routes._contribute_one)
         assert "comparable = req.pipeline_version == existing.pipeline_version" in body
         assert "if similarity is not None and comparable:" in body
 
@@ -257,7 +257,7 @@ class TestTheReadPathAfterTheKeyChange:
         not arise. Applying the same fix-up there would be guessing at data a client
         sent deliberately."""
         assert "_decode_pipeline" not in inspect.getsource(routes.similar)
-        assert "_decode_pipeline" not in inspect.getsource(routes.contribute_embedding)
+        assert "_decode_pipeline" not in inspect.getsource(routes._contribute_one)
 
     def test_the_docstring_tells_a_caller_which_question_to_ask(self):
         """The failure here is silent: a lookup by metadata alone returns a

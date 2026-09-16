@@ -52,7 +52,7 @@ class TestWhatTheCeilingAppliesTo:
 
         from app.api import routes
 
-        body = inspect.getsource(routes.contribute_embedding)
+        body = inspect.getsource(routes._contribute_one)
         assert body.index('status="confirmed"') < body.index("max_embeddings"), (
             "the ceiling must be checked only after the confirmation path has "
             "returned, or confirmations get refused once the corpus is full"
@@ -68,7 +68,7 @@ class TestTheError:
 
         from app.api import routes
 
-        body = inspect.getsource(routes.contribute_embedding)
+        body = inspect.getsource(routes._contribute_one)
         assert "507" in body
         for phrase in ("ceiling", "Lookups and confirmations", "ADR-0004"):
             assert phrase in body, f"the rejection should mention {phrase!r}"
