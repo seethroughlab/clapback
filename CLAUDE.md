@@ -164,7 +164,7 @@ something bigger** — recorded in `ADR-0010`'s Implementation block: the Acoust
 *string* is not reproducible across fingerprinting paths. `fpcalc` and pyacoustid's library path
 agree on 24 of 56 FLACs (10 of 24 CD-quality ones); `fpcalc` 1.5.1 and 1.6.1 on 37 of 56. One bit
 is a new key, so a second client on another path lands on a different row more often than not,
-and no agreement is recorded. **`ADR-0019` is proposed to fix it**: the hash stays the row key,
+and no agreement is recorded. **`ADR-0019` was accepted 2026-09-16 to fix it, and nothing in it is built**: the hash stays the row key,
 but agreement, independence and confirmation are counted per *recording* — across keys — through
 `ADR-0012`'s claims; tools that hold an MBID look up by it first; similarity collapses rows
 sharing a recording; AcoustID track ids are admitted as a second claim type. Pinning `fpcalc`,

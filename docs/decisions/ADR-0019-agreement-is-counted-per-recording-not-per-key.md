@@ -1,8 +1,17 @@
 # ADR-0019: Agreement Is Counted per Recording, Not per Key
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-16
+
+Implementation:
+- **Accepted 2026-09-16**, the day it was proposed, on the measurement in `ADR-0010`'s
+  Implementation block. Nothing is built. Point 8's order: the documentation line (point 1),
+  then lookup by recording in the client (point 3), then the cross-key agreement (point 2, with
+  its migration and the two-keys-one-recording test), then collapsed similarity (point 4), then
+  the AcoustID claim type (point 6); point 5 waits on `ADR-0007`. `ADR-0015` and `ADR-0018`,
+  still proposed, each gain a point if accepted: batch lookup takes ids, and the by-hash claims
+  route serves the join.
 
 Extends [ADR-0010](ADR-0010-the-corpus-key-is-a-function-of-the-audio.md),
 [ADR-0008](ADR-0008-the-corpus-serves-agreement-not-a-verdict.md) and
