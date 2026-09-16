@@ -277,9 +277,16 @@ is part of the contract**, not an implementation detail. `ADR-0005` point 11 wid
 match.
 
 **The server.** Familiar calls `/v1/embeddings`, `/v1/features` and `/v1/analysis-detail` — GET and
-POST on each — plus `/health`. **The features and analysis-detail endpoints are legacy for the
-corpus but live for the client.** `ADR-0001` point 7 decided no existing feature rows migrate; that
-is a statement about what the corpus carries, and it does not license removing the endpoints.
+POST on each — plus `POST /v1/recordings/claims` (its `ADR-0115` backfill, since 2026-09-14),
+`GET /v1/recordings/{mbid}?type=musicbrainz_recording&pipeline_version=…` (its `ADR-0119`, since
+2026-09-16: the recording is asked first and the hash only on a 404, per `ADR-0019` point 3; it
+takes the first row of `embeddings` and reads `fingerprint_hash`, `embedding`, `pipeline_version`,
+`contributor_count` and `recording_claims` off it), and `/health`. It also sends `recording_mbid`
+on `POST /v1/embeddings` when it holds one. Verified 2026-09-16 against
+`backend/app/services/community_cache.py` in the sibling checkout — nine request sites. **The
+features and analysis-detail endpoints are legacy for the corpus but live for the client.**
+`ADR-0001` point 7 decided no existing feature rows migrate; that is a statement about what the
+corpus carries, and it does not license removing the endpoints.
 
 **The API is the only way in.** Clients and tools — Familiar, the CLI of `ADR-0001` point 3,
 anything else — reach the corpus over HTTP and never over a database connection. Every guarantee the
