@@ -64,8 +64,10 @@ Implementation:
   pyacoustid both times — and measured stability, not reproducibility. Nor is `fpcalc` a path
   one can pin: the official 1.6.0 and 1.6.1 builds (both ffmpeg 8) agree on 56 of 56, but 1.5.1
   (ffmpeg 4, 2021) agrees with 1.6.1 on **37 of 56**, every disagreement a 16-bit 44.1 kHz file
-  — the resampler moved between ffmpeg releases, and Picard bundles one `fpcalc` while every
-  Linux distribution ships another (`measure_fingerprint.versions-2026-09-16.csv`).
+  — the resampler moved between ffmpeg generations. The break is a step, not a drift: 1.6.1
+  built on swresample 6.1 and on 7.1 agree on 56 of 56. But Picard bundles one `fpcalc` and each
+  Linux release ships another, and a 2021 build is not rare
+  (`measure_fingerprint.versions-2026-09-16.csv`).
 - **What this does and does not break, as of 2026-09-16.** Every row in the corpus came from one
   client on one path, so nothing in it is wrong. What cannot be relied on is the thing three
   accepted records are built on: that a *second* client with the same file lands on the same

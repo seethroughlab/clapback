@@ -102,8 +102,10 @@ the string.
 ## Alternatives Considered
 
 - **Pin the fingerprinting path: "the key is what `fpcalc` says".** Rejected by measurement,
-  2026-09-16: `fpcalc` 1.5.1 and 1.6.1 disagree on 19 of 24 CD-quality files. A pinned binary
-  version is not something a Picard user or a Debian package can be held to.
+  2026-09-16: `fpcalc` 1.5.1 and 1.6.1 disagree on 19 of 24 CD-quality files (builds since the
+  ffmpeg 5 era agree among themselves, 56 of 56 across swresample 6.1 and 7.1, so the break is a
+  step rather than a drift). A pinned binary version is still not something a Picard user or a
+  Debian package can be held to, and the 2021 build is in the wild.
 - **Make the AcoustID track id the key.** Considered seriously — it is the right identifier for
   "same audio, whoever decoded it". Rejected as the *key* because it needs the network and an
   application key at contribution time, which makes an offline tool unable to key a row, and
