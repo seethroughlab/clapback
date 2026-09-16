@@ -45,6 +45,15 @@ Implementation:
   `ADR-0008` point 4 working as written — disagreement served, not hidden — and it means a
   contradiction count is not by itself evidence of a wrong pipeline. The band is unchanged; the
   figure is labelled for what it is on `/api`.
+- **Point 4 is built** (2026-09-16, undeployed). `/v1/similar` ranks as before, then
+  `_collapse_by_recording` over-fetches — a window of twice `limit`, doubling to a ceiling of
+  1,000 — resolves each row's recording through the claims, and keeps the first row seen per
+  (recording, pipeline), which is the nearest, until `limit` survive or the corpus runs out.
+  Unnamed rows are never folded. The response gains `collapsed`, the number of rows folded away;
+  `searched` still counts what was ranked. No schema change. Four more tests in
+  `tests/test_cross_key_agreement.py`: two keys one neighbour, the nearer rip is the one kept,
+  unnamed rows untouched, and the window widening past eight rows of one recording. With one
+  contributor every live search collapses nothing, and `collapsed` says 0.
 - **Point 3 is built in the client** (2026-09-16, `clapback-client` 0.3.0, on PyPI the same day):
   `Corpus.lookup(recording_mbid=, pipeline_version=)` returns the most-claimed row under the id
   in the shape a hash lookup returns, `None` when nobody has claimed it, and refuses both keys

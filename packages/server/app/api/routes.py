@@ -286,6 +286,11 @@ class Neighbour(BaseModel):
 class SimilarResponse(BaseModel):
     neighbours: list[Neighbour]
     searched: int
+    #: `ADR-0019` point 4: rows folded into a neighbour above because they share
+    #: its recording and pipeline — one file keyed twice by two fingerprinting
+    #: paths, or two installs' rips of one recording. 0 until a second path
+    #: contributes. Rows nobody has named are never folded.
+    collapsed: int = 0
 
 
 # --- Embedding models ---
@@ -798,6 +803,38 @@ async def contribute_batch(
     )
 
 
+#: `ADR-0019` point 4's over-fetch ceiling. A window this wide that still cannot
+#: fill `limit` distinct recordings is a corpus where one recording holds hundreds
+#: of rows, which is not a case worth optimising for before it exists.
+_COLLAPSE_MAX_WINDOW = 1000
+
+
+async def _collapse_by_recording(db, ranked, limit: int):
+    """Take the ranked query and return `(rows, recordings, collapsed)`: at most
+    `limit` rows with one per (recording, pipeline), the recording lookup for
+    them, and how many rows were folded away. See `similar` for why."""
+    window = limit * 2
+    while True:
+        rows = (await db.execute(ranked.limit(window))).all()
+        recordings = await _recordings_for(db, [r.fingerprint_hash for r in rows])
+        kept, seen, collapsed = [], set(), 0
+        for r in rows:
+            rec = recordings.get(r.fingerprint_hash)
+            if rec is not None:
+                key = (rec[0], r.pipeline_version)
+                if key in seen:
+                    collapsed += 1
+                    continue
+                seen.add(key)
+            kept.append(r)
+            if len(kept) == limit:
+                break
+        exhausted = len(rows) < window
+        if len(kept) == limit or exhausted or window >= _COLLAPSE_MAX_WINDOW:
+            return kept, recordings, collapsed
+        window = min(window * 2, _COLLAPSE_MAX_WINDOW)
+
+
 @router.post("/similar", response_model=SimilarResponse)
 @limiter.limit(settings.lookup_rate_limit)
 async def similar(
@@ -843,16 +880,22 @@ async def similar(
         filters.append(Embedding.pipeline_version == req.pipeline_version)
     if filters:
         stmt = stmt.where(*filters)
-    stmt = stmt.order_by(Embedding.embedding.cosine_distance(req.embedding)).limit(req.limit)
+    stmt = stmt.order_by(Embedding.embedding.cosine_distance(req.embedding))
 
-    rows = (await db.execute(stmt)).all()
+    # **`ADR-0019` point 4: one neighbour per claimed recording, the nearest of
+    # its rows.** A recording two installs keyed differently is two rows a
+    # fraction apart in this space, and without this it would be two adjacent
+    # results a caller cannot tell from two recordings. The ranking query has no
+    # notion of a recording — the recording is a derived, most-claimed id — so
+    # it over-fetches, resolves recordings, and keeps the first row seen per
+    # (recording, pipeline), widening the window until `limit` survive or the
+    # corpus runs out. Unnamed rows are kept as they are: nothing says two of
+    # them are one recording, and folding on a guess is what the corpus refuses.
+    rows, recordings, collapsed = await _collapse_by_recording(db, stmt, req.limit)
     count_stmt = select(func.count()).select_from(Embedding)
     if filters:
         count_stmt = count_stmt.where(*filters)
     searched = await db.scalar(count_stmt)
-    # `ADR-0012` point 5: a neighbour with a recording is a title and a page; one
-    # without is still a hash, and the response says which is which.
-    recordings = await _recordings_for(db, [r.fingerprint_hash for r in rows])
     agreements = await _recording_agreements_for(
         db,
         [
@@ -867,6 +910,7 @@ async def similar(
         return agreements.get((rec[0], r.pipeline_version), (0, 0)) if rec else (0, 0)
 
     return SimilarResponse(
+        collapsed=collapsed,
         neighbours=[
             Neighbour(
                 fingerprint_hash=r.fingerprint_hash,

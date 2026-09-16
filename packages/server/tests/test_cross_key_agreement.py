@@ -152,3 +152,63 @@ class TestOneRecordingTwoKeysTwoClients:
         )
         assert r.status_code == 200 and r.json()["created"] == 1
         assert await _figures(db_client, f"/v1/recordings/{MBID}") == (1, 0)
+
+
+class TestSimilarityCollapsesRowsSharingARecording:
+    """`ADR-0019` point 4: one neighbour per claimed recording under the
+    requested pipeline — the nearest of its rows — so a recording two installs
+    keyed differently appears once, not as two adjacent near-identical results.
+    Rows nobody has named stay as they are."""
+
+    async def test_two_keys_one_recording_is_one_neighbour(self, db_client):
+        v = _unit(1)
+        await db_client.post("/v1/embeddings", json=_contribution(H1, "client-a", v))
+        await db_client.post("/v1/embeddings", json=_contribution(H2, "client-b", v))
+        await db_client.post(
+            "/v1/embeddings", json=_contribution(H3, "client-c", _unit(3), mbid=None)
+        )
+        r = await db_client.post(
+            "/v1/similar", json={"embedding": v, "limit": 10, "pipeline_version": PIPELINE}
+        )
+        body = r.json()
+        hashes = [n["fingerprint_hash"] for n in body["neighbours"]]
+        assert len(hashes) == 2 and hashes[0] in (H1, H2) and hashes[1] == H3
+        assert body["collapsed"] == 1
+        assert body["searched"] == 3  # what was ranked, not what survived
+        assert body["neighbours"][0]["recording_confirmations"] == 1
+
+    async def test_the_nearest_row_of_the_recording_is_the_one_kept(self, db_client):
+        """Two rips of one recording, a few e-04 apart: the one nearer the
+        query is the neighbour, and the other is the row folded away."""
+        near, far = _unit(1), [x * 0.999 + y * 0.001 for x, y in zip(_unit(1), _unit(9))]
+        await db_client.post("/v1/embeddings", json=_contribution(H1, "client-a", far))
+        await db_client.post("/v1/embeddings", json=_contribution(H2, "client-b", near))
+        r = await db_client.post(
+            "/v1/similar", json={"embedding": near, "limit": 5, "pipeline_version": PIPELINE}
+        )
+        assert [n["fingerprint_hash"] for n in r.json()["neighbours"]] == [H2]
+
+    async def test_unnamed_rows_are_never_folded(self, db_client):
+        v = _unit(1)
+        await db_client.post("/v1/embeddings", json=_contribution(H1, "client-a", v, mbid=None))
+        await db_client.post("/v1/embeddings", json=_contribution(H2, "client-b", v, mbid=None))
+        r = await db_client.post(
+            "/v1/similar", json={"embedding": v, "limit": 5, "pipeline_version": PIPELINE}
+        )
+        assert len(r.json()["neighbours"]) == 2 and r.json()["collapsed"] == 0
+
+    async def test_the_window_widens_until_limit_distinct_recordings(self, db_client):
+        """Eight rows under one recording and one under another, limit 2: the
+        first window of four is all one recording, and the search keeps going."""
+        v = _unit(1)
+        for i, h in enumerate(f"{i:02d}" * 32 for i in range(8)):
+            await db_client.post("/v1/embeddings", json=_contribution(h, f"client-{i}", v))
+        other = "2c6da765-da50-476b-a000-61e7cf45ded8"
+        await db_client.post(
+            "/v1/embeddings", json=_contribution(H4, "client-z", _unit(2), mbid=other)
+        )
+        r = await db_client.post(
+            "/v1/similar", json={"embedding": v, "limit": 2, "pipeline_version": PIPELINE}
+        )
+        assert [n["recording_mbid"] for n in r.json()["neighbours"]] == [MBID, other]
+        assert r.json()["collapsed"] == 7

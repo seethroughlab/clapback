@@ -158,8 +158,10 @@ class TestWhatTheReadsCarry:
         assert n.recording_mbid is None and n.recording_claims == 0
 
     def test_similar_and_lookup_resolve_through_the_claims(self):
-        for fn in (routes.similar, routes.lookup_embedding):
+        # `similar` resolves inside `_collapse_by_recording` since `ADR-0019` point 4.
+        for fn in (routes._collapse_by_recording, routes.lookup_embedding):
             assert "_recordings_for(" in inspect.getsource(fn), fn.__name__
+        assert "_collapse_by_recording(" in inspect.getsource(routes.similar)
 
     def test_the_recording_read_is_per_pipeline(self):
         """A recording held from two pipelines is two rows that are not

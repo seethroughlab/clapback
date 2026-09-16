@@ -70,8 +70,10 @@ is those decisions as code so a tool does not have to reimplement them.
   holds under your pipeline.
 - **Similarity across libraries you do not own.** `similar(vector)` returns the nearest recordings
   the commons holds, each with a `recording_mbid` when anyone has claimed one — a MusicBrainz
-  recording a person can look up — and a bare hash when nobody has. `recording(mbid)` goes the
-  other way: what does recording X sound like, without holding X.
+  recording a person can look up — and a bare hash when nobody has. One neighbour per recording:
+  rows two installs keyed differently are folded into the nearest, and the response's `collapsed`
+  says how many were. `recording(mbid)` goes the other way: what does recording X sound like,
+  without holding X.
 - **Confirmation** — every result that names a recording carries `recording_confirmations`
   and `recording_contradictions`: how many independent installs sent a vector for that recording,
   under that pipeline, inside the `identical` band (cosine ≥ 0.999999), and how many sent one

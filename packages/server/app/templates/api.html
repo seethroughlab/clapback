@@ -227,6 +227,16 @@ query  = embed_text("dreamy ambient with piano")   # the same space</code></pre>
         result you cannot resolve should say so. The vector can come from audio or from text:
         <code>embed_text("distant piano under tape hiss")</code> is a query in the same space.
     </p>
+    <p class="muted">
+        <strong>One neighbour per recording.</strong> A recording two installs keyed differently —
+        two fingerprinting paths, or two rips — is two rows a fraction apart in this space, and
+        would otherwise be two adjacent results you could not tell from two recordings. Named rows
+        sharing a recording under one pipeline are folded into the nearest of them, and
+        <code>collapsed</code> says how many were; unnamed rows are never folded, because nothing
+        says two of them are one recording
+        (<a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0019-agreement-is-counted-per-recording-not-per-key.md">ADR-0019</a>
+        point 4). <code>searched</code> still counts what was ranked.
+    </p>
 </div>
 
 <div class="card">
