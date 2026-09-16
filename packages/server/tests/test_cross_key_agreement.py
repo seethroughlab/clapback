@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import math
 
-
 from tests.conftest import needs_db
 
 pytestmark = needs_db
