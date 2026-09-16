@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.api.deps import DbSession
+from app.cache import stats_cache
 from app.config import settings
 from app.db.models import AnalysisDetail, Embedding, Features, RecordingClaim, SubmissionAgreement
 from app.limiter import limiter
@@ -677,6 +678,67 @@ async def recording(
             for e, n in rows
         ],
     )
+
+
+# --- Pipelines: what the corpus holds, by identity (`ADR-0014` point 3) ---
+
+
+class PipelineEntry(BaseModel):
+    """One pipeline identity the corpus holds rows under, with its population."""
+
+    pipeline_version: str
+    rows: int
+    #: Rows under this identity that any client has claimed a recording for.
+    named: int
+    first_contributed_at: datetime
+    last_contributed_at: datetime
+
+
+class PipelinesResponse(BaseModel):
+    pipelines: list[PipelineEntry]
+
+
+async def _fetch_pipelines(db) -> list[PipelineEntry]:
+    # Named per identity: rows whose hash carries any claim. A hash is claimed
+    # once however many pipelines hold it, so the join is against distinct
+    # claimed hashes rather than claims — two clients naming a row is one name.
+    claimed = select(func.distinct(RecordingClaim.fingerprint_hash).label("h")).subquery()
+    stmt = (
+        select(
+            Embedding.pipeline_version,
+            func.count().label("rows"),
+            func.count(claimed.c.h).label("named"),
+            func.min(Embedding.created_at).label("first"),
+            func.max(Embedding.created_at).label("last"),
+        )
+        .outerjoin(claimed, claimed.c.h == Embedding.fingerprint_hash)
+        .group_by(Embedding.pipeline_version)
+        .order_by(func.count().desc(), Embedding.pipeline_version)
+    )
+    return [
+        PipelineEntry(
+            pipeline_version=pv, rows=int(rows), named=int(named), first_contributed_at=first, last_contributed_at=last
+        )
+        for pv, rows, named, first, last in (await db.execute(stmt)).all()
+    ]
+
+
+@router.get("/pipelines", response_model=PipelinesResponse)
+@limiter.limit(settings.lookup_rate_limit)
+async def pipelines(request: Request, db: DbSession) -> PipelinesResponse:
+    """Every pipeline identity the corpus holds, with how populated each is.
+
+    `ADR-0014` point 3: the live form of the export manifest's per-identity
+    list. A tool deciding whether to contribute under its own identity or
+    adopt an existing one asks here which identities exist and how many rows
+    each has. The corpus does not interpret the strings — it compares them
+    whole (`ADR-0006`) — so this is a list of what has been declared, ordered
+    by population, not a registry of what is allowed.
+
+    A read, unauthenticated, on the lookup rate limit, cached like the landing
+    page's counts (60 s) because it is a full scan grouped by identity.
+    """
+    return PipelinesResponse(pipelines=await stats_cache.get_or_compute("pipelines", lambda: _fetch_pipelines(db)))
 
 
 # --- Features endpoints ---

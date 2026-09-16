@@ -120,6 +120,26 @@ query  = embed_text("dreamy ambient with piano")   # the same space</code></pre>
         could vary is pinned and versioned, and <code>PIPELINE_VERSION</code> is the identity of all
         of it together.
     </p>
+    <p class="muted">
+        <strong>A tool with its own pipeline contributes under its own identity</strong> — a
+        string of five <code>+</code>-separated tokens: the checkpoint as its publisher names it,
+        the front-end, the windowing rule, the pooling rule, and the precision of what was
+        <em>sent</em> (a vector quantised for your own storage and dequantised on the way out is
+        <code>int8</code>, not <code>fp32</code>). Ours reads
+        <code>laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32</code>. The corpus does not
+        parse it; it compares the whole string, so two tools that agree on every token share a
+        population and two that differ in one do not. What each token means is declared once, in
+        your README. The convention, with worked examples, is in the
+        <a href="https://pypi.org/project/clapback-client/">client package's README</a>
+        (<a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0014-a-pipeline-identity-is-self-describing-and-the-corpus-lists-what-it-holds.md">ADR-0014</a>).
+    </p>
+    <pre><code>curl https://{{ host }}/v1/pipelines</code></pre>
+    <p class="muted">
+        Every identity the corpus holds rows under, most populated first, with its row count, how
+        many rows are named, and the first and latest contribution. Ask here before choosing an
+        identity: if yours already exists, contributing under it joins that population; if not,
+        yours starts one. Today there is one.
+    </p>
 </div>
 
 <div class="card">
@@ -233,6 +253,7 @@ query  = embed_text("dreamy ambient with piano")   # the same space</code></pre>
         <tr><td><code>GET</code></td><td><code>/v1/embeddings/{hash}</code></td><td>open</td></tr>
         <tr><td><code>POST</code></td><td><code>/v1/similar</code></td><td>open · a read that needs a body</td></tr>
         <tr><td><code>GET</code></td><td><code>/v1/recordings/{mbid}</code></td><td>open</td></tr>
+        <tr><td><code>GET</code></td><td><code>/v1/pipelines</code></td><td>open</td></tr>
         <tr><td><code>POST</code></td><td><code>/v1/recordings/claims</code></td><td><strong>open</strong> · a write</td></tr>
         <tr><td><code>GET</code></td><td><code>/v1/features/{hash}</code></td><td>open · legacy</td></tr>
         <tr><td><code>GET</code></td><td><code>/v1/analysis-detail/{hash}</code></td><td>open · legacy</td></tr>

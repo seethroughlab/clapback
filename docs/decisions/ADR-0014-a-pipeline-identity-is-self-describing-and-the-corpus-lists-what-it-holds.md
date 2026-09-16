@@ -9,9 +9,25 @@ Implementation:
   built. `ADR-0017`, first in point 6's order, was rejected on 2026-09-16 by its own
   measurement, so the order is now this record → `ADR-0015` and `ADR-0018` together →
   `ADR-0016`. Point 6's Decision text is left as written; this line is the correction.
-- Owed: the convention section in `packages/client/README.md` with ours and Kalinka's strings
-  as the worked examples (point 4), the `contribute` docstring pointer (point 4), and
-  `GET /v1/pipelines` (point 3).
+- **Built 2026-09-16, undeployed and unreleased.** Point 3: `GET /v1/pipelines`
+  (`packages/server/app/api/routes.py`, `_fetch_pipelines`), one grouped scan, on the lookup
+  limit, in `stats_cache` for 60 s; exercised against a local Postgres with three rows across
+  two identities (rows 2/1, named 1/1) and pinned by `tests/test_pipelines.py`. Point 4:
+  "Naming your pipeline" in `packages/client/README.md` with both worked examples, the
+  `contribute` docstring pointer, and `Corpus.pipelines()` — one more read the record did not
+  name, added so the README could say "ask first" and point at something. `/api` gained the
+  convention paragraph and the endpoint. Client 0.3.0, alongside `ADR-0019` point 3.
+- **Two corrections found while writing the convention down.** (1) Point 1 says the third token
+  is the windowing rule and cites ours as `artifact1`; `artifact1` is `ARTIFACT_VERSION` — the
+  version of the ONNX export of the checkpoint (`packages/embed/src/clapback_embed/artifacts.py`)
+  — and the reference's windowing has no token of its own. The README says so and tells a new
+  tool to put its windowing in that slot; the reference string is not changed, because changing
+  it would re-key 25,886 rows to say something a reader can look up here. (2) The string this
+  project offered in KalinkaPlayer#128, `…+frag3x10s+mean+l2+fp32`, is six tokens under point
+  1; the README's example is `…+frag3x10s+meanl2+fp32`. Either is a valid key; only one is the
+  convention, and the thread should be told which before Kalinka contributes.
+- Owed: the landing page's count broken down by identity once a second one has rows (Follow-up),
+  and the "for plug-in authors" section (Follow-up), which `ADR-0018` also feeds.
 
 Extends [ADR-0006](ADR-0006-the-pipeline-identity-is-the-corpus-key.md) and
 [ADR-0011](ADR-0011-the-commons-is-what-other-tools-plug-into.md) point 3. One of five records

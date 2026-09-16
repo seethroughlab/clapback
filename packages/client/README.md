@@ -88,6 +88,40 @@ the same setting that sends the vector, and say so in your own "what leaves the 
 
 The commons is worth exactly its coverage of the library asking. Early on, expect misses.
 
+## Naming your pipeline
+
+`pipeline_version` is half the corpus key. Two vectors are comparable exactly when it matches, and
+the corpus compares the whole string — it never parses one, never guesses that two strings with
+the same checkpoint are "probably comparable". So the string has to say enough that another tool
+with the same pipeline would write the same one, and a tool with a different one would not
+([`ADR-0014`](../../docs/decisions/ADR-0014-a-pipeline-identity-is-self-describing-and-the-corpus-lists-what-it-holds.md)).
+
+**Five tokens, in this order, joined by `+`**, each a short token with no `+` and no whitespace:
+
+| Token | What it names | Reference | Kalinka, for example |
+|---|---|---|---|
+| checkpoint | the weights, as their publisher names them, with a namespace | `laion/clap-htsat-unfused` | `lukewys/laion_clap:music_audioset_epoch_15_esc_90.14` |
+| front-end | how audio becomes model input — resampling, mel, normalisation | `frontend1` | `frontend1` |
+| windowing | which audio the model sees | `artifact1` — see below | `frag3x10s` (three 10-s fragments) |
+| pooling | how window vectors become one | `pool1` (mean of raw outputs, then L2) | `meanl2` |
+| precision | of the vector **you send**, not the one you store | `fp32` | `fp32` if sent before quantising; `int8` if dequantised from INT8 |
+
+Reference: `laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32` — what `clapback_embed.PIPELINE_VERSION`
+returns. Its third token predates the convention: `artifact1` is the version of the ONNX export of
+the checkpoint, and the reference's windowing — the whole track as consecutive 10-second windows —
+is fixed by `clapback-embed` and has no token of its own; a change to either moves the identity.
+A new tool should put its windowing rule in that slot, as Kalinka's example does. A tool that stores INT8 for itself but sends the fp32 vector it computed contributes
+under `+fp32`; one that sends a dequantised vector contributes under `+int8`. Both may exist in
+the corpus; they are different pipelines, and nothing is ever recomputed to change one into the
+other.
+
+Declare the string once in your own README, with what each token means — the corpus does not
+interpret tokens, so their meaning lives with the tool that chose them. Before choosing, ask
+`GET /v1/pipelines` (`Corpus.pipelines()`) which identities the corpus already holds and how many
+rows each has: if yours exists, contributing under it joins that population; if not, yours starts
+one. The server does not validate the grammar. A string that ignores it is still a valid key —
+just one nobody else will land on.
+
 ## Fingerprinting needs chromaprint, and only fingerprinting does
 
 ```bash

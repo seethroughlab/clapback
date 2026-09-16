@@ -120,7 +120,9 @@ class Corpus:
         from urllib.parse import quote
 
         if (fingerprint_hash is None) == (recording_mbid is None):
-            raise ValueError("lookup takes a fingerprint_hash or a recording_mbid, not both or neither")
+            raise ValueError(
+                "lookup takes a fingerprint_hash or a recording_mbid, not both or neither"
+            )
         if recording_mbid is not None:
             rows = self.recording(recording_mbid, pipeline_version=pipeline_version)
             if not rows:
@@ -165,7 +167,11 @@ class Corpus:
 
         `pipeline_version` and `client_id` are what the records require of a
         contribution (`ADR-0006` point 4, `ADR-0004` point 1) and have no
-        defaults. The other two are recorded columns the key no longer includes:
+        defaults. A tool with its own pipeline declares its own identity — five
+        `+`-joined tokens: checkpoint, front-end, windowing, pooling, and the
+        precision of what is *sent*; "Naming your pipeline" in the README has
+        the convention and `pipelines()` lists what the corpus already holds
+        (`ADR-0014`). The other two are recorded columns the key no longer includes:
         `clap_model_version` defaults to the first component of the pipeline
         identity, which is the checkpoint, so the two cannot disagree about one
         fact; `analysis_version` is the caller's own counter and starts at 1.
@@ -257,6 +263,21 @@ class Corpus:
         if status != 200:
             raise CorpusError(f"similar returned {status}: {payload}")
         return list((payload or {}).get("neighbours", []))
+
+    def pipelines(self) -> list[dict]:
+        """Every pipeline identity the corpus holds rows under, most populated first.
+
+        `ADR-0014` point 3. Each entry carries `pipeline_version`, `rows`,
+        `named` (rows anyone has claimed a recording for) and the first and
+        latest contribution. Ask before choosing an identity: if yours is here,
+        contributing under it joins that population; if not, yours starts one.
+        The corpus never interprets the strings — see "Naming your pipeline" in
+        the README for the convention it expects you to follow.
+        """
+        status, payload = self._request("GET", "/v1/pipelines")
+        if status == 200:
+            return list((payload or {}).get("pipelines", []))
+        raise CorpusError(f"pipelines returned {status}: {payload}")
 
     def recording(self, recording_mbid: str, *, pipeline_version: str | None = None) -> list[dict]:
         """What does recording X sound like — without holding X.

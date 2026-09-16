@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import io
 import json
+import pathlib
 import urllib.error
 import urllib.request
 from urllib.parse import parse_qs, urlsplit
@@ -212,7 +213,10 @@ class TestNamingARecording:
         assert "recording_mbid" not in self._sent(wire)
         wire.answer(201, {})
         Corpus("https://x.invalid").contribute(
-            fingerprint_hash=HASH, embedding=VECTOR, pipeline_version=PIPELINE, client_id="c",
+            fingerprint_hash=HASH,
+            embedding=VECTOR,
+            pipeline_version=PIPELINE,
+            client_id="c",
             recording_mbid=MBID,
         )
         assert self._sent(wire)["recording_mbid"] == MBID
@@ -244,20 +248,48 @@ class TestNamingARecording:
 
 class TestSimilarAndRecording:
     def test_similar_returns_neighbours_with_their_recordings(self, wire):
-        wire.answer(200, {"neighbours": [
-            {"fingerprint_hash": HASH, "similarity": 1.0, "pipeline_version": PIPELINE,
-             "recording_mbid": MBID, "recording_claims": 1},
-            {"fingerprint_hash": "e2" * 32, "similarity": 0.9, "pipeline_version": PIPELINE,
-             "recording_mbid": None, "recording_claims": 0},
-        ], "searched": 2})
+        wire.answer(
+            200,
+            {
+                "neighbours": [
+                    {
+                        "fingerprint_hash": HASH,
+                        "similarity": 1.0,
+                        "pipeline_version": PIPELINE,
+                        "recording_mbid": MBID,
+                        "recording_claims": 1,
+                    },
+                    {
+                        "fingerprint_hash": "e2" * 32,
+                        "similarity": 0.9,
+                        "pipeline_version": PIPELINE,
+                        "recording_mbid": None,
+                        "recording_claims": 0,
+                    },
+                ],
+                "searched": 2,
+            },
+        )
         n = Corpus("https://x.invalid").similar(VECTOR, limit=2, pipeline_version=PIPELINE)
         assert [x["recording_mbid"] for x in n] == [MBID, None]
         assert json.loads(wire.requests[-1].data)["pipeline_version"] == PIPELINE
 
     def test_recording_returns_rows_and_empty_when_unclaimed(self, wire):
-        wire.answer(200, {"recording_mbid": MBID, "embeddings": [
-            {"fingerprint_hash": HASH, "pipeline_version": PIPELINE, "embedding": VECTOR,
-             "contributor_count": 1, "recording_claims": 1}]})
+        wire.answer(
+            200,
+            {
+                "recording_mbid": MBID,
+                "embeddings": [
+                    {
+                        "fingerprint_hash": HASH,
+                        "pipeline_version": PIPELINE,
+                        "embedding": VECTOR,
+                        "contributor_count": 1,
+                        "recording_claims": 1,
+                    }
+                ],
+            },
+        )
         rows = Corpus("https://x.invalid").recording(MBID, pipeline_version=PIPELINE)
         assert rows[0]["fingerprint_hash"] == HASH
         assert "+" not in urlsplit(wire.requests[-1].full_url).query
@@ -271,12 +303,28 @@ class TestLookupByRecording:
     first. The id is the same on every path."""
 
     def test_by_recording_goes_to_the_recording_route_and_returns_one_row(self, wire):
-        wire.answer(200, {"recording_mbid": MBID, "embeddings": [
-            {"fingerprint_hash": HASH, "pipeline_version": PIPELINE, "embedding": VECTOR,
-             "contributor_count": 2, "recording_claims": 3},
-            {"fingerprint_hash": "e2" * 32, "pipeline_version": PIPELINE, "embedding": VECTOR,
-             "contributor_count": 1, "recording_claims": 1},
-        ]})
+        wire.answer(
+            200,
+            {
+                "recording_mbid": MBID,
+                "embeddings": [
+                    {
+                        "fingerprint_hash": HASH,
+                        "pipeline_version": PIPELINE,
+                        "embedding": VECTOR,
+                        "contributor_count": 2,
+                        "recording_claims": 3,
+                    },
+                    {
+                        "fingerprint_hash": "e2" * 32,
+                        "pipeline_version": PIPELINE,
+                        "embedding": VECTOR,
+                        "contributor_count": 1,
+                        "recording_claims": 1,
+                    },
+                ],
+            },
+        )
         row = Corpus("https://x.invalid").lookup(recording_mbid=MBID, pipeline_version=PIPELINE)
         url = urlsplit(wire.requests[-1].full_url)
         assert url.path == f"/v1/recordings/{MBID}"
@@ -300,9 +348,47 @@ class TestLookupByRecording:
 
     def test_the_docstring_states_the_rule(self):
         import inspect
+
         doc = " ".join((inspect.getdoc(Corpus.lookup) or "").split()).lower()
         assert "by `recording_mbid=` if you hold one, by hash otherwise" in doc
         assert "contribute under your hash either way" in doc
+
+
+class TestPipelines:
+    """`ADR-0014` point 3: the corpus lists the identities it holds, and point 4:
+    the convention lives in the README, pointed to from `contribute`."""
+
+    def test_it_lists_what_the_corpus_holds(self, wire):
+        wire.answer(
+            200,
+            {
+                "pipelines": [
+                    {
+                        "pipeline_version": PIPELINE,
+                        "rows": 25886,
+                        "named": 23196,
+                        "first_contributed_at": "2026-09-04T00:00:00",
+                        "last_contributed_at": "2026-09-15T00:00:00",
+                    }
+                ]
+            },
+        )
+        got = Corpus("https://x.invalid").pipelines()
+        assert urlsplit(wire.requests[-1].full_url).path == "/v1/pipelines"
+        assert got[0]["pipeline_version"] == PIPELINE and got[0]["rows"] == 25886
+
+    def test_contribute_points_at_the_convention(self):
+        import inspect
+
+        doc = " ".join((inspect.getdoc(Corpus.contribute) or "").split()).lower()
+        assert "naming your pipeline" in doc
+        assert "adr-0014" in doc
+
+    def test_the_readme_has_the_convention_with_both_examples(self):
+        readme = (pathlib.Path(__file__).parent.parent / "README.md").read_text()
+        assert "## Naming your pipeline" in readme
+        assert "laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32" in readme
+        assert "lukewys/laion_clap:music_audioset_epoch_15_esc_90.14" in readme
 
 
 class TestLookupWithoutAPipeline:
@@ -315,7 +401,11 @@ class TestLookupWithoutAPipeline:
 
         def fake(method, path, body=None):
             seen["path"] = path
-            return 200, {"embedding": [0.0] * 512, "pipeline_version": "corpus-pipe", "contributor_count": 1}
+            return 200, {
+                "embedding": [0.0] * 512,
+                "pipeline_version": "corpus-pipe",
+                "contributor_count": 1,
+            }
 
         c = Corpus("https://x.invalid")
         c._request = fake  # type: ignore[method-assign]
