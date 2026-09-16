@@ -10,9 +10,31 @@ Implementation:
   a tool that holds an id looks up by it first. Point 1 is built that way — each entry in the
   request names which kind of key it is, and each entry in the answer says which key it
   answered — rather than as hashes-only with ids added later. Nothing is built.
-- Owed: `POST /v1/embeddings/lookup` (points 1–3, as amended), `Corpus.lookup_many` (point 4),
-  and the plug-in adoptions (Follow-up). Point 3's per-hash cost is not what `slowapi`'s
-  decorator counts; the handler charges the limiter per entry after parsing the body.
+- **The Context's premise is wrong, measured 2026-09-16.** "A 10,000-track library takes 33
+  minutes to look up" was arithmetic on the configured `300/minute`, not a measurement, and the
+  limit does not bind a library scan: `slowapi`'s default `key_style="url"` keys each window on
+  the request *path*, so `GET /v1/embeddings/{hash}` has one window per hash. Against a local
+  server, 320 lookups of distinct hashes from one address drew no 429; 320 of one hash drew the
+  first at the 301st. What binds a scan is the round trip: sequential single lookups to the
+  deployed commons measured **72 ms median, 83 ms p90 (n=60, misses)** — 12 minutes for 10,000
+  tracks, an hour for 50,000. The decision stands on its own Alternatives paragraph, which said
+  the round trip was the shape and the limit was not the bottleneck; the headline number was
+  wrong by a factor of three and is corrected here, not in the Context.
+- **Built 2026-09-16, undeployed and unreleased.** Points 1–3 as amended: `POST
+  /v1/embeddings/lookup` takes up to 100 `{fingerprint_hash}` or `{recording_mbid}` keys,
+  answers in order with the key echoed, a hash by its own row and an id by the row most clients
+  have claimed under it; `vectors: false` drops the floats. Measured locally, 100 held keys:
+  **671 KB with vectors, 40 KB without** — the record's "under 20 KB" was an estimate and the
+  key echo plus per-row metadata is twice it. Point 3 is `app/limiter.py`'s `charge()`: the
+  handler spends `len(keys)` of the lookup limit against the batch route's own per-address
+  window after parsing (a 422 costs nothing); the fourth batch of a hundred in a minute is a
+  429 with `Retry-After`. Point 4: `Corpus.lookup_many(keys, pipeline_version=None,
+  vectors=True)` types keys by shape (64 hex or a UUID), chunks at 100, honours `Retry-After`
+  (capped at 120 s) before the fixed delays, and refuses a short answer as an error. Client
+  0.3.0. `tests/test_batch_lookup.py` on the server, `TestLookingUpALibrary` in the client.
+- Owed: the plug-ins' whole-library passes moving to `lookup_many` (Follow-up; batched with
+  their `ADR-0019` point 3 id lookups, one release each), and the post-deploy load measurement
+  the Tradeoff asks for.
 
 Extends [ADR-0009](ADR-0009-the-tool-is-useful-before-the-corpus-is.md) point 6 and
 [ADR-0011](ADR-0011-the-commons-is-what-other-tools-plug-into.md) point 2. One of the five records

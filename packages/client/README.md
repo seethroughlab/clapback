@@ -75,6 +75,49 @@ is those decisions as code so a tool does not have to reimplement them.
 - **Confirmation** — whether your vector for a recording agrees with others' independently
   computed one.
 
+## Looking up a whole library
+
+One `lookup` per track is the right shape for a tool that embeds as it goes. It is the wrong shape
+for a tool that already holds a fingerprint or an id for every track and wants to know, before
+doing anything else, which of them the commons has: sequential single lookups to the commons
+measured 72 ms median on 2026-09-16, which is twelve minutes for 10,000 tracks spent mostly on
+round trips answering "no" ([`ADR-0015`](../../docs/decisions/ADR-0015-a-library-is-looked-up-in-batches.md)).
+
+```python
+for key, row in corpus.lookup_many(keys, pipeline_version, vectors=False):
+    ...   # key is exactly what you passed; row is what lookup() would return, or None
+```
+
+`keys` is any iterable of fingerprint hashes and MusicBrainz recording ids, mixed — told apart by
+shape — and a tool should pass the id wherever it holds one. Batches of 100 go to
+`POST /v1/embeddings/lookup`; the answer comes back in order. `vectors=False` leaves out the 512
+floats, which is what a tool asking "which of these do you hold, and what are they called?" wants
+and is a fraction of the bytes. The commons counts its lookup limit per key, not per request, so
+a large library will be told to wait part-way; `lookup_many` honours `Retry-After` and continues,
+and one call walks the whole library. If you want the *whole* corpus rather than your library's
+slice of it, the weekly export is the right download, not this.
+
+## Which recording is this?
+
+Every `lookup` result carries `recording_mbid` — the MusicBrainz recording id the most independent
+installs have asserted for that row — and `recording_claims`, how many. `lookup_many(...,
+vectors=False)` is the whole-library form of that question, and `corpus.claims(hash)` lists every
+id claimed for a row with its count, dissent included
+([`ADR-0018`](../../docs/decisions/ADR-0018-the-corpus-answers-which-recording-is-this.md)).
+
+What this is, in order: it works only for recordings the commons holds; the id is the one most
+independent installs asserted, and the count is how many; it is not verified and it is not
+AcoustID; and a count of 1 means one install said so. AcoustID answers the same question by fuzzy
+match against a database built for it. This is an exact-hash shortcut that is silent when the
+commons has not seen the recording — never a replacement, and a tool must not treat it as one.
+What it has that AcoustID does not: no key, no per-second limit, and the answer comes with the
+vector.
+
+**Never send an id you learned here back as your own claim.** A tool that does counts itself as
+independent confirmation of what it copied. Claim only what you established yourself — from your
+tags, from AcoustID, from Picard. The server cannot tell the difference; this sentence is the only
+defence.
+
 ## Naming what you contribute
 
 If your tool knows the MusicBrainz **recording** id — beets' `mb_trackid`, Picard's recording id,

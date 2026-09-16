@@ -12,7 +12,6 @@ class Base(DeclarativeBase):
     """Base class for all models."""
 
 
-
 class Embedding(Base):
     """CLAP embedding cache entry.
 
@@ -94,9 +93,7 @@ class Embedding(Base):
 
     # Metadata
     contributor_count: Mapped[int] = mapped_column(Integer, default=1)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     last_accessed_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )
@@ -171,9 +168,7 @@ class SubmissionAgreement(Base):
     #: point 6 lands in Familiar.
     pipeline_version: Mapped[str | None] = mapped_column(String(200))
 
-    recorded_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now()
-    )
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
 class Features(Base):
@@ -197,9 +192,7 @@ class Features(Base):
 
     # Metadata
     contributor_count: Mapped[int] = mapped_column(Integer, default=1)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     last_accessed_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )
@@ -215,9 +208,7 @@ class BannedIP(Base):
 
     ip_address: Mapped[str] = mapped_column(String(45), primary_key=True)  # IPv6 max length
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    banned_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now()
-    )
+    banned_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     banned_by: Mapped[str | None] = mapped_column(String(100), nullable=True)  # Admin identifier
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
@@ -239,9 +230,7 @@ class IPStats(Base):
     lookup_misses: Mapped[int] = mapped_column(Integer, default=0)  # Not found
 
     # Timestamps
-    first_seen: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now()
-    )
+    first_seen: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     last_seen: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )
@@ -261,9 +250,7 @@ class AnalysisDetail(Base):
     """
 
     __tablename__ = "analysis_details"
-    __table_args__ = (
-        Index("ix_analysis_details_last_accessed", "last_accessed_at"),
-    )
+    __table_args__ = (Index("ix_analysis_details_last_accessed", "last_accessed_at"),)
 
     # Composite primary key
     fingerprint_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -274,9 +261,7 @@ class AnalysisDetail(Base):
 
     # Metadata
     contributor_count: Mapped[int] = mapped_column(Integer, default=1)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     last_accessed_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )

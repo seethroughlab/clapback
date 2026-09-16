@@ -90,7 +90,9 @@ async def _fetch_top_stats(db: AsyncSession) -> dict:
     named = await db.scalar(select(func.count(func.distinct(RecordingClaim.fingerprint_hash)))) or 0
     contributors = (
         await db.scalar(
-            select(func.count(func.distinct(Embedding.client_id))).where(Embedding.client_id.is_not(None))
+            select(func.count(func.distinct(Embedding.client_id))).where(
+                Embedding.client_id.is_not(None)
+            )
         )
         or 0
     )
@@ -103,14 +105,20 @@ async def _fetch_top_stats(db: AsyncSession) -> dict:
 
 
 async def _fetch_velocity(db: AsyncSession) -> dict:
-    last_24h = (await db.execute(
-        select(func.count()).select_from(Embedding)
-        .where(Embedding.created_at > func.now() - text("interval '24 hours'"))
-    )).scalar() or 0
-    last_7d = (await db.execute(
-        select(func.count()).select_from(Embedding)
-        .where(Embedding.created_at > func.now() - text("interval '7 days'"))
-    )).scalar() or 0
+    last_24h = (
+        await db.execute(
+            select(func.count())
+            .select_from(Embedding)
+            .where(Embedding.created_at > func.now() - text("interval '24 hours'"))
+        )
+    ).scalar() or 0
+    last_7d = (
+        await db.execute(
+            select(func.count())
+            .select_from(Embedding)
+            .where(Embedding.created_at > func.now() - text("interval '7 days'"))
+        )
+    ).scalar() or 0
     return {"last_24h": int(last_24h), "last_7d": int(last_7d)}
 
 
@@ -118,7 +126,9 @@ async def _fetch_growth(db: AsyncSession) -> list[dict]:
     """Daily-bucketed cumulative count for the last 90 days, of the rows that exist
     now. Rows removed by migration `011` or `ADR-0010`'s collapse are not here, so
     the line is "what is here, by when it arrived" rather than a history."""
-    rows = (await db.execute(text("""
+    rows = (
+        await db.execute(
+            text("""
         SELECT day, sum(daily_count) OVER (ORDER BY day) AS cumulative
         FROM (
             SELECT date_trunc('day', created_at) AS day, count(*) AS daily_count
@@ -127,7 +137,9 @@ async def _fetch_growth(db: AsyncSession) -> list[dict]:
             GROUP BY 1
         ) t
         ORDER BY day
-    """))).all()
+    """)
+        )
+    ).all()
     return [{"day": r.day.date().isoformat(), "cumulative": int(r.cumulative)} for r in rows]
 
 
@@ -249,8 +261,12 @@ async def export_latest(request: Request):
     """Redirect to the current manifest in the bucket — a stable URL on this
     domain, so the bucket can move (`ADR-0013` point 5) without breaking links."""
     if not settings.export_public_url:
-        raise HTTPException(status_code=404, detail="No export has been published yet — see /export")
-    return RedirectResponse(f"{settings.export_public_url.rstrip('/')}/latest/manifest.json", status_code=307)
+        raise HTTPException(
+            status_code=404, detail="No export has been published yet — see /export"
+        )
+    return RedirectResponse(
+        f"{settings.export_public_url.rstrip('/')}/latest/manifest.json", status_code=307
+    )
 
 
 class HashResolution(BaseModel):
@@ -297,8 +313,12 @@ async def recent(request: Request, db: DbSession, limit: int = 20) -> RecentResp
             RecentRow(
                 fingerprint_hash=r.fingerprint_hash,
                 created_at=r.created_at.isoformat(timespec="minutes") if r.created_at else "",
-                recording_mbid=recordings[r.fingerprint_hash][0] if r.fingerprint_hash in recordings else None,
-                recording_claims=recordings[r.fingerprint_hash][1] if r.fingerprint_hash in recordings else 0,
+                recording_mbid=recordings[r.fingerprint_hash][0]
+                if r.fingerprint_hash in recordings
+                else None,
+                recording_claims=recordings[r.fingerprint_hash][1]
+                if r.fingerprint_hash in recordings
+                else 0,
             )
             for r in rows
         ]
@@ -318,26 +338,44 @@ async def detail(
 
     fp = fingerprint_hash.lower()
 
-    embeddings = (await db.execute(
-        select(Embedding)
-        .where(Embedding.fingerprint_hash == fp)
-        .order_by(Embedding.analysis_version.desc(), Embedding.clap_model_version)
-    )).scalars().all()
+    embeddings = (
+        (
+            await db.execute(
+                select(Embedding)
+                .where(Embedding.fingerprint_hash == fp)
+                .order_by(Embedding.analysis_version.desc(), Embedding.clap_model_version)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     if not embeddings:
         raise HTTPException(status_code=404, detail="Fingerprint not found")
 
-    features = (await db.execute(
-        select(Features)
-        .where(Features.fingerprint_hash == fp)
-        .order_by(Features.analysis_version.desc())
-    )).scalars().all()
+    features = (
+        (
+            await db.execute(
+                select(Features)
+                .where(Features.fingerprint_hash == fp)
+                .order_by(Features.analysis_version.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
 
-    details = (await db.execute(
-        select(AnalysisDetail)
-        .where(AnalysisDetail.fingerprint_hash == fp)
-        .order_by(AnalysisDetail.analysis_version.desc())
-    )).scalars().all()
+    details = (
+        (
+            await db.execute(
+                select(AnalysisDetail)
+                .where(AnalysisDetail.fingerprint_hash == fp)
+                .order_by(AnalysisDetail.analysis_version.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     feat_by_av = {f.analysis_version: f for f in features}
     detail_by_av = {d.analysis_version: d for d in details}
@@ -351,33 +389,39 @@ async def detail(
         emb_views = []
         for e in embeddings_by_av[av]:
             vec = [float(x) for x in e.embedding] if e.embedding is not None else []
-            emb_views.append({
-                "clap_model_version": e.clap_model_version,
-                # Null on every row contributed before `ADR-0006` phase 2, which
-                # is the whole corpus today. The template says so rather than
-                # omitting the line, because "not recorded" is the interesting
-                # fact about these rows.
-                "pipeline_version": e.pipeline_version,
-                "contributor_count": e.contributor_count,
-                "dims": len(vec),
-                "preview": fmt_vec_preview(vec),
-                "vec_json": json.dumps(vec),
-                "created_at": e.created_at,
-                "last_accessed_at": e.last_accessed_at,
-            })
+            emb_views.append(
+                {
+                    "clap_model_version": e.clap_model_version,
+                    # Null on every row contributed before `ADR-0006` phase 2, which
+                    # is the whole corpus today. The template says so rather than
+                    # omitting the line, because "not recorded" is the interesting
+                    # fact about these rows.
+                    "pipeline_version": e.pipeline_version,
+                    "contributor_count": e.contributor_count,
+                    "dims": len(vec),
+                    "preview": fmt_vec_preview(vec),
+                    "vec_json": json.dumps(vec),
+                    "created_at": e.created_at,
+                    "last_accessed_at": e.last_accessed_at,
+                }
+            )
 
         feat = feat_by_av.get(av)
         det = detail_by_av.get(av)
         det_json = json.dumps(det.detail, indent=2, sort_keys=True) if det else None
-        versions.append({
-            "av": av,
-            "embeddings": emb_views,
-            "features": feat,
-            "features_json": json.dumps(feat.features, indent=2, sort_keys=True) if feat else None,
-            "detail": det,
-            "detail_json": det_json,
-            "detail_size_kb": (len(det_json) / 1024) if det_json else None,
-        })
+        versions.append(
+            {
+                "av": av,
+                "embeddings": emb_views,
+                "features": feat,
+                "features_json": json.dumps(feat.features, indent=2, sort_keys=True)
+                if feat
+                else None,
+                "detail": det,
+                "detail_json": det_json,
+                "detail_size_kb": (len(det_json) / 1024) if det_json else None,
+            }
+        )
 
     return templates.TemplateResponse(
         request,
@@ -412,7 +456,9 @@ async def resolve_prefix(request: Request, prefix: str, db: DbSession) -> HashRe
         raise HTTPException(status_code=422, detail="prefix must be 12 to 64 hex characters")
     rows = (
         await db.execute(
-            select(Embedding.fingerprint_hash, Embedding.pipeline_version, Embedding.contributor_count)
+            select(
+                Embedding.fingerprint_hash, Embedding.pipeline_version, Embedding.contributor_count
+            )
             .where(Embedding.fingerprint_hash.like(prefix + "%"))
             .order_by(Embedding.contributor_count.desc(), Embedding.pipeline_version)
             .limit(3)

@@ -82,13 +82,16 @@ class TestTheError:
         assert 500 <= exc.status_code < 600
 
 
-@pytest.mark.parametrize("total,ceiling,refused", [
-    (0, 500_000, False),
-    (499_999, 500_000, False),
-    (500_000, 500_000, True),      # at the ceiling, not past it — the row would be the 500,001st
-    (500_001, 500_000, True),
-    (10, 0, False),                # disabled
-])
+@pytest.mark.parametrize(
+    "total,ceiling,refused",
+    [
+        (0, 500_000, False),
+        (499_999, 500_000, False),
+        (500_000, 500_000, True),  # at the ceiling, not past it — the row would be the 500,001st
+        (500_001, 500_000, True),
+        (10, 0, False),  # disabled
+    ],
+)
 def test_the_boundary(total, ceiling, refused):
     """`>=` rather than `>`: the ceiling is the number of rows the corpus holds,
     so a write while already at it would exceed it."""

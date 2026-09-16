@@ -65,23 +65,34 @@ class TestContributingWithAnId:
 
     def test_it_is_optional_and_defaults_to_none(self):
         r = routes.EmbeddingRequest(
-            fingerprint_hash=HASH, embedding=VEC, analysis_version=1,
-            clap_model_version="x", pipeline_version="p",
+            fingerprint_hash=HASH,
+            embedding=VEC,
+            analysis_version=1,
+            clap_model_version="x",
+            pipeline_version="p",
         )
         assert r.recording_mbid is None
 
     def test_it_is_canonicalised_on_the_way_in(self):
         r = routes.EmbeddingRequest(
-            fingerprint_hash=HASH, embedding=VEC, analysis_version=1,
-            clap_model_version="x", pipeline_version="p", recording_mbid=MBID.upper(),
+            fingerprint_hash=HASH,
+            embedding=VEC,
+            analysis_version=1,
+            clap_model_version="x",
+            pipeline_version="p",
+            recording_mbid=MBID.upper(),
         )
         assert r.recording_mbid == MBID
 
     def test_a_malformed_id_is_a_422_not_a_silent_drop(self):
         with pytest.raises(ValidationError):
             routes.EmbeddingRequest(
-                fingerprint_hash=HASH, embedding=VEC, analysis_version=1,
-                clap_model_version="x", pipeline_version="p", recording_mbid="nope",
+                fingerprint_hash=HASH,
+                embedding=VEC,
+                analysis_version=1,
+                clap_model_version="x",
+                pipeline_version="p",
+                recording_mbid="nope",
             )
 
     def test_an_id_without_a_client_is_refused(self):

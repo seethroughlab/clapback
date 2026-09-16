@@ -53,7 +53,12 @@ INDEX_CTX = {
     "growth_max": 25886,
     "similarity_ms": 3,
     "similarity_measured": "2026-09",
-    "map_meta": {"generated": "2026-09-05", "count": 25587, "pipeline_version": None, "available": True},
+    "map_meta": {
+        "generated": "2026-09-05",
+        "count": 25587,
+        "pipeline_version": None,
+        "available": True,
+    },
 }
 
 API_CTX = {
@@ -93,7 +98,7 @@ class TestTheLandingPage:
     def test_the_tagline_is_the_sites_one_tagline(self):
         html = render("index.html", **INDEX_CTX)
         assert SITE["tagline"] in html
-        assert f'<title>{SITE["name"]} — {SITE["tagline"]}</title>' in html
+        assert f"<title>{SITE['name']} — {SITE['tagline']}</title>" in html
 
     def test_two_contributors_changes_the_tile(self):
         ctx = dict(INDEX_CTX, top=dict(INDEX_CTX["top"], contributors=2))
@@ -106,7 +111,10 @@ class TestTheLandingPage:
         assert "Nothing has arrived in the last 90 days." in html and "<polyline" not in html
 
     def test_no_map_means_no_script(self):
-        ctx = dict(INDEX_CTX, map_meta={"generated": None, "count": 0, "pipeline_version": None, "available": False})
+        ctx = dict(
+            INDEX_CTX,
+            map_meta={"generated": None, "count": 0, "pipeline_version": None, "available": False},
+        )
         html = render("index.html", **ctx)
         assert "map.js" not in html and "has not been generated yet" in html
 
@@ -119,9 +127,15 @@ class TestTheOtherPages:
 
     def test_map_renders_as_the_explorer(self):
         html = render("map.html", map_meta=INDEX_CTX["map_meta"])
-        assert "Explore the corpus" in html and 'id="query"' in html and "Random named recording" in html
+        assert (
+            "Explore the corpus" in html
+            and 'id="query"' in html
+            and "Random named recording" in html
+        )
         assert "names.js" in html and "/browse/recent" in html and "/browse/hash/" in html
-        assert "musicbrainz.org/ws/2" not in html, "the page must not talk to MusicBrainz; names.js does"
+        assert "musicbrainz.org/ws/2" not in html, (
+            "the page must not talk to MusicBrainz; names.js does"
+        )
 
     def test_detail_links_to_the_explorer(self):
         html = render(
@@ -130,7 +144,7 @@ class TestTheOtherPages:
             totals={"embeddings": 1, "features": 0, "details": 0},
             versions=[],
         )
-        assert f'/map?hash={"d8" * 32}' in html
+        assert f"/map?hash={'d8' * 32}" in html
 
     def test_admin_pages_carry_no_site_chrome(self):
         html = render("admin/login.html", error_message=None)
@@ -237,7 +251,12 @@ class TestTheExplorersRoutes:
     def test_growth_points_scale_to_the_box(self):
         from app.api.browse import growth_points
 
-        pts = growth_points([{"day": "a", "cumulative": 0}, {"day": "b", "cumulative": 10}], width=100, height=50, pad=5)
+        pts = growth_points(
+            [{"day": "a", "cumulative": 0}, {"day": "b", "cumulative": 10}],
+            width=100,
+            height=50,
+            pad=5,
+        )
         assert pts == "0.0,45.0 100.0,5.0"
         assert growth_points([]) == ""
 
@@ -258,9 +277,11 @@ MANIFEST = {
     "licence": "CC0-1.0",
     "url": "https://clapback-export.s3.us-east-1.amazonaws.com/exports/2026-09-21/",
     "embeddings": [
-        {"pipeline_version": "laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32",
-         "file": "embeddings-laion_clap.htsat.unfused_frontend1_artifact1_pool1_fp32.csv.gz",
-         "rows": 25886},
+        {
+            "pipeline_version": "laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32",
+            "file": "embeddings-laion_clap.htsat.unfused_frontend1_artifact1_pool1_fp32.csv.gz",
+            "rows": 25886,
+        },
     ],
     "embeddings_total": 25886,
     "claims": {"file": "claims.csv.gz", "rows": 23196},
@@ -321,13 +342,24 @@ class TestTheExportScript:
     CODE = "\n".join(line for line in SCRIPT.splitlines() if not line.lstrip().startswith("#"))
 
     def test_no_private_column_or_table_is_selected(self):
-        for forbidden in ("client_id", "ip_stats", "banned_ips", "submission_agreement", "ip_address"):
+        for forbidden in (
+            "client_id",
+            "ip_stats",
+            "banned_ips",
+            "submission_agreement",
+            "ip_address",
+        ):
             assert forbidden not in self.CODE, forbidden
 
     def test_the_embedding_rows_keep_the_shape_the_map_builder_reads(self):
         """hash first, vector last — `scripts/build_map.py` takes row[0] and row[-1]."""
-        sel = self.CODE[self.CODE.index("SELECT e.fingerprint_hash"):self.CODE.index("FROM embeddings e")]
-        cols = [c.strip().split(" AS ")[-1].split(".")[-1] for c in sel.replace("SELECT", "").split(",\n")]
+        sel = self.CODE[
+            self.CODE.index("SELECT e.fingerprint_hash") : self.CODE.index("FROM embeddings e")
+        ]
+        cols = [
+            c.strip().split(" AS ")[-1].split(".")[-1]
+            for c in sel.replace("SELECT", "").split(",\n")
+        ]
         assert cols[0] == "fingerprint_hash" and cols[-1] == "embedding"
         assert "created_at::date" in sel  # day precision, point 4
         assert "HEADER" in self.CODE
@@ -340,6 +372,10 @@ class TestTheExportScript:
         import json
 
         pol = json.loads((SERVER / "deploy" / "iam-export-policy.json").read_text())
-        actions = {a for st in pol["Statement"] for a in ([st["Action"]] if isinstance(st["Action"], str) else st["Action"])}
+        actions = {
+            a
+            for st in pol["Statement"]
+            for a in ([st["Action"]] if isinstance(st["Action"], str) else st["Action"])
+        }
         assert "s3:DeleteObject" not in actions and "s3:PutObject" in actions
         assert all("clapback-backup" not in json.dumps(st) for st in pol["Statement"])

@@ -5,7 +5,7 @@ import re
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -13,7 +13,7 @@ from app.api.deps import DbSession
 from app.cache import stats_cache
 from app.config import settings
 from app.db.models import AnalysisDetail, Embedding, Features, RecordingClaim, SubmissionAgreement
-from app.limiter import limiter
+from app.limiter import charge, limiter
 
 router = APIRouter(prefix="/v1")
 
@@ -680,6 +680,239 @@ async def recording(
     )
 
 
+# --- Batch lookup: a library is looked up in batches (`ADR-0015`) ---
+
+
+#: `ADR-0015` point 1's ceiling. Above it is a 422, not a partial answer.
+LOOKUP_BATCH_MAX = 100
+
+
+class LookupKey(BaseModel):
+    """One key in a batch: a fingerprint hash, or — `ADR-0019` point 3 — a
+    MusicBrainz recording id, which is the same on every fingerprinting path.
+    Exactly one of the two."""
+
+    fingerprint_hash: str | None = Field(default=None, min_length=1, max_length=64)
+    recording_mbid: str | None = Field(default=None, max_length=36)
+
+    @field_validator("recording_mbid")
+    @classmethod
+    def _mbid_shape(cls, v: str | None) -> str | None:
+        return None if v is None else _canonical_mbid(v)
+
+    @model_validator(mode="after")
+    def _exactly_one(self) -> "LookupKey":
+        if (self.fingerprint_hash is None) == (self.recording_mbid is None):
+            raise ValueError("a key is a fingerprint_hash or a recording_mbid, not both or neither")
+        return self
+
+
+class LookupBatchRequest(BaseModel):
+    keys: list[LookupKey] = Field(..., min_length=1, max_length=LOOKUP_BATCH_MAX)
+    #: As on the single lookup: send it if you intend to use the vector.
+    pipeline_version: str | None = Field(default=None, min_length=1, max_length=200)
+    #: Point 2: `false` returns everything but the 512 floats — "which of these
+    #: do you hold, and what are they called?" in under 20 KB per hundred.
+    vectors: bool = True
+
+
+class LookupRow(EmbeddingResponse):
+    """`EmbeddingResponse` with the vector optional, for `vectors: false`."""
+
+    embedding: list[float] | None = None  # type: ignore[assignment]
+
+
+class LookupResult(BaseModel):
+    """The key as asked, and the row or null — order preserved so a client can
+    zip the answer with its request."""
+
+    key: LookupKey
+    row: LookupRow | None
+
+
+class LookupBatchResponse(BaseModel):
+    results: list[LookupResult]
+
+
+def _row_for(emb: Embedding, recording: tuple[str, int] | None, *, vectors: bool) -> LookupRow:
+    fields: dict = {
+        "fingerprint_hash": emb.fingerprint_hash,
+        "analysis_version": emb.analysis_version,
+        "clap_model_version": emb.clap_model_version,
+        "pipeline_version": emb.pipeline_version,
+        "contributor_count": emb.contributor_count,
+        "recording_mbid": recording[0] if recording else None,
+        "recording_claims": recording[1] if recording else 0,
+    }
+    if vectors:
+        fields["embedding"] = list(emb.embedding)
+    return LookupRow(**fields)
+
+
+@router.post(
+    "/embeddings/lookup",
+    response_model=LookupBatchResponse,
+    response_model_exclude_unset=True,
+)
+async def lookup_batch(
+    request: Request, req: LookupBatchRequest, db: DbSession
+) -> LookupBatchResponse:
+    """Look up to a hundred keys at once — `ADR-0015`.
+
+    One entry per key, in the order sent: the row if held, null if not. A held
+    entry is exactly what the single `GET` returns for that key, so nothing a
+    client learned there changes here; with `vectors: false` it is that minus
+    the embedding. A hash answers with its own row (the most-confirmed under the
+    pipeline asked for, or under any); a recording id answers with the row most
+    clients have claimed under it (`ADR-0019` point 3), which is how a tool
+    holding an id never misses a recording the corpus holds because two
+    fingerprinting paths keyed one file differently.
+
+    **The rate limit counts keys, not requests** (point 3): a batch of a hundred
+    spends a hundred of this route's per-address window. Charged after parsing,
+    so a malformed batch costs nothing and a batch over the ceiling is refused
+    by validation before it is counted.
+    """
+    charge(request, settings.lookup_rate_limit, len(req.keys))
+    pipeline = _decode_pipeline(req.pipeline_version) if req.pipeline_version is not None else None
+
+    hashes = [k.fingerprint_hash for k in req.keys if k.fingerprint_hash is not None]
+    mbids = [k.recording_mbid for k in req.keys if k.recording_mbid is not None]
+
+    # By hash: one row per hash, chosen as the single lookup chooses — most
+    # confirmed, earliest, then pipeline, a total order — by taking the first
+    # row per hash from the same ordering.
+    by_hash: dict[str, Embedding] = {}
+    if hashes:
+        stmt = select(Embedding).where(Embedding.fingerprint_hash.in_(hashes))
+        if pipeline is not None:
+            stmt = stmt.where(Embedding.pipeline_version == pipeline)
+        stmt = stmt.order_by(
+            Embedding.fingerprint_hash,
+            Embedding.contributor_count.desc(),
+            Embedding.created_at,
+            Embedding.pipeline_version,
+        )
+        for emb in (await db.execute(stmt)).scalars():
+            by_hash.setdefault(emb.fingerprint_hash, emb)
+
+    # By recording: the row most distinct clients have claimed under the id,
+    # then the most confirmed — the order `GET /v1/recordings/{mbid}` serves.
+    by_mbid: dict[str, Embedding] = {}
+    if mbids:
+        claimed = (
+            select(
+                RecordingClaim.recording_mbid,
+                RecordingClaim.fingerprint_hash,
+                func.count(func.distinct(RecordingClaim.client_id)).label("n"),
+            )
+            .where(RecordingClaim.recording_mbid.in_(mbids))
+            .group_by(RecordingClaim.recording_mbid, RecordingClaim.fingerprint_hash)
+            .subquery()
+        )
+        stmt = (
+            select(claimed.c.recording_mbid, Embedding)
+            .join(claimed, claimed.c.fingerprint_hash == Embedding.fingerprint_hash)
+            .order_by(
+                claimed.c.recording_mbid,
+                claimed.c.n.desc(),
+                Embedding.contributor_count.desc(),
+                Embedding.created_at,
+                Embedding.pipeline_version,
+            )
+        )
+        if pipeline is not None:
+            stmt = stmt.where(Embedding.pipeline_version == pipeline)
+        for mbid, emb in (await db.execute(stmt)).all():
+            by_mbid.setdefault(mbid, emb)
+
+    found = list(by_hash.values()) + list(by_mbid.values())
+    recordings = await _recordings_for(db, sorted({e.fingerprint_hash for e in found}))
+    if found:
+        now = datetime.utcnow()
+        for emb in found:
+            emb.last_accessed_at = now
+        await db.commit()
+
+    results = []
+    for key in req.keys:
+        emb = (
+            by_hash.get(key.fingerprint_hash)
+            if key.fingerprint_hash
+            else by_mbid.get(key.recording_mbid)
+        )
+        row = (
+            _row_for(emb, recordings.get(emb.fingerprint_hash), vectors=req.vectors)
+            if emb
+            else None
+        )
+        results.append(LookupResult(key=key, row=row))
+    return LookupBatchResponse(results=results)
+
+
+# --- The claims on a row, all of them (`ADR-0018` point 2) ---
+
+
+class ClaimEntry(BaseModel):
+    #: `musicbrainz_recording` today; `ADR-0019` point 6 admits `acoustid_track`
+    #: later, and the field is here from the first version so that a reader
+    #: never has to guess what kind of id it was handed.
+    type: str
+    id: str
+    #: Distinct `client_id`s asserting this id for this row.
+    clients: int
+
+
+class ClaimsResponse(BaseModel):
+    fingerprint_hash: str
+    #: Most-supported first; ties on the id text, so the order is total.
+    claims: list[ClaimEntry]
+
+
+@router.get("/recordings/by-hash/{fingerprint_hash}", response_model=ClaimsResponse)
+@limiter.limit(settings.lookup_rate_limit)
+async def claims_for_hash(request: Request, fingerprint_hash: str, db: DbSession) -> ClaimsResponse:
+    """Every recording id claimed for a row, with how many clients say so.
+
+    `ADR-0018` point 2 — "which recording is this?", with the dissent. The
+    single lookup's `recording_mbid` is the summary (the most-supported id);
+    this is the whole list, no vector. It is also the read side of `ADR-0019`'s
+    cross-key join: a tool that learns the recording a hash is claimed under can
+    find every other key the corpus holds for it through
+    `GET /v1/recordings/{mbid}`.
+
+    What this is not: verified, or AcoustID. It works only for a row the corpus
+    holds, and a count of one means one install said so. `404` when the row is
+    unknown; an empty list when it is held and nobody has named it.
+    """
+    held = await db.scalar(
+        select(func.count())
+        .select_from(Embedding)
+        .where(Embedding.fingerprint_hash == fingerprint_hash)
+    )
+    if not held:
+        raise HTTPException(status_code=404, detail="Embedding not found")
+    stmt = (
+        select(
+            RecordingClaim.recording_mbid,
+            func.count(func.distinct(RecordingClaim.client_id)).label("n"),
+        )
+        .where(RecordingClaim.fingerprint_hash == fingerprint_hash)
+        .group_by(RecordingClaim.recording_mbid)
+        .order_by(
+            func.count(func.distinct(RecordingClaim.client_id)).desc(),
+            RecordingClaim.recording_mbid,
+        )
+    )
+    return ClaimsResponse(
+        fingerprint_hash=fingerprint_hash,
+        claims=[
+            ClaimEntry(type="musicbrainz_recording", id=mbid, clients=int(n))
+            for mbid, n in (await db.execute(stmt)).all()
+        ],
+    )
+
+
 # --- Pipelines: what the corpus holds, by identity (`ADR-0014` point 3) ---
 
 
@@ -717,7 +950,11 @@ async def _fetch_pipelines(db) -> list[PipelineEntry]:
     )
     return [
         PipelineEntry(
-            pipeline_version=pv, rows=int(rows), named=int(named), first_contributed_at=first, last_contributed_at=last
+            pipeline_version=pv,
+            rows=int(rows),
+            named=int(named),
+            first_contributed_at=first,
+            last_contributed_at=last,
         )
         for pv, rows, named, first, last in (await db.execute(stmt)).all()
     ]
@@ -738,7 +975,9 @@ async def pipelines(request: Request, db: DbSession) -> PipelinesResponse:
     A read, unauthenticated, on the lookup rate limit, cached like the landing
     page's counts (60 s) because it is a full scan grouped by identity.
     """
-    return PipelinesResponse(pipelines=await stats_cache.get_or_compute("pipelines", lambda: _fetch_pipelines(db)))
+    return PipelinesResponse(
+        pipelines=await stats_cache.get_or_compute("pipelines", lambda: _fetch_pipelines(db))
+    )
 
 
 # --- Features endpoints ---

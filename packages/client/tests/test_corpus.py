@@ -33,6 +33,7 @@ class FakeResponse(io.BytesIO):
     def __init__(self, status: int, body: dict | None):
         super().__init__(json.dumps(body).encode() if body is not None else b"")
         self.status = status
+        self.headers = {}
 
     def __enter__(self):
         return self
@@ -49,10 +50,11 @@ def wire(monkeypatch):
 
     def fake_urlopen(req, timeout=None):
         log.append(req)
-        status, body = answers.pop(0)
+        status, body, *rest = answers.pop(0)
+        headers = rest[0] if rest else {}
         if status >= 400:
             raise urllib.error.HTTPError(
-                req.full_url, status, "err", {}, io.BytesIO(json.dumps(body or {}).encode())
+                req.full_url, status, "err", headers, io.BytesIO(json.dumps(body or {}).encode())
             )
         return FakeResponse(status, body)
 
@@ -63,8 +65,8 @@ def wire(monkeypatch):
         requests = log
 
         @staticmethod
-        def answer(status, body=None):
-            answers.append((status, body))
+        def answer(status, body=None, headers=None):
+            answers.append((status, body, headers or {}))
 
     return Wire
 
@@ -389,6 +391,106 @@ class TestPipelines:
         assert "## Naming your pipeline" in readme
         assert "laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32" in readme
         assert "lukewys/laion_clap:music_audioset_epoch_15_esc_90.14" in readme
+
+
+class TestLookingUpALibrary:
+    """`ADR-0015`: a library is looked up in batches of 100, hashes and recording
+    ids mixed (`ADR-0019` point 3), the answer zipped back in order."""
+
+    def _row(self, h):
+        return {
+            "fingerprint_hash": h,
+            "pipeline_version": PIPELINE,
+            "contributor_count": 1,
+            "recording_mbid": None,
+            "recording_claims": 0,
+        }
+
+    def test_keys_are_typed_by_shape_and_answers_come_back_in_order(self, wire):
+        h2 = "e2" * 32
+        wire.answer(
+            200,
+            {
+                "results": [
+                    {"key": {"fingerprint_hash": HASH}, "row": self._row(HASH)},
+                    {"key": {"recording_mbid": MBID}, "row": self._row(h2)},
+                    {"key": {"fingerprint_hash": h2}, "row": None},
+                ]
+            },
+        )
+        got = list(
+            Corpus("https://x.invalid").lookup_many([HASH, MBID, h2], PIPELINE, vectors=False)
+        )
+        sent = json.loads(wire.requests[-1].data)
+        assert sent["keys"] == [
+            {"fingerprint_hash": HASH},
+            {"recording_mbid": MBID},
+            {"fingerprint_hash": h2},
+        ]
+        assert sent["pipeline_version"] == PIPELINE and sent["vectors"] is False
+        assert [k for k, _ in got] == [HASH, MBID, h2]
+        assert got[0][1]["fingerprint_hash"] == HASH
+        assert got[1][1]["fingerprint_hash"] == h2  # the id resolved to another path's key
+        assert got[2][1] is None
+
+    def test_a_library_is_chunked_at_one_hundred(self, wire):
+        keys = [f"{i:064x}" for i in range(250)]
+        for n in (100, 100, 50):
+            wire.answer(
+                200, {"results": [{"key": {"fingerprint_hash": k}, "row": None} for k in range(n)]}
+            )
+        got = list(Corpus("https://x.invalid").lookup_many(keys))
+        assert len(got) == 250 and [k for k, _ in got] == keys
+        assert [len(json.loads(r.data)["keys"]) for r in wire.requests] == [100, 100, 50]
+
+    def test_a_429_waits_for_retry_after_then_continues(self, wire):
+        wire.answer(429, {"detail": "counted per key"}, {"Retry-After": "7"})
+        wire.answer(200, {"results": [{"key": {"fingerprint_hash": HASH}, "row": None}]})
+        got = list(Corpus("https://x.invalid").lookup_many([HASH]))
+        assert got == [(HASH, None)]
+        assert ("slept", 7.0) in wire.requests
+
+    def test_a_short_answer_is_an_error_not_a_silent_miss(self, wire):
+        wire.answer(200, {"results": []})
+        with pytest.raises(CorpusError):
+            list(Corpus("https://x.invalid").lookup_many([HASH]))
+
+    def test_a_key_of_neither_shape_is_refused_locally(self):
+        with pytest.raises(ValueError):
+            list(Corpus("https://x.invalid").lookup_many(["not-a-key"]))
+
+
+class TestWhichRecordingIsThis:
+    """`ADR-0018`: the claims are served as an answer, with the honest line, and
+    a claim learned here is never re-contributed."""
+
+    def test_claims_lists_every_id_with_its_count(self, wire):
+        wire.answer(
+            200,
+            {
+                "fingerprint_hash": HASH,
+                "claims": [
+                    {"type": "musicbrainz_recording", "id": MBID, "clients": 3},
+                    {"type": "musicbrainz_recording", "id": "2" + MBID[1:], "clients": 1},
+                ],
+            },
+        )
+        got = Corpus("https://x.invalid").claims(HASH)
+        assert urlsplit(wire.requests[-1].full_url).path == f"/v1/recordings/by-hash/{HASH}"
+        assert [c["clients"] for c in got] == [3, 1]
+
+    def test_unknown_row_is_none_and_unnamed_row_is_empty(self, wire):
+        wire.answer(404)
+        assert Corpus("https://x.invalid").claims(HASH) is None
+        wire.answer(200, {"fingerprint_hash": HASH, "claims": []})
+        assert Corpus("https://x.invalid").claims(HASH) == []
+
+    def test_claim_says_to_claim_only_what_you_established(self):
+        import inspect
+
+        doc = " ".join((inspect.getdoc(Corpus.claim) or "").split()).lower()
+        assert "claim only what you established yourself" in doc
+        assert "never an id a lookup" in doc
 
 
 class TestLookupWithoutAPipeline:

@@ -73,7 +73,9 @@ class BanIPRequest(BaseModel):
     reason: str | None = None
 
 
-def _render_login(request: Request, error_message: str | None = None, status_code: int = 200) -> HTMLResponse:
+def _render_login(
+    request: Request, error_message: str | None = None, status_code: int = 200
+) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "admin/login.html",
@@ -138,25 +140,31 @@ async def dashboard(request: Request, db: DbSession) -> HTMLResponse:
 
     embedding_count = (await db.execute(select(func.count()).select_from(Embedding))).scalar() or 0
     features_count = (await db.execute(select(func.count()).select_from(Features))).scalar() or 0
-    analysis_detail_count = (await db.execute(select(func.count()).select_from(AnalysisDetail))).scalar() or 0
-    banned_count = (await db.execute(
-        select(func.count()).select_from(BannedIP).where(BannedIP.is_active == True)
-    )).scalar() or 0
+    analysis_detail_count = (
+        await db.execute(select(func.count()).select_from(AnalysisDetail))
+    ).scalar() or 0
+    banned_count = (
+        await db.execute(
+            select(func.count()).select_from(BannedIP).where(BannedIP.is_active == True)
+        )
+    ).scalar() or 0
     unique_ips = (await db.execute(select(func.count()).select_from(IPStats))).scalar() or 0
 
-    top_contributors = (await db.execute(
-        select(IPStats)
-        .order_by(IPStats.total_contributions.desc())
-        .limit(20)
-    )).scalars().all()
+    top_contributors = (
+        (await db.execute(select(IPStats).order_by(IPStats.total_contributions.desc()).limit(20)))
+        .scalars()
+        .all()
+    )
 
     # **The Phase 0 measurement.** Buckets rather than an average: the question is
     # whether honest agreement is *separable* from everything else, and a mean over a
     # bimodal distribution hides exactly that. If the top bucket holds nearly all of
     # them, a consensus threshold is viable; if they are spread, it is not, and the
     # verification design needs a different shape.
-    agreement = (await db.execute(
-        text("""
+    agreement = (
+        (
+            await db.execute(
+                text("""
             SELECT
               count(*) FILTER (WHERE similarity >= 0.999999) AS identical,
               count(*) FILTER (WHERE similarity >= 0.9999 AND similarity < 0.999999) AS near,
@@ -167,27 +175,43 @@ async def dashboard(request: Request, db: DbSession) -> HTMLResponse:
               count(DISTINCT client_id) AS distinct_clients
             FROM submission_agreement
         """)
-    )).mappings().first()
+            )
+        )
+        .mappings()
+        .first()
+    )
 
-    flagged_ips = (await db.execute(
-        select(IPStats)
-        .where(IPStats.flagged == True)
-        .order_by(IPStats.last_seen.desc())
-        .limit(20)
-    )).scalars().all()
+    flagged_ips = (
+        (
+            await db.execute(
+                select(IPStats)
+                .where(IPStats.flagged == True)
+                .order_by(IPStats.last_seen.desc())
+                .limit(20)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
-    banned_ips = (await db.execute(
-        select(BannedIP)
-        .where(BannedIP.is_active == True)
-        .order_by(BannedIP.banned_at.desc())
-        .limit(50)
-    )).scalars().all()
+    banned_ips = (
+        (
+            await db.execute(
+                select(BannedIP)
+                .where(BannedIP.is_active == True)
+                .order_by(BannedIP.banned_at.desc())
+                .limit(50)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
-    recent_ips = (await db.execute(
-        select(IPStats)
-        .order_by(IPStats.last_seen.desc())
-        .limit(20)
-    )).scalars().all()
+    recent_ips = (
+        (await db.execute(select(IPStats).order_by(IPStats.last_seen.desc()).limit(20)))
+        .scalars()
+        .all()
+    )
 
     return templates.TemplateResponse(
         request,
@@ -265,9 +289,7 @@ async def delete_recording(
         ("submission_agreements", SubmissionAgreement),
         ("recording_claims", RecordingClaim),
     ):
-        result = await db.execute(
-            delete(model).where(model.fingerprint_hash == fingerprint_hash)
-        )
+        result = await db.execute(delete(model).where(model.fingerprint_hash == fingerprint_hash))
         counts[table] = result.rowcount or 0
 
     await db.commit()
@@ -304,17 +326,13 @@ async def delete_client_submissions(
     """
     _require_auth(request)
 
-    embeddings = await db.execute(
-        delete(Embedding).where(Embedding.client_id == client_id)
-    )
+    embeddings = await db.execute(delete(Embedding).where(Embedding.client_id == client_id))
     agreements = await db.execute(
         delete(SubmissionAgreement).where(SubmissionAgreement.client_id == client_id)
     )
     # `ADR-0012` point 9: this client's claims and nothing else. Another client's
     # claim on the same hash is that client's to keep.
-    claims = await db.execute(
-        delete(RecordingClaim).where(RecordingClaim.client_id == client_id)
-    )
+    claims = await db.execute(delete(RecordingClaim).where(RecordingClaim.client_id == client_id))
     await db.commit()
 
     counts = DeletionResult(
@@ -340,9 +358,7 @@ async def ban_ip(
     if not _verify_session(request):
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    existing = await db.execute(
-        select(BannedIP).where(BannedIP.ip_address == ip_address)
-    )
+    existing = await db.execute(select(BannedIP).where(BannedIP.ip_address == ip_address))
     ban = existing.scalar_one_or_none()
 
     if ban:
@@ -373,9 +389,7 @@ async def unban_ip(
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     await db.execute(
-        update(BannedIP)
-        .where(BannedIP.ip_address == ip_address)
-        .values(is_active=False)
+        update(BannedIP).where(BannedIP.ip_address == ip_address).values(is_active=False)
     )
     await db.commit()
     return RedirectResponse(url="/admin", status_code=302)

@@ -64,9 +64,7 @@ class IPBanMiddleware(BaseHTTPMiddleware):
 
         return "unknown"
 
-    async def _track_request(
-        self, request: Request, response: Response, client_ip: str
-    ) -> None:
+    async def _track_request(self, request: Request, response: Response, client_ip: str) -> None:
         """Track request statistics for an IP."""
         path = request.url.path
         method = request.method
@@ -81,21 +79,28 @@ class IPBanMiddleware(BaseHTTPMiddleware):
 
         async with async_session_maker() as db:
             # Upsert stats using PostgreSQL INSERT ... ON CONFLICT
-            stmt = insert(IPStats).values(
-                ip_address=client_ip,
-                total_lookups=1 if is_lookup else 0,
-                total_contributions=1 if is_contribute else 0,
-                lookup_hits=1 if is_lookup and status == 200 else 0,
-                lookup_misses=1 if is_lookup and status == 404 else 0,
-            ).on_conflict_do_update(
-                index_elements=["ip_address"],
-                set_={
-                    "total_lookups": IPStats.total_lookups + (1 if is_lookup else 0),
-                    "total_contributions": IPStats.total_contributions + (1 if is_contribute else 0),
-                    "lookup_hits": IPStats.lookup_hits + (1 if is_lookup and status == 200 else 0),
-                    "lookup_misses": IPStats.lookup_misses + (1 if is_lookup and status == 404 else 0),
-                    "last_seen": func.now(),
-                },
+            stmt = (
+                insert(IPStats)
+                .values(
+                    ip_address=client_ip,
+                    total_lookups=1 if is_lookup else 0,
+                    total_contributions=1 if is_contribute else 0,
+                    lookup_hits=1 if is_lookup and status == 200 else 0,
+                    lookup_misses=1 if is_lookup and status == 404 else 0,
+                )
+                .on_conflict_do_update(
+                    index_elements=["ip_address"],
+                    set_={
+                        "total_lookups": IPStats.total_lookups + (1 if is_lookup else 0),
+                        "total_contributions": IPStats.total_contributions
+                        + (1 if is_contribute else 0),
+                        "lookup_hits": IPStats.lookup_hits
+                        + (1 if is_lookup and status == 200 else 0),
+                        "lookup_misses": IPStats.lookup_misses
+                        + (1 if is_lookup and status == 404 else 0),
+                        "last_seen": func.now(),
+                    },
+                )
             )
             await db.execute(stmt)
             await db.commit()

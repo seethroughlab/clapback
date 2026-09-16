@@ -97,7 +97,9 @@ class TestTheResultSaysWhatHappened:
         }
 
     def test_counts_are_integers_so_zero_is_distinguishable_from_absent(self):
-        r = admin.DeletionResult(embeddings=0, features=0, analysis_details=0, submission_agreements=0)
+        r = admin.DeletionResult(
+            embeddings=0, features=0, analysis_details=0, submission_agreements=0
+        )
         assert r.embeddings == 0
 
 

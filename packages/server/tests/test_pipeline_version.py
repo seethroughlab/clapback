@@ -122,9 +122,7 @@ class TestTheKeyIsWhatProducedTheVector:
         assert Embedding.__table__.columns["pipeline_version"].nullable is False
 
     def test_it_is_indexed_on_its_own_as_well_as_leading_the_key(self):
-        indexed = {
-            tuple(c.name for c in ix.columns) for ix in Embedding.__table__.indexes
-        }
+        indexed = {tuple(c.name for c in ix.columns) for ix in Embedding.__table__.indexes}
         assert ("pipeline_version",) in indexed
 
 
@@ -155,16 +153,14 @@ class TestAMismatchIsNeverRecordedAsDisagreement:
     @pytest.mark.parametrize(
         ("submitted", "stored", "expected"),
         [
-            (None, None, True),      # the legacy case: unchanged from today
+            (None, None, True),  # the legacy case: unchanged from today
             ("p+pool1", "p+pool1", True),
             ("p+pool2", "p+pool1", False),
             ("p+pool1", None, False),  # one declares, one does not — unknown
             (None, "p+pool1", False),
         ],
     )
-    def test_comparability_is_equality_including_both_absent(
-        self, submitted, stored, expected
-    ):
+    def test_comparability_is_equality_including_both_absent(self, submitted, stored, expected):
         """Equality rather than "both declared". Both-null is every row in the
         corpus today and must keep recording exactly as it does now; one side
         declaring and the other not is precisely the unknown the guard is for,

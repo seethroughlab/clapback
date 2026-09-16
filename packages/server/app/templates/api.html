@@ -102,6 +102,33 @@ row = Corpus().lookup(key, pipeline_version)       # None on a miss — then emb
 </div>
 
 <div class="card">
+    <h2>Look up a library</h2>
+    <pre><code>curl -X POST https://{{ host }}/v1/embeddings/lookup \
+  -H 'Content-Type: application/json' \
+  -d '{"keys": [{"fingerprint_hash": "..."}, {"recording_mbid": "1c6da765-da50-476b-a000-61e7cf45ded8"}],
+       "pipeline_version": "laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32",
+       "vectors": false}'</code></pre>
+    <p class="muted">
+        Up to 100 keys, hashes and MusicBrainz recording ids mixed, answered in order: the row if
+        held, <code>null</code> if not, each entry naming the key it answered. A held entry is
+        exactly what the single lookup returns for that key; <code>"vectors": false</code> leaves
+        out the 512 floats, for a tool asking "which of these do you hold, and what are they
+        called?" — under 40&nbsp;KB per hundred rather than ~670&nbsp;KB. A recording id answers
+        with the row most clients have claimed under it, whichever fingerprinting path keyed it.
+        More than 100 is a <code>422</code>, not a partial answer.
+    </p>
+    <p class="muted">
+        <strong>The lookup limit is counted per key, not per request.</strong> A batch of a hundred
+        spends a hundred of the 300 per minute, so a whole library is a number of requests you can
+        reason about; the client's <code>lookup_many</code> chunks, honours <code>Retry-After</code>
+        and continues
+        (<a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0015-a-library-is-looked-up-in-batches.md">ADR-0015</a>).
+        For the whole corpus rather than your library's slice of it, take the
+        <a href="/export">export</a> instead.
+    </p>
+</div>
+
+<div class="card">
     <h2>Compute one yourself</h2>
     <p class="muted">
         The reference implementation is published, so a miss costs you a dependency rather than a
@@ -213,6 +240,20 @@ query  = embed_text("dreamy ambient with piano")   # the same space</code></pre>
         does not depend on the fingerprinting path: two rows under one pipeline here are one file
         keyed twice, and a tool that holds the id finds both.
     </p>
+    <pre><code>curl https://{{ host }}/v1/recordings/by-hash/{fingerprint_hash}</code></pre>
+    <p class="muted">
+        <strong>Which recording is this?</strong> Every id claimed for a row, most-supported first,
+        each with how many distinct installs asserted it, no vector — the dissent that a lookup's
+        single <code>recording_mbid</code> summarises away. In order: it works only for recordings
+        the corpus holds; the id is the one most independent installs asserted and the count is how
+        many; it is not verified and it is not AcoustID; a count of 1 means one install said so.
+        AcoustID answers this by fuzzy match against a database built for it — this is an
+        exact-hash shortcut that is silent when the corpus has not seen the recording, never a
+        replacement. And <strong>never send an id you learned here back as your own claim</strong>:
+        a tool that does counts itself as independent confirmation of what it copied, and the
+        server cannot tell
+        (<a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0018-the-corpus-answers-which-recording-is-this.md">ADR-0018</a>).
+    </p>
 </div>
 
 <div class="card">
@@ -251,8 +292,10 @@ query  = embed_text("dreamy ambient with piano")   # the same space</code></pre>
     <table>
         <tr><th>Method</th><th>Path</th><th>Status</th></tr>
         <tr><td><code>GET</code></td><td><code>/v1/embeddings/{hash}</code></td><td>open</td></tr>
+        <tr><td><code>POST</code></td><td><code>/v1/embeddings/lookup</code></td><td>open · a read that needs a body · limit per key</td></tr>
         <tr><td><code>POST</code></td><td><code>/v1/similar</code></td><td>open · a read that needs a body</td></tr>
         <tr><td><code>GET</code></td><td><code>/v1/recordings/{mbid}</code></td><td>open</td></tr>
+        <tr><td><code>GET</code></td><td><code>/v1/recordings/by-hash/{hash}</code></td><td>open</td></tr>
         <tr><td><code>GET</code></td><td><code>/v1/pipelines</code></td><td>open</td></tr>
         <tr><td><code>POST</code></td><td><code>/v1/recordings/claims</code></td><td><strong>open</strong> · a write</td></tr>
         <tr><td><code>GET</code></td><td><code>/v1/features/{hash}</code></td><td>open · legacy</td></tr>
@@ -276,10 +319,13 @@ query  = embed_text("dreamy ambient with piano")   # the same space</code></pre>
 <div class="card">
     <h2>Rate limits</h2>
     <p class="muted">
-        {{ lookup_limit }} for reads and {{ contribute_limit }} for writes, per address — a claim
-        is a write. Pace a backfill under the limit, not at it: the client retries three times
-        and then gives up, and a run at the limit loses submissions silently. There is no key to
-        obtain and no plan to buy.
+        {{ lookup_limit }} for reads and {{ contribute_limit }} for writes, per address and per
+        route — a claim is a write. Measured 2026-09-16: a route with the key in its path, such as
+        <code>/v1/embeddings/{hash}</code>, has one window per key, so the read limit bounds
+        repeats of one key and a scan of many is bounded by round trips instead; the batch lookup
+        counts its 300 per key. Pace a backfill under the write limit, not at it: the client
+        retries three times and then gives up, and a run at the limit loses submissions silently.
+        There is no key to obtain and no plan to buy.
         If you need more, the corpus is a few hundred megabytes and open source — run your own.
     </p>
 </div>

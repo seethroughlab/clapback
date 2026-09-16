@@ -20,7 +20,13 @@ from app.api.routes import PipelineEntry, PipelinesResponse
 class TestTheShape:
     def test_an_entry_carries_the_four_facts_the_record_names(self):
         fields = set(PipelineEntry.model_fields)
-        assert {"pipeline_version", "rows", "named", "first_contributed_at", "last_contributed_at"} <= fields
+        assert {
+            "pipeline_version",
+            "rows",
+            "named",
+            "first_contributed_at",
+            "last_contributed_at",
+        } <= fields
 
     def test_the_route_exists_under_v1_as_a_read(self):
         route = next(r for r in routes.router.routes if r.path == "/v1/pipelines")

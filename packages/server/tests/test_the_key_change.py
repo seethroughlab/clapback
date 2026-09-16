@@ -30,8 +30,7 @@ from app.api.routes import EmbeddingRequest, EmbeddingResponse
 from app.db.models import Embedding, SubmissionAgreement
 
 MIGRATION = (
-    Path(__file__).resolve().parents[1]
-    / "migrations/versions/011_pipeline_version_is_the_key.py"
+    Path(__file__).resolve().parents[1] / "migrations/versions/011_pipeline_version_is_the_key.py"
 )
 
 
@@ -70,16 +69,16 @@ class TestItRefusesToEmptyTheCorpus:
         body = source[source.index("def upgrade()") :]
         guard = body.index("RuntimeError")
         removal = body.index("DELETE FROM embeddings")
-        assert guard < removal, (
-            "the guard must be evaluated before any row is removed"
-        )
+        assert guard < removal, "the guard must be evaluated before any row is removed"
 
     def test_the_message_says_what_went_wrong_and_what_to_do(self):
         """An exception during a migration is read by someone under time pressure
         who did not write it. "Refusing to run" without a reason produces a forced
         override, which is the outcome the guard exists to prevent."""
         source = MIGRATION.read_text()
-        message = source[source.index("Refusing to run") : source.index('")\n', source.index("Refusing to run"))]
+        message = source[
+            source.index("Refusing to run") : source.index('")\n', source.index("Refusing to run"))
+        ]
         assert "ADR-0006" in message
         assert "pipeline_version" in message
         assert "CLAPBACK_ALLOW_EMPTYING_THE_CORPUS" in source
@@ -113,9 +112,7 @@ class TestRowsTheNewKeyCannotSeparate:
         source = MIGRATION.read_text()
         collapse = source.index("PARTITION BY fingerprint_hash, pipeline_version")
         key = source.index("create_primary_key")
-        assert collapse < key, (
-            "adding the key before collapsing duplicates would fail on real data"
-        )
+        assert collapse < key, "adding the key before collapsing duplicates would fail on real data"
 
     def test_the_survivor_is_the_earliest(self):
         """First-write-wins, which is the rule the contribution path has always
@@ -280,8 +277,7 @@ class TestTheReadPathAfterTheKeyChange:
 class TestAgreementFollowsTheSameIdentity:
     def test_agreements_can_be_found_by_recording_and_pipeline(self):
         indexed = {
-            tuple(c.name for c in ix.columns)
-            for ix in SubmissionAgreement.__table__.indexes
+            tuple(c.name for c in ix.columns) for ix in SubmissionAgreement.__table__.indexes
         }
         assert ("fingerprint_hash", "pipeline_version") in indexed
 
@@ -289,8 +285,6 @@ class TestAgreementFollowsTheSameIdentity:
         """They stopped being identity and stayed provenance. Someone will ask
         "which analysis versions are in here" and should not get a sequential
         scan for it."""
-        indexed = {
-            tuple(c.name for c in ix.columns) for ix in Embedding.__table__.indexes
-        }
+        indexed = {tuple(c.name for c in ix.columns) for ix in Embedding.__table__.indexes}
         assert ("analysis_version",) in indexed
         assert ("pipeline_version",) in indexed

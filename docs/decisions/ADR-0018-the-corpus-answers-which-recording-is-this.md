@@ -12,8 +12,17 @@ Implementation:
   admits a second claim type (the AcoustID track id) later, so the by-hash response carries a
   claim `type` from the first version, with `musicbrainz_recording` the only value until then.
   Nothing is built.
-- Owed: the "which recording is this?" section on `/api` and in the client README (points 1,
-  3, 4), the by-hash route (point 2), and the `Corpus.claim` docstring line (point 4).
+- **Built 2026-09-16, undeployed and unreleased.** Point 1: "Which recording is this?" in
+  `packages/client/README.md` and on `/api`, with the four statements in the record's order.
+  Point 2: `GET /v1/recordings/by-hash/{fingerprint_hash}` returns `{type, id, clients}` per
+  claim, most-supported first, ties on the id, no vector; 404 for a row the corpus does not
+  hold, an empty list for one nobody has named. `type` is `musicbrainz_recording` and is there
+  for `ADR-0019` point 6. Exercised locally with a row claimed by three clients under two ids
+  (2 and 1) and listed in that order. Point 3: `lookup_many(vectors=False)` is documented as the
+  whole-library form. Point 4: `Corpus.claim`'s docstring and both sections say "claim only what
+  you established yourself", and `Corpus.claims(hash)` is the client's read for point 2. Client
+  0.3.0; `tests/test_batch_lookup.py::TestWhichRecordingIsThis` on the server.
+- Owed: the "for plug-in authors" section (Follow-up, shared with `ADR-0014`).
 
 Extends [ADR-0012](ADR-0012-a-contribution-can-name-its-recording.md) points 1, 5 and 8, and
 [ADR-0015](ADR-0015-a-library-is-looked-up-in-batches.md). One of the five records proposed

@@ -19,9 +19,11 @@ a loop either way.
 from __future__ import annotations
 
 import json
+import re
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Iterable, Iterator
 
 DEFAULT_BASE_URL = "https://clapback.seethroughlab.com"
 
@@ -30,6 +32,39 @@ DEFAULT_BASE_URL = "https://clapback.seethroughlab.com"
 #: will meet this: Familiar's backfill of 26,431 tracks took roughly 80 minutes
 #: of paced lookups.
 _RETRY_DELAYS = (2.0, 5.0, 15.0)
+
+#: `ADR-0015` point 1: the most keys one batch lookup may carry. Over it is a
+#: 422, not a partial answer, so the client never sends more.
+LOOKUP_BATCH = 100
+
+#: The longest a `Retry-After` is honoured for. A window is a minute; anything
+#: far past that is a server telling us something other than "wait".
+_MAX_RETRY_AFTER = 120.0
+
+_HEX64 = re.compile(r"^[0-9a-f]{64}$")
+_UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+
+
+def _key_of(key: str) -> dict[str, str]:
+    """A batch key as the corpus wants it: by shape, a hash or a recording id."""
+    k = key.strip().lower()
+    if _HEX64.match(k):
+        return {"fingerprint_hash": k}
+    if _UUID.match(k):
+        return {"recording_mbid": k}
+    raise ValueError(f"not a fingerprint hash or a recording MBID: {key!r}")
+
+
+def _retry_after(headers: dict[str, str], fallback: float | None) -> float | None:
+    """Seconds to wait after a 429: the server's `Retry-After` if it sent one and
+    it is sane, else the next fixed delay, else None to give up."""
+    value = headers.get("Retry-After") or headers.get("retry-after")
+    if value is not None:
+        try:
+            return min(max(float(value), 0.0), _MAX_RETRY_AFTER)
+        except ValueError:
+            pass
+    return fallback
 
 
 class CorpusError(RuntimeError):
@@ -42,6 +77,12 @@ class Corpus:
         self.timeout = timeout
 
     def _request(self, method: str, path: str, body: dict | None = None) -> tuple[int, dict | None]:
+        status, payload, _ = self._request_with_headers(method, path, body)
+        return status, payload
+
+    def _request_with_headers(
+        self, method: str, path: str, body: dict | None = None
+    ) -> tuple[int, dict | None, dict[str, str]]:
         data = json.dumps(body).encode() if body is not None else None
         req = urllib.request.Request(
             f"{self.base_url}{path}",
@@ -59,14 +100,18 @@ class Corpus:
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 raw = resp.read()
-                return resp.status, (json.loads(raw) if raw else None)
+                return (
+                    resp.status,
+                    (json.loads(raw) if raw else None),
+                    dict(getattr(resp, "headers", None) or {}),
+                )
         except urllib.error.HTTPError as exc:
             raw = exc.read()
             try:
                 payload = json.loads(raw) if raw else None
             except json.JSONDecodeError:
                 payload = None
-            return exc.code, payload
+            return exc.code, payload, dict(exc.headers or {})
         except urllib.error.URLError as exc:
             raise CorpusError(f"{self.base_url} is unreachable: {exc.reason}") from exc
         except TimeoutError as exc:
@@ -152,6 +197,72 @@ class Corpus:
         """
         return self.lookup(fingerprint_hash, pipeline_version) is not None
 
+    def lookup_many(
+        self,
+        keys: Iterable[str],
+        pipeline_version: str | None = None,
+        *,
+        vectors: bool = True,
+    ) -> Iterator[tuple[str, dict | None]]:
+        """Look up a library: `(key, row_or_None)` for every key, in order.
+
+        `ADR-0015`. A key is a fingerprint hash (64 hex characters) or a
+        MusicBrainz recording id (a UUID) — told apart by shape, so a tool can
+        hand over whichever it holds per track, and should hand over the id
+        when it has one (`ADR-0019` point 3: the id is the same on every
+        fingerprinting path; the hash may not be). Sent in batches of 100 to
+        `POST /v1/embeddings/lookup`; each answer is what `lookup` would have
+        returned for that key, or `None`.
+
+        `vectors=False` asks for everything but the embedding — "which of these
+        do you hold, and what are they called?" — which is the whole-library
+        form of "which recording is this?" (`ADR-0018` point 3) and a fraction
+        of the bytes.
+
+        The corpus counts the limit per key, not per request, so a library
+        larger than the per-minute limit will be told to wait; this honours
+        `Retry-After` and then continues, so a full pass over any library is one
+        call that takes as long as it takes.
+        """
+        batch: list[str] = []
+        for key in keys:
+            batch.append(key)
+            if len(batch) == LOOKUP_BATCH:
+                yield from self._lookup_batch(batch, pipeline_version, vectors)
+                batch = []
+        if batch:
+            yield from self._lookup_batch(batch, pipeline_version, vectors)
+
+    def _lookup_batch(
+        self, keys: list[str], pipeline_version: str | None, vectors: bool
+    ) -> Iterator[tuple[str, dict | None]]:
+        body: dict = {"keys": [_key_of(k) for k in keys], "vectors": vectors}
+        if pipeline_version is not None:
+            body["pipeline_version"] = pipeline_version
+        for delay in (*_RETRY_DELAYS, None):
+            status, payload, headers = self._request_with_headers(
+                "POST", "/v1/embeddings/lookup", body
+            )
+            if status == 200:
+                results = (payload or {}).get("results", [])
+                if len(results) != len(keys):
+                    raise CorpusError(f"batch lookup answered {len(results)} of {len(keys)} keys")
+                for key, result in zip(keys, results):
+                    yield key, result.get("row")
+                return
+            if status == 429:
+                wait = _retry_after(headers, delay)
+                if wait is None:
+                    break
+                time.sleep(wait)
+                continue
+            if status == 422:
+                raise CorpusError(
+                    f"the corpus refused the batch as malformed: {(payload or {}).get('detail')}"
+                )
+            raise CorpusError(f"batch lookup returned {status}: {payload}")
+        raise CorpusError("rate limited repeatedly; try again later")
+
     def contribute(
         self,
         *,
@@ -224,6 +335,13 @@ class Corpus:
         a repeat `contribute` is recorded as agreement, and a tool tagging its
         library must not read as that library agreeing with itself.
 
+        **Claim only what you established yourself** — from your tags, from
+        AcoustID, from Picard — never an id a lookup or `claims()` told you. A
+        tool that sends back what it copied counts itself as independent
+        confirmation of it, which is the manufactured agreement `ADR-0004` point
+        4 and `ADR-0008` exist to exclude. The server cannot tell; this contract
+        is the only defence (`ADR-0018` point 4).
+
         Returns the corpus's answer — what the hash now resolves to, and how many
         distinct clients say so. Raises `CorpusError` on a 404, which means the
         corpus does not hold the row yet: contribute the vector first.
@@ -263,6 +381,27 @@ class Corpus:
         if status != 200:
             raise CorpusError(f"similar returned {status}: {payload}")
         return list((payload or {}).get("neighbours", []))
+
+    def claims(self, fingerprint_hash: str) -> list[dict] | None:
+        """Every recording id claimed for a row, most-supported first, no vector.
+
+        `ADR-0018` point 2 — "which recording is this?", with the dissent that
+        `lookup`'s single `recording_mbid` summarises away. Each entry is
+        `{"type": "musicbrainz_recording", "id": ..., "clients": n}`, where
+        `clients` is how many distinct installs asserted it. `None` when the
+        corpus does not hold the row; `[]` when it does and nobody has named it.
+
+        What this is not: verified, or AcoustID. It answers only for rows the
+        corpus holds, from what contributors asserted, and a count of one means
+        one install said so. And **never send an id you learned here back as
+        your own claim** — see `claim`.
+        """
+        status, payload = self._request("GET", f"/v1/recordings/by-hash/{fingerprint_hash}")
+        if status == 200:
+            return list((payload or {}).get("claims", []))
+        if status == 404:
+            return None
+        raise CorpusError(f"claims returned {status}: {payload}")
 
     def pipelines(self) -> list[dict]:
         """Every pipeline identity the corpus holds rows under, most populated first.
