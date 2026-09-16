@@ -24,12 +24,14 @@
         exists.
     </p>
     <p class="muted">
-        Recordings are keyed by the <strong>SHA256 of an AcoustID fingerprint</strong>, so the
-        corpus never learns a title, an artist or a filename. A hash names a recording only to
-        someone who already holds it, so a client may also <em>claim</em> a MusicBrainz recording
-        id for a row — counted per client, never verified, and shown beside every result that has
-        one. {{ "{:,}".format(counts.named) }} rows are named so far. The rest are hashes, and a
-        result that is one says so rather than handing you a blank.
+        Recordings are keyed by the <strong>SHA256 of an AcoustID fingerprint</strong>. The corpus
+        never receives a title, an artist, a filename or a path, and cannot recover one from the
+        hash. <strong>But a named row is not anonymous:</strong> a client may <em>claim</em> a
+        MusicBrainz recording id for a row — counted per client, never verified, shown beside every
+        result that has one — and a recording id is a title and an artist one public MusicBrainz
+        call away. {{ "{:,}".format(counts.named) }} rows are named so far, which is why every
+        client sends the id under the same opt-in switch as the vector, and says so. The rest are
+        hashes, and a result that is one says so rather than handing you a blank.
     </p>
     <p class="muted">
         All of it is <a href="https://creativecommons.org/publicdomain/zero/1.0/">CC0</a> — public

@@ -96,10 +96,12 @@ anything can contribute.
 
 - A recording is identified by the SHA256 of its AcoustID fingerprint — one-way, and
   computed by the client. The corpus never receives a title, an artist, a filename or a
-  path, and cannot recover one.
-- A client *may* attach a MusicBrainz recording id. That tells the operator which
-  recording you hold, which is why every client sends it under the same opt-in switch
-  as the vector and says so.
+  path, and cannot recover one from the hash.
+- A client *may* attach a MusicBrainz recording id, or an AcoustID track id. **A named row
+  is not anonymous**: a recording id is a title and an artist one public MusicBrainz call
+  away, and 89.6% of rows are named (2026-09-16). It tells the operator, and anyone reading
+  the public export, which recording you hold — which is why every client sends it under
+  the same opt-in switch as the vector and says so.
 - `client_id` is a random UUID minted on the first contribution, derived from nothing
   about you or your machine. Delete it and you are a new contributor.
 - Contribution is off until you turn it on, in every client.
