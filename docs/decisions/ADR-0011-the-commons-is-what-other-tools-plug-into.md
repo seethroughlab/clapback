@@ -189,6 +189,19 @@ Implementation:
   matters to a 10-second-fragment pipeline — `ADR-0009`'s 0.950 lead-in result. **What it
   committed to:** a PR against Kalinka's CONTRIBUTING flow, behind a default-off setting,
   without per-commit AI attribution, if the maintainer says go.
+- **That reply and its first correction were withdrawn and replaced** (2026-09-16, 00:28 UTC).
+  The 23:14 reply cited the lead-in result against Kalinka's fragment rule; measuring it that
+  night (next entry) showed the rule was not exposed to it, and a 23:53 correction went up. The
+  key measurement the following hour (`ADR-0010`'s Implementation block, `ADR-0019`) then
+  contradicted the reply's point 3 for a second time. Rather than a third comment correcting the
+  second, Jeff deleted both — the maintainer had not yet answered — and posted one reply to the
+  six questions with what had by then been measured: the fingerprint key is path-dependent and
+  the MBIDs Kalinka already resolves are the most valuable thing it would send; hashes never
+  match across rips and MP3 128k vectors are where the real gap is; INT8 under its own identity;
+  the three-fragment rule holds 0.99 under 5 s of lead-in; the export is live under CC0. The
+  deleted comments reached the maintainer by email as posted; the thread on GitHub is now their
+  questions and one answer. **A lesson for the next reply:** measure before writing, not after —
+  three of six answers changed within seven hours of being posted.
 - **What the thread changed about this record's premise.** Point 5 assumed the value to a
   plug-in was skipping the model run. The maintainer said outright that inference is not their
   bottleneck — audio preparation and MusicBrainz's rate limit are — and that the interest is
