@@ -148,29 +148,36 @@ one sanctioned direct-database write. Prompted by the first prospective second c
 in KalinkaPlayer#128, whether the data would outlive the box. Its point 8 has the execution order;
 the licence sentence goes first.
 
-**`ADR-0014`, `ADR-0015`, `ADR-0016` and `ADR-0018` were accepted 2026-09-16; `ADR-0017` was
-rejected the same day (below). Nothing in the four is built.** Five records from the first
-prospective second contributor's six questions (KalinkaPlayer#128), in three groups. *Pipelines
-are legible:* `ADR-0014` — an identity string's five tokens, and `GET /v1/pipelines`. *Library
-scale:* `ADR-0015` batch lookup (100 keys, rate limit per key — **hashes or recording MBIDs
-mixed, by `ADR-0019` point 3**) and `ADR-0016` batch contribute (same per-row code, non-atomic,
-`client_id` required, and `ADR-0004` point 9's per-client quota built first). *What a tool
-brings and gets back:* `ADR-0017` — `fingerprint_pcm()` from audio the tool already decoded,
-conditional on a measurement; `ADR-0018` — the recording claims served as "which recording is
-this?", with the honest line that it is exact-hash and counted, not AcoustID, and its by-hash
-route serving `ADR-0019`'s cross-key join. Build order: 0014 → 0015 + 0018 → 0016, after
-`ADR-0019` points 1 and 3.
+**`ADR-0014`, `ADR-0015`, `ADR-0016` and `ADR-0018` were accepted 2026-09-16 and built the same
+day; `ADR-0017` was rejected (below). All four are undeployed and the client that carries them
+(`clapback-client` 0.3.0) is unreleased.** Five records from the first prospective second
+contributor's six questions (KalinkaPlayer#128), in three groups. *Pipelines are legible:*
+`ADR-0014` — an identity string's five tokens, and `GET /v1/pipelines`; its Implementation block
+records that `artifact1` in the reference string is the ONNX export version, not the windowing
+rule the Decision says it is. *Library scale:* `ADR-0015` batch lookup (100 keys, **hashes or
+recording MBIDs mixed** by `ADR-0019` point 3, the limit counted per key) and `ADR-0016` batch
+contribute (same per-row code, non-atomic, `client_id` required, and `ADR-0004` point 9's
+per-client quota built first — 50,000 rows a day). *What a tool brings and gets back:*
+`ADR-0017` — `fingerprint_pcm()`, conditional on a measurement; `ADR-0018` — the recording claims
+served as "which recording is this?" with the honest line, its by-hash route serving `ADR-0019`'s
+cross-key join. **A premise fell while building `ADR-0015`:** `slowapi` keys rate-limit windows
+on the request *path*, so `GET /v1/embeddings/{hash}` is limited per hash, a library scan never
+hits it, and "33 minutes for 10,000 tracks" was wrong — round trips bind, at 72 ms median to the
+commons. Recorded in `ADR-0015` and `ADR-0004`.
 
 **`ADR-0017` was rejected on 2026-09-16 by its own measurement, and the measurement found
 something bigger** — recorded in `ADR-0010`'s Implementation block: the AcoustID fingerprint
 *string* is not reproducible across fingerprinting paths. `fpcalc` and pyacoustid's library path
 agree on 24 of 56 FLACs (10 of 24 CD-quality ones); `fpcalc` 1.5.1 and 1.6.1 on 37 of 56. One bit
 is a new key, so a second client on another path lands on a different row more often than not,
-and no agreement is recorded. **`ADR-0019` was accepted 2026-09-16 to fix it, and nothing in it is built**: the hash stays the row key,
+and no agreement is recorded. **`ADR-0019` was accepted 2026-09-16 to fix it, and its points 1 and 3 are built**: the hash stays the row key,
 but agreement, independence and confirmation are counted per *recording* — across keys — through
 `ADR-0012`'s claims; tools that hold an MBID look up by it first; similarity collapses rows
 sharing a recording; AcoustID track ids are admitted as a second claim type. Pinning `fpcalc`,
 keying on the AcoustID id, and server-side fuzzy matching are each rejected with reasons.
+**Points 1 and 3 are done (2026-09-16)** — the documentation, and `Corpus.lookup(recording_mbid=)`
+in the client; points 2, 4 and 6 are owed in that order, and the two plug-ins passing the id they
+hold is owed as one release each.
 
 `ADR-0008` closes `ADR-0001` deferred item 2 — the part the cross-machine measurement did not answer,
 being where the agreement threshold sits and what the corpus does with it.
@@ -221,6 +228,12 @@ green timer is evidence the check ran, not evidence anyone would hear it.**
 
 - **`ADR-0007`**, deliberately, until a second contributor exists.
 - **`ADR-0008`** — the corpus cannot yet tell anyone how corroborated a vector is.
+- **`ADR-0019` points 2, 4 and 6** — cross-key agreement, collapsed similarity, the AcoustID claim.
+- **`ADR-0013` point 7** — the import script.
+
+**Built and not deployed, as of 2026-09-16** — one deploy, in this order: the server image (`ADR-0014`,
+`0015`, `0016`, `0018`), then `alembic upgrade head` for migration `013` (runbook section 4),
+then `clapback-client` 0.3.0 to PyPI, whose new calls 404 against the running server until then.
 
 **`ADR-0011` point 5's outreach went out 2026-09-15** — beets#7032 and picard-plugins#436 (the
 listings), dj-track-similarity#2 and KalinkaPlayer#128 (proposals, PR offered). Its

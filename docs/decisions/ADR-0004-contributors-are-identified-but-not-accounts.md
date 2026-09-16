@@ -59,8 +59,16 @@ Implementation:
   environment, so the threshold could not be overridden for a test without editing the deployed
   config — the script's own comment says it chose POSIX `df` to stay testable, and this quietly
   undid that. Environment now wins.
-- Point 9's third bound, per-client quotas, is still owed and needs point 1's identifier to be
-  arriving, which it now is.
+- **Point 9's third bound, per-client quotas, is built** (2026-09-16, by `ADR-0016` point 7,
+  undeployed): 50,000 rows per `client_id` per rolling 24 hours — ten percent of the ceiling —
+  counting creations and confirmations, checked before every attributed write, refused with a
+  429 and `Retry-After`. Migration `013` adds the two indexes it counts on. An unattributed
+  contribution cannot be counted and is bounded by the ceiling and the rate alone, as before.
+- **The rate limits are per address *and per route path*, measured 2026-09-16** (`ADR-0015`'s
+  Implementation block): `slowapi` keys a window on the request path, so a route with the key
+  in its path — `GET /v1/embeddings/{hash}` — has a window per key, and the read limit bounds
+  repeats of one key rather than a scan of many. The write route is one path, so its 30 a minute
+  binds as this record assumed.
 
 ## Context
 
