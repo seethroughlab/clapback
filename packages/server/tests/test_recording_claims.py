@@ -99,13 +99,15 @@ class TestContributingWithAnId:
         """Point 1: a claim is keyed by the client that made it. Unattributable,
         it could be neither revoked nor counted."""
         body = inspect.getsource(routes._contribute_one)
-        assert "req.recording_mbid and not req.client_id" in body
+        assert (
+            "_identity_of(req) and not req.client_id" in body
+        )  # either kind of id, `ADR-0019` point 6
         assert "422" in body
 
     def test_both_branches_record_the_claim(self):
         """A contribution that confirms an existing row can still name it."""
         body = inspect.getsource(routes._contribute_one)
-        assert body.count("_record_claim(") == 2
+        assert body.count("_record_claims(") == 2
 
 
 class TestClaimingWithoutResending:
@@ -136,7 +138,7 @@ class TestClaimingWithoutResending:
         assert "SubmissionAgreement" not in body
 
     def test_saying_it_twice_is_saying_it_once(self):
-        body = inspect.getsource(routes._record_claim)
+        body = inspect.getsource(routes._record_claims)
         assert "on_conflict_do_nothing" in body
 
 
@@ -158,9 +160,10 @@ class TestWhatTheReadsCarry:
         assert n.recording_mbid is None and n.recording_claims == 0
 
     def test_similar_and_lookup_resolve_through_the_claims(self):
-        # `similar` resolves inside `_collapse_by_recording` since `ADR-0019` point 4.
+        # `similar` resolves inside `_collapse_by_recording` since `ADR-0019` point 4,
+        # and every read resolves through `_identities_for` since point 6.
         for fn in (routes._collapse_by_recording, routes.lookup_embedding):
-            assert "_recordings_for(" in inspect.getsource(fn), fn.__name__
+            assert "_identities_for(" in inspect.getsource(fn), fn.__name__
         assert "_collapse_by_recording(" in inspect.getsource(routes.similar)
 
     def test_the_recording_read_is_per_pipeline(self):
@@ -176,15 +179,15 @@ class TestResolvingIsATotalOrdering:
     changed."""
 
     def test_most_distinct_clients_wins_then_the_id_text_breaks_ties(self):
-        body = inspect.getsource(routes._recordings_for)
+        body = inspect.getsource(routes._identities_for)
         assert "func.distinct(RecordingClaim.client_id)" in body
         order = body[body.index(".order_by(") :]
-        assert order.index(".desc()") < order.index("RecordingClaim.recording_mbid,")
+        assert order.index(".desc()") < order.index("RecordingClaim.recording_id,")
 
     def test_it_counts_clients_not_rows(self):
         """One client claiming the same thing twice is one vote. The key already
         prevents the duplicate row; the count must not depend on that."""
-        assert "count(func.distinct" in inspect.getsource(routes._recordings_for)
+        assert "count(func.distinct" in inspect.getsource(routes._identities_for)
 
 
 class TestDeletionCoversClaims:
@@ -209,9 +212,11 @@ class TestTheTable:
     def test_embeddings_is_untouched(self):
         assert "recording_mbid" not in models.Embedding.__table__.columns
 
-    def test_the_key_is_hash_mbid_client(self):
+    def test_the_key_is_hash_type_id_client(self):
+        """Was (hash, mbid, client); `ADR-0019` point 6 admitted a second kind of
+        id and made the kind part of the key, so the two are never one claim."""
         pk = [c.name for c in models.RecordingClaim.__table__.primary_key.columns]
-        assert pk == ["fingerprint_hash", "recording_mbid", "client_id"]
+        assert pk == ["fingerprint_hash", "claim_type", "recording_id", "client_id"]
 
     def test_client_is_required_here_unlike_on_embeddings(self):
         assert models.RecordingClaim.__table__.c.client_id.nullable is False

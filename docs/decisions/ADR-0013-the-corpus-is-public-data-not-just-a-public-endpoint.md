@@ -78,6 +78,10 @@ Implementation:
   each workflow green. Every contribution switch that ships now carries the sentence.
 - **Still owed:** point 7's `scripts/import_export.py`. The runbook carries the `COPY` SQL that
   loads an embeddings file by hand in the meantime.
+- **The export gained a file** (2026-09-16, `ADR-0019` point 6): `acoustid_claims.csv.gz`
+  (`fingerprint_hash, acoustid_track_id, claim_count`) and a manifest key `acoustid_claims`.
+  `claims.csv.gz` keeps its columns and now means MusicBrainz claims only; `schema_version`
+  stays 1 because nothing a reader of it had changes.
 
 Extends [ADR-0001](ADR-0001-clapback-is-a-public-clap-embedding-commons.md) point 1,
 [ADR-0003](ADR-0003-the-commons-runs-on-one-small-server.md) point 6 and

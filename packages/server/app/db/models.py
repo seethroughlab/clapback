@@ -300,15 +300,22 @@ class RecordingClaim(Base):
 
     __tablename__ = "recording_claims"
     __table_args__ = (
-        # "What does recording X sound like" — `ADR-0012` point 5's third read.
-        Index("ix_recording_claims_mbid", "recording_mbid"),
+        # "What does recording X sound like" — `ADR-0012` point 5's third read,
+        # per kind of id since `ADR-0019` point 6.
+        Index("ix_recording_claims_id", "claim_type", "recording_id"),
     )
 
     fingerprint_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
-    #: The MusicBrainz *recording* MBID, canonical lowercase UUID text. Not a
-    #: track id, not a release id — beets calls the recording id `mb_trackid`,
-    #: which is the trap `ADR-0012` names.
-    recording_mbid: Mapped[str] = mapped_column(String(36), primary_key=True)
+    #: Which kind of id this is — `ADR-0019` point 6. `musicbrainz_recording`:
+    #: the MusicBrainz *recording* MBID (not a track id, not a release id —
+    #: beets calls the recording id `mb_trackid`, which is the trap `ADR-0012`
+    #: names). `acoustid_track`: the AcoustID track id, what AcoustID's own
+    #: fuzzy matcher assigns to a cluster of near-identical fingerprints — the
+    #: same across decoders, `fpcalc` versions and lossy re-encodes of one rip,
+    #: which is why it is admitted as a second way to join keys. Part of the key.
+    claim_type: Mapped[str] = mapped_column(String(32), primary_key=True)
+    #: The id, canonical lowercase UUID text — both kinds are UUIDs.
+    recording_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     #: Required here, unlike on `embeddings`: a claim that cannot be attributed
     #: cannot be revoked, and cannot count toward agreement either.
     client_id: Mapped[str] = mapped_column(String(64), primary_key=True)

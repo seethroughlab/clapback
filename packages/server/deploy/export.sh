@@ -87,13 +87,26 @@ while IFS= read -r PIPELINE; do
     {\"pipeline_version\": $(printf '%s' "$PIPELINE" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'), \"file\": \"$FILE\", \"rows\": $ROWS}"
 done <<< "$PIPELINES"
 
+# `claims.csv.gz` keeps the columns schema_version 1 promised — MusicBrainz
+# recording claims only. `ADR-0019` point 6's second kind, the AcoustID track
+# id, goes in its own file rather than a column that would change the first.
 psql -c "COPY (
-    SELECT fingerprint_hash, recording_mbid, COUNT(*) AS claim_count
+    SELECT fingerprint_hash, recording_id AS recording_mbid, COUNT(*) AS claim_count
     FROM recording_claims
-    GROUP BY fingerprint_hash, recording_mbid
-    ORDER BY fingerprint_hash, recording_mbid
+    WHERE claim_type = 'musicbrainz_recording'
+    GROUP BY fingerprint_hash, recording_id
+    ORDER BY fingerprint_hash, recording_id
 ) TO STDOUT WITH (FORMAT csv, HEADER)" | gzip -9 > "$OUT/claims.csv.gz"
 CLAIM_ROWS=$(( $(gunzip -c "$OUT/claims.csv.gz" | wc -l) - 1 ))
+
+psql -c "COPY (
+    SELECT fingerprint_hash, recording_id AS acoustid_track_id, COUNT(*) AS claim_count
+    FROM recording_claims
+    WHERE claim_type = 'acoustid_track'
+    GROUP BY fingerprint_hash, recording_id
+    ORDER BY fingerprint_hash, recording_id
+) TO STDOUT WITH (FORMAT csv, HEADER)" | gzip -9 > "$OUT/acoustid_claims.csv.gz"
+ACOUSTID_ROWS=$(( $(gunzip -c "$OUT/acoustid_claims.csv.gz" | wc -l) - 1 ))
 
 cat > "$OUT/manifest.json" <<EOF
 {
@@ -107,7 +120,8 @@ cat > "$OUT/manifest.json" <<EOF
   "embeddings": [${FILES_JSON}
   ],
   "embeddings_total": $TOTAL,
-  "claims": {"file": "claims.csv.gz", "rows": $CLAIM_ROWS}
+  "claims": {"file": "claims.csv.gz", "rows": $CLAIM_ROWS},
+  "acoustid_claims": {"file": "acoustid_claims.csv.gz", "rows": $ACOUSTID_ROWS}
 }
 EOF
 python3 -m json.tool "$OUT/manifest.json" > /dev/null   # refuse to publish a manifest that does not parse

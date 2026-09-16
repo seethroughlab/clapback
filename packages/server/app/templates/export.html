@@ -42,6 +42,13 @@
             <td class="muted">recording claims — <code>fingerprint_hash, recording_mbid, claim_count</code></td>
             <td>{{ "{:,}".format(manifest.claims.rows) }}</td>
         </tr>
+        {% if manifest.acoustid_claims %}
+        <tr>
+            <td><a href="{{ manifest.url }}{{ manifest.acoustid_claims.file }}"><code>{{ manifest.acoustid_claims.file }}</code></a></td>
+            <td class="muted">AcoustID track-id claims — <code>fingerprint_hash, acoustid_track_id, claim_count</code></td>
+            <td>{{ "{:,}".format(manifest.acoustid_claims.rows) }}</td>
+        </tr>
+        {% endif %}
         <tr>
             <td><a href="{{ manifest.url }}manifest.json"><code>manifest.json</code></a></td>
             <td class="muted">this listing, as data — <a href="/export/latest.json"><code>/export/latest.json</code></a> always redirects to the current one</td>

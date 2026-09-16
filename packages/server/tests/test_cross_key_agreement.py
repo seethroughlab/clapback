@@ -242,3 +242,103 @@ class TestTheIndexAnswersTheWholeWindow:
             async with engine.begin() as conn:
                 await conn.execute(text("ALTER DATABASE cache RESET enable_seqscan"))
             await engine.dispose()
+
+
+ACOUSTID = "9ff43b6a-4f16-427c-93c2-92307ca505e0"
+
+
+def _with_acoustid(body, acoustid=ACOUSTID):
+    return {**body, "acoustid_track_id": acoustid}
+
+
+class TestTheAcoustidTrackIdIsASecondClaimType:
+    """`ADR-0019` point 6: admitted, not required. A client that has one sends it
+    beside the MBID, and point 2's join runs on either id."""
+
+    async def test_the_join_runs_on_the_acoustid_id_alone(self, db_client):
+        """A holds MBID + AcoustID id under H1. B holds only the AcoustID id —
+        a tool with AcoustID but no MusicBrainz match — under H2. B's vector
+        still meets A's, through the id they share."""
+        v = _unit(1)
+        await db_client.post(
+            "/v1/embeddings", json=_with_acoustid(_contribution(H1, "client-a", v))
+        )
+        r = await db_client.post(
+            "/v1/embeddings", json=_with_acoustid(_contribution(H2, "client-b", v, mbid=None))
+        )
+        assert r.status_code == 201 and r.json()["status"] == "created"
+        assert await _figures(db_client, f"/v1/embeddings/{H1}") == (1, 0)
+        # H2 has no MBID; its figures are grouped under its AcoustID id, and the
+        # same population is reached from either row.
+        assert await _figures(db_client, f"/v1/embeddings/{H2}") == (1, 0)
+
+    async def test_the_reads_carry_both_names(self, db_client):
+        v = _unit(1)
+        await db_client.post(
+            "/v1/embeddings", json=_with_acoustid(_contribution(H1, "client-a", v))
+        )
+        r = (await db_client.get(f"/v1/embeddings/{H1}")).json()
+        assert (
+            r["recording_mbid"],
+            r["recording_claims"],
+            r["acoustid_track_id"],
+            r["acoustid_claims"],
+        ) == (MBID, 1, ACOUSTID, 1)
+        claims = (await db_client.get(f"/v1/recordings/by-hash/{H1}")).json()["claims"]
+        assert {(c["type"], c["id"]) for c in claims} == {
+            ("musicbrainz_recording", MBID),
+            ("acoustid_track", ACOUSTID),
+        }
+
+    async def test_the_recording_route_and_batch_take_the_type(self, db_client):
+        v = _unit(1)
+        await db_client.post(
+            "/v1/embeddings", json=_with_acoustid(_contribution(H1, "client-a", v, mbid=None))
+        )
+        r = await db_client.get(f"/v1/recordings/{ACOUSTID}?type=acoustid_track")
+        assert r.status_code == 200 and r.json()["type"] == "acoustid_track"
+        assert r.json()["embeddings"][0]["fingerprint_hash"] == H1
+        # As an MBID it is unknown — the two are never mixed.
+        assert (await db_client.get(f"/v1/recordings/{ACOUSTID}")).status_code == 404
+        assert (await db_client.get(f"/v1/recordings/{ACOUSTID}?type=other")).status_code == 422
+        r = await db_client.post(
+            "/v1/embeddings/lookup",
+            json={
+                "keys": [{"acoustid_track_id": ACOUSTID}, {"recording_mbid": ACOUSTID}],
+                "vectors": False,
+            },
+        )
+        rows = [x["row"] for x in r.json()["results"]]
+        assert rows[0]["fingerprint_hash"] == H1 and rows[1] is None
+
+    async def test_a_claim_may_name_either_or_both(self, db_client):
+        await db_client.post(
+            "/v1/embeddings", json=_contribution(H1, "client-a", _unit(1), mbid=None)
+        )
+        r = await db_client.post(
+            "/v1/recordings/claims",
+            json={"fingerprint_hash": H1, "acoustid_track_id": ACOUSTID, "client_id": "client-a"},
+        )
+        assert (
+            r.status_code == 201
+            and r.json()["acoustid_track_id"] == ACOUSTID
+            and r.json()["recording_mbid"] is None
+        )
+        r = await db_client.post(
+            "/v1/recordings/claims", json={"fingerprint_hash": H1, "client_id": "client-a"}
+        )
+        assert r.status_code == 422
+
+    async def test_similarity_collapses_on_the_acoustid_id_when_there_is_no_mbid(self, db_client):
+        v = _unit(1)
+        await db_client.post(
+            "/v1/embeddings", json=_with_acoustid(_contribution(H1, "client-a", v, mbid=None))
+        )
+        await db_client.post(
+            "/v1/embeddings", json=_with_acoustid(_contribution(H2, "client-b", v, mbid=None))
+        )
+        r = await db_client.post(
+            "/v1/similar", json={"embedding": v, "limit": 5, "pipeline_version": PIPELINE}
+        )
+        assert len(r.json()["neighbours"]) == 1 and r.json()["collapsed"] == 1
+        assert r.json()["neighbours"][0]["acoustid_track_id"] == ACOUSTID

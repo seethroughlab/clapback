@@ -570,6 +570,71 @@ class TestWhichRecordingIsThis:
         assert "never an id a lookup" in doc
 
 
+class TestTheAcoustidTrackId:
+    """`ADR-0019` point 6: a second kind of name, admitted not required."""
+
+    ACOUSTID = "9ff43b6a-4f16-427c-93c2-92307ca505e0"
+
+    def test_contribute_and_claim_send_it_beside_the_mbid(self, wire):
+        wire.answer(201, {"status": "created", "contributor_count": 1})
+        Corpus("https://x.invalid").contribute(
+            fingerprint_hash=HASH,
+            embedding=VECTOR,
+            pipeline_version=PIPELINE,
+            client_id="c",
+            recording_mbid=MBID,
+            acoustid_track_id=self.ACOUSTID,
+        )
+        sent = json.loads(wire.requests[-1].data)
+        assert (sent["recording_mbid"], sent["acoustid_track_id"]) == (MBID, self.ACOUSTID)
+        wire.answer(201, {"status": "claimed"})
+        Corpus("https://x.invalid").claim(
+            fingerprint_hash=HASH, client_id="c", acoustid_track_id=self.ACOUSTID
+        )
+        sent = json.loads(wire.requests[-1].data)
+        assert sent["acoustid_track_id"] == self.ACOUSTID and "recording_mbid" not in sent
+
+    def test_lookup_by_acoustid_asks_the_recording_route_with_the_type(self, wire):
+        wire.answer(
+            200,
+            {
+                "recording_mbid": self.ACOUSTID,
+                "type": "acoustid_track",
+                "embeddings": [
+                    {
+                        "fingerprint_hash": HASH,
+                        "pipeline_version": PIPELINE,
+                        "embedding": VECTOR,
+                        "contributor_count": 1,
+                        "recording_claims": 0,
+                    }
+                ],
+            },
+        )
+        row = Corpus("https://x.invalid").lookup(acoustid_track_id=self.ACOUSTID)
+        url = urlsplit(wire.requests[-1].full_url)
+        assert url.path == f"/v1/recordings/{self.ACOUSTID}"
+        assert parse_qs(url.query)["type"] == ["acoustid_track"]
+        assert row["acoustid_track_id"] == self.ACOUSTID
+        with pytest.raises(ValueError):
+            Corpus("https://x.invalid").lookup(HASH, acoustid_track_id=self.ACOUSTID)
+
+    def test_a_batch_key_names_the_kind_because_both_are_uuids(self, wire):
+        wire.answer(
+            200,
+            {
+                "results": [
+                    {"key": {"acoustid_track_id": self.ACOUSTID}, "row": None},
+                    {"key": {"recording_mbid": MBID}, "row": None},
+                ]
+            },
+        )
+        got = list(Corpus("https://x.invalid").lookup_many([("acoustid", self.ACOUSTID), MBID]))
+        sent = json.loads(wire.requests[-1].data)["keys"]
+        assert sent == [{"acoustid_track_id": self.ACOUSTID}, {"recording_mbid": MBID}]
+        assert got[0][0] == ("acoustid", self.ACOUSTID)
+
+
 class TestLookupWithoutAPipeline:
     """0.2.1: the filter became optional for a tool with no embedder at all —
     Picard's plugin in lookup-only mode — which wants the corpus's own row and

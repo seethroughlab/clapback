@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator, model_validator
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.api.deps import DbSession
@@ -90,6 +90,29 @@ def _canonical_mbid(value: str) -> str:
     return v
 
 
+#: `ADR-0019` point 6: the two kinds of id a claim can carry. Both are UUIDs;
+#: they are not the same namespace and are never compared with each other.
+CLAIM_MUSICBRAINZ = "musicbrainz_recording"
+CLAIM_ACOUSTID = "acoustid_track"
+
+
+def _canonical_acoustid(value: str) -> str:
+    v = value.strip().lower()
+    if not _MBID.match(v):
+        raise ValueError("acoustid_track_id must be an AcoustID track id (a UUID)")
+    return v
+
+
+def _identity_of(req) -> list[tuple[str, str]]:
+    """The ids a request names, as `(claim_type, id)` pairs — either, both, or none."""
+    out = []
+    if getattr(req, "recording_mbid", None):
+        out.append((CLAIM_MUSICBRAINZ, req.recording_mbid))
+    if getattr(req, "acoustid_track_id", None):
+        out.append((CLAIM_ACOUSTID, req.acoustid_track_id))
+    return out
+
+
 #: `ADR-0008` point 3: the `identical` band. A submission whose cosine against a
 #: stored vector is inside it confirms that vector; outside, it contradicts it.
 #: Measured, not chosen — the table in that record is its justification.
@@ -97,9 +120,9 @@ AGREEMENT_BAND = 0.999999
 
 
 async def _recording_agreements_for(
-    db, keys: list[tuple[str, str]]
-) -> dict[tuple[str, str], tuple[int, int]]:
-    """Per `(recording_mbid, pipeline_version)`: how many independent installs
+    db, keys: list[tuple[str, str, str]]
+) -> dict[tuple[str, str, str], tuple[int, int]]:
+    """Per `(claim_type, id, pipeline_version)`: how many independent installs
     confirmed the recording's vector, and how many contradicted it.
 
     `ADR-0019` point 2, computed at read time as `ADR-0008` point 6 requires.
@@ -113,11 +136,13 @@ async def _recording_agreements_for(
     """
     if not keys:
         return {}
-    mbids = sorted({m for m, _ in keys})
-    pipelines = sorted({p for _, p in keys})
+    ids = sorted({(t, i) for t, i, _ in keys})
+    pipelines = sorted({p for _, _, p in keys})
     claimed = (
-        select(RecordingClaim.recording_mbid, RecordingClaim.fingerprint_hash)
-        .where(RecordingClaim.recording_mbid.in_(mbids))
+        select(
+            RecordingClaim.claim_type, RecordingClaim.recording_id, RecordingClaim.fingerprint_hash
+        )
+        .where(tuple_(RecordingClaim.claim_type, RecordingClaim.recording_id).in_(ids))
         .distinct()
         .subquery()
     )
@@ -127,7 +152,8 @@ async def _recording_agreements_for(
     )
     stmt = (
         select(
-            claimed.c.recording_mbid,
+            claimed.c.claim_type,
+            claimed.c.recording_id,
             a.pipeline_version,
             func.count(func.distinct(a.client_id))
             .filter(a.similarity >= AGREEMENT_BAND)
@@ -144,9 +170,9 @@ async def _recording_agreements_for(
             & (Embedding.pipeline_version == a.pipeline_version),
         )
         .where(a.pipeline_version.in_(pipelines), independent)
-        .group_by(claimed.c.recording_mbid, a.pipeline_version)
+        .group_by(claimed.c.claim_type, claimed.c.recording_id, a.pipeline_version)
     )
-    return {(m, pv): (int(c), int(d)) for m, pv, c, d in (await db.execute(stmt)).all()}
+    return {(t, i, pv): (int(c), int(d)) for t, i, pv, c, d in (await db.execute(stmt)).all()}
 
 
 async def _record_cross_key_agreements(db, req: "EmbeddingRequest") -> int:
@@ -156,9 +182,13 @@ async def _record_cross_key_agreements(db, req: "EmbeddingRequest") -> int:
     row it was measured against. The row under the submission's own key is
     excluded: the same-key path already compared it. Returns how many rows were
     compared. Does not commit."""
+    # Point 6: the join runs on either id the submission carries. A row claimed
+    # under the same MBID *or* the same AcoustID track id is the same recording.
     claimed = (
         select(RecordingClaim.fingerprint_hash)
-        .where(RecordingClaim.recording_mbid == req.recording_mbid)
+        .where(
+            tuple_(RecordingClaim.claim_type, RecordingClaim.recording_id).in_(_identity_of(req))
+        )
         .distinct()
         .scalar_subquery()
     )
@@ -195,48 +225,87 @@ async def _record_cross_key_agreements(db, req: "EmbeddingRequest") -> int:
     return compared
 
 
-async def _recordings_for(db, hashes: list[str]) -> dict[str, tuple[str, int]]:
-    """The recording each hash resolves to, and how many distinct clients say so.
+async def _identities_for(db, hashes: list[str]) -> dict[str, dict[str, tuple[str, int]]]:
+    """Per hash, per claim type: the id with the most distinct clients, and how many.
 
     `ADR-0012` point 1: derived from the claims rather than read from the row. The
-    winner is the MBID with the most distinct clients; ties break on the MBID text
+    winner is the id with the most distinct clients; ties break on the id text
     so the answer is a **total** ordering — `ADR-0006` learned what a partial one
     costs, being a corpus that answers the same question differently between calls.
-    Hashes with no claims are absent from the result, which callers render as null.
+    Types are never mixed: an MBID and an AcoustID id are different namespaces
+    (`ADR-0019` point 6). Hashes with no claims are absent from the result.
     """
     if not hashes:
         return {}
     stmt = (
         select(
             RecordingClaim.fingerprint_hash,
-            RecordingClaim.recording_mbid,
+            RecordingClaim.claim_type,
+            RecordingClaim.recording_id,
             func.count(func.distinct(RecordingClaim.client_id)).label("n"),
         )
         .where(RecordingClaim.fingerprint_hash.in_(hashes))
-        .group_by(RecordingClaim.fingerprint_hash, RecordingClaim.recording_mbid)
+        .group_by(
+            RecordingClaim.fingerprint_hash, RecordingClaim.claim_type, RecordingClaim.recording_id
+        )
         .order_by(
             RecordingClaim.fingerprint_hash,
+            RecordingClaim.claim_type,
             func.count(func.distinct(RecordingClaim.client_id)).desc(),
-            RecordingClaim.recording_mbid,
+            RecordingClaim.recording_id,
         )
     )
-    out: dict[str, tuple[str, int]] = {}
-    for h, mbid, n in (await db.execute(stmt)).all():
-        out.setdefault(h, (mbid, int(n)))
+    out: dict[str, dict[str, tuple[str, int]]] = {}
+    for h, t, i, n in (await db.execute(stmt)).all():
+        out.setdefault(h, {}).setdefault(t, (i, int(n)))
     return out
 
 
-async def _record_claim(db, fingerprint_hash: str, recording_mbid: str, client_id: str) -> None:
-    """One claim per (hash, mbid, client). Saying it twice is saying it once."""
-    await db.execute(
-        pg_insert(RecordingClaim)
-        .values(
-            fingerprint_hash=fingerprint_hash,
-            recording_mbid=recording_mbid,
-            client_id=client_id,
+async def _recordings_for(db, hashes: list[str]) -> dict[str, tuple[str, int]]:
+    """The MusicBrainz recording each hash resolves to, and how many say so —
+    the projection of `_identities_for` every read has carried since `ADR-0012`."""
+    ids = await _identities_for(db, hashes)
+    return {h: v[CLAIM_MUSICBRAINZ] for h, v in ids.items() if CLAIM_MUSICBRAINZ in v}
+
+
+def _named(ids: dict[str, tuple[str, int]] | None) -> dict:
+    """The four name fields every read carries, from a hash's identities."""
+    ids = ids or {}
+    mb = ids.get(CLAIM_MUSICBRAINZ)
+    ac = ids.get(CLAIM_ACOUSTID)
+    return {
+        "recording_mbid": mb[0] if mb else None,
+        "recording_claims": mb[1] if mb else 0,
+        "acoustid_track_id": ac[0] if ac else None,
+        "acoustid_claims": ac[1] if ac else 0,
+    }
+
+
+def _best_identity(ids: dict[str, tuple[str, int]] | None) -> tuple[str, str] | None:
+    """The identity a row is grouped under for agreement and collapse: its MBID
+    when it has one, else its AcoustID track id, else nothing."""
+    if not ids:
+        return None
+    for t in (CLAIM_MUSICBRAINZ, CLAIM_ACOUSTID):
+        if t in ids:
+            return (t, ids[t][0])
+    return None
+
+
+async def _record_claims(db, fingerprint_hash: str, req, client_id: str) -> None:
+    """One claim per (hash, type, id, client) for each id the request names.
+    Saying it twice is saying it once."""
+    for claim_type, recording_id in _identity_of(req):
+        await db.execute(
+            pg_insert(RecordingClaim)
+            .values(
+                fingerprint_hash=fingerprint_hash,
+                claim_type=claim_type,
+                recording_id=recording_id,
+                client_id=client_id,
+            )
+            .on_conflict_do_nothing()
         )
-        .on_conflict_do_nothing()
-    )
 
 
 class SimilarRequest(BaseModel):
@@ -274,6 +343,11 @@ class Neighbour(BaseModel):
     #: know that rather than be handed a blank.
     recording_mbid: str | None = None
     recording_claims: int = 0
+    #: `ADR-0019` point 6: the AcoustID track id the most distinct clients
+    #: assert for this row, and how many. A second kind of name, not a second
+    #: opinion about the first; null and 0 when nobody has sent one.
+    acoustid_track_id: str | None = None
+    acoustid_claims: int = 0
     #: `ADR-0019` point 2, served as `ADR-0008` decides: independent installs
     #: whose vector for this recording, under this pipeline, agreed to the
     #: `identical` band — counted across every key the recording is held under —
@@ -328,11 +402,21 @@ class EmbeddingRequest(BaseModel):
     #: claim by this client alongside the contribution. Needs `client_id` — a
     #: claim nobody can be said to have made cannot be revoked or counted.
     recording_mbid: str | None = Field(default=None, max_length=36)
+    #: `ADR-0019` point 6: the AcoustID track id, if the tool holds one (Picard
+    #: always does; beets' `chroma` stores it as `acoustid_id`). Admitted, not
+    #: required; recorded as a second claim beside the MBID, and point 2's join
+    #: runs on either. Needs `client_id` for the same reason the MBID does.
+    acoustid_track_id: str | None = Field(default=None, max_length=36)
 
     @field_validator("recording_mbid")
     @classmethod
     def _mbid_shape(cls, v: str | None) -> str | None:
         return None if v is None else _canonical_mbid(v)
+
+    @field_validator("acoustid_track_id")
+    @classmethod
+    def _acoustid_shape(cls, v: str | None) -> str | None:
+        return None if v is None else _canonical_acoustid(v)
 
 
 class EmbeddingResponse(BaseModel):
@@ -350,6 +434,11 @@ class EmbeddingResponse(BaseModel):
     #: `ADR-0012` point 5, as on `Neighbour`.
     recording_mbid: str | None = None
     recording_claims: int = 0
+    #: `ADR-0019` point 6: the AcoustID track id the most distinct clients
+    #: assert for this row, and how many. A second kind of name, not a second
+    #: opinion about the first; null and 0 when nobody has sent one.
+    acoustid_track_id: str | None = None
+    acoustid_claims: int = 0
     #: `ADR-0019` point 2, served as `ADR-0008` decides: independent installs
     #: whose vector for this recording, under this pipeline, agreed to the
     #: `identical` band — counted across every key the recording is held under —
@@ -455,10 +544,11 @@ async def lookup_embedding(
     emb.last_accessed_at = datetime.utcnow()
     await db.commit()
 
-    recording = (await _recordings_for(db, [emb.fingerprint_hash])).get(emb.fingerprint_hash)
+    ids = (await _identities_for(db, [emb.fingerprint_hash])).get(emb.fingerprint_hash)
+    best = _best_identity(ids)
     agreement = (0, 0)
-    if recording:
-        key = (recording[0], emb.pipeline_version)
+    if best:
+        key = (*best, emb.pipeline_version)
         agreement = (await _recording_agreements_for(db, [key])).get(key, (0, 0))
     return EmbeddingResponse(
         fingerprint_hash=emb.fingerprint_hash,
@@ -467,8 +557,7 @@ async def lookup_embedding(
         clap_model_version=emb.clap_model_version,
         pipeline_version=emb.pipeline_version,
         contributor_count=emb.contributor_count,
-        recording_mbid=recording[0] if recording else None,
-        recording_claims=recording[1] if recording else 0,
+        **_named(ids),
         recording_confirmations=agreement[0],
         recording_contradictions=agreement[1],
     )
@@ -549,10 +638,10 @@ async def _contribute_one(db, req: EmbeddingRequest) -> ContributeResponse:
     # `ADR-0012` point 1: a claim is keyed by the client that made it. A recording
     # id with nobody behind it could be neither revoked nor counted, so it is
     # refused up front rather than dropped on the floor.
-    if req.recording_mbid and not req.client_id:
+    if _identity_of(req) and not req.client_id:
         raise HTTPException(
             status_code=422,
-            detail="recording_mbid needs a client_id: a claim must be attributable (ADR-0012)",
+            detail="a recording id needs a client_id: a claim must be attributable (ADR-0012)",
         )
 
     # **The quota is checked before anything is written, for creations and
@@ -610,12 +699,12 @@ async def _contribute_one(db, req: EmbeddingRequest) -> ContributeResponse:
         # row that could not say what produced it, so there is no null left to fill
         # in. `ADR-0006` point 5 is discharged rather than ongoing.
         existing.contributor_count += 1
-        if req.recording_mbid:
+        if _identity_of(req):
             # `ADR-0019` point 2: the recording joins what the key could not —
             # a row for this recording under another fingerprinting path is
             # compared too, and the agreement is counted per recording.
             await _record_cross_key_agreements(db, req)
-            await _record_claim(db, req.fingerprint_hash, req.recording_mbid, req.client_id)
+            await _record_claims(db, req.fingerprint_hash, req, req.client_id)
         await db.commit()
         return ContributeResponse(
             status="confirmed",
@@ -657,12 +746,12 @@ async def _contribute_one(db, req: EmbeddingRequest) -> ContributeResponse:
         pipeline_version=req.pipeline_version,
     )
     db.add(emb)
-    if req.recording_mbid:
+    if _identity_of(req):
         # `ADR-0019` point 2, and this is the branch that matters: a second
         # client on another fingerprinting path lands here, under a new key,
         # and without this its vector would agree with nothing.
         await _record_cross_key_agreements(db, req)
-        await _record_claim(db, req.fingerprint_hash, req.recording_mbid, req.client_id)
+        await _record_claims(db, req.fingerprint_hash, req, req.client_id)
     await db.commit()
 
     return ContributeResponse(status="created", contributor_count=1)
@@ -811,8 +900,8 @@ _COLLAPSE_MAX_WINDOW = 1000
 
 async def _collapse_by_recording(db, ranked, limit: int):
     """Take the ranked query and return `(rows, recordings, collapsed)`: at most
-    `limit` rows with one per (recording, pipeline), the recording lookup for
-    them, and how many rows were folded away. See `similar` for why."""
+    `limit` rows with one per (identity, pipeline), their identities, and how
+    many rows were folded away. See `similar` for why."""
     window = limit * 2
     while True:
         # **HNSW returns at most `hnsw.ef_search` candidates, whatever the LIMIT.**
@@ -822,12 +911,12 @@ async def _collapse_by_recording(db, ranked, limit: int):
         # here would be. Set it to the window, for this transaction only.
         await db.execute(text(f"SET LOCAL hnsw.ef_search = {min(window, _COLLAPSE_MAX_WINDOW)}"))
         rows = (await db.execute(ranked.limit(window))).all()
-        recordings = await _recordings_for(db, [r.fingerprint_hash for r in rows])
+        identities = await _identities_for(db, [r.fingerprint_hash for r in rows])
         kept, seen, collapsed = [], set(), 0
         for r in rows:
-            rec = recordings.get(r.fingerprint_hash)
-            if rec is not None:
-                key = (rec[0], r.pipeline_version)
+            best = _best_identity(identities.get(r.fingerprint_hash))
+            if best is not None:
+                key = (*best, r.pipeline_version)
                 if key in seen:
                     collapsed += 1
                     continue
@@ -837,7 +926,7 @@ async def _collapse_by_recording(db, ranked, limit: int):
                 break
         exhausted = len(rows) < window
         if len(kept) == limit or exhausted or window >= _COLLAPSE_MAX_WINDOW:
-            return kept, recordings, collapsed
+            return kept, identities, collapsed
         window = min(window * 2, _COLLAPSE_MAX_WINDOW)
 
 
@@ -897,23 +986,19 @@ async def similar(
     # (recording, pipeline), widening the window until `limit` survive or the
     # corpus runs out. Unnamed rows are kept as they are: nothing says two of
     # them are one recording, and folding on a guess is what the corpus refuses.
-    rows, recordings, collapsed = await _collapse_by_recording(db, stmt, req.limit)
+    rows, identities, collapsed = await _collapse_by_recording(db, stmt, req.limit)
     count_stmt = select(func.count()).select_from(Embedding)
     if filters:
         count_stmt = count_stmt.where(*filters)
     searched = await db.scalar(count_stmt)
+    bests = {r.fingerprint_hash: _best_identity(identities.get(r.fingerprint_hash)) for r in rows}
     agreements = await _recording_agreements_for(
-        db,
-        [
-            (recordings[r.fingerprint_hash][0], r.pipeline_version)
-            for r in rows
-            if r.fingerprint_hash in recordings
-        ],
+        db, [(*b, r.pipeline_version) for r in rows if (b := bests[r.fingerprint_hash])]
     )
 
     def _agreement(r) -> tuple[int, int]:
-        rec = recordings.get(r.fingerprint_hash)
-        return agreements.get((rec[0], r.pipeline_version), (0, 0)) if rec else (0, 0)
+        b = bests[r.fingerprint_hash]
+        return agreements.get((*b, r.pipeline_version), (0, 0)) if b else (0, 0)
 
     return SimilarResponse(
         collapsed=collapsed,
@@ -924,12 +1009,7 @@ async def similar(
                 analysis_version=r.analysis_version,
                 clap_model_version=r.clap_model_version,
                 pipeline_version=r.pipeline_version,
-                recording_mbid=recordings[r.fingerprint_hash][0]
-                if r.fingerprint_hash in recordings
-                else None,
-                recording_claims=recordings[r.fingerprint_hash][1]
-                if r.fingerprint_hash in recordings
-                else 0,
+                **_named(identities.get(r.fingerprint_hash)),
                 recording_confirmations=_agreement(r)[0],
                 recording_contradictions=_agreement(r)[1],
             )
@@ -953,13 +1033,26 @@ class ClaimRequest(BaseModel):
     """
 
     fingerprint_hash: str = Field(..., min_length=64, max_length=64)
-    recording_mbid: str = Field(..., max_length=36)
+    #: Either, or both — `ADR-0019` point 6. At least one.
+    recording_mbid: str | None = Field(default=None, max_length=36)
+    acoustid_track_id: str | None = Field(default=None, max_length=36)
     client_id: str = Field(..., min_length=1, max_length=64)
 
     @field_validator("recording_mbid")
     @classmethod
-    def _mbid_shape(cls, v: str) -> str:
-        return _canonical_mbid(v)
+    def _mbid_shape(cls, v: str | None) -> str | None:
+        return None if v is None else _canonical_mbid(v)
+
+    @field_validator("acoustid_track_id")
+    @classmethod
+    def _acoustid_shape(cls, v: str | None) -> str | None:
+        return None if v is None else _canonical_acoustid(v)
+
+    @model_validator(mode="after")
+    def _at_least_one(self) -> "ClaimRequest":
+        if not self.recording_mbid and not self.acoustid_track_id:
+            raise ValueError("a claim names a recording_mbid, an acoustid_track_id, or both")
+        return self
 
 
 class ClaimResponse(BaseModel):
@@ -967,6 +1060,8 @@ class ClaimResponse(BaseModel):
     #: What the hash resolves to after this claim, and how many clients agree.
     recording_mbid: str | None
     recording_claims: int
+    acoustid_track_id: str | None = None
+    acoustid_claims: int = 0
 
 
 class RecordingEmbedding(BaseModel):
@@ -986,7 +1081,10 @@ class RecordingEmbedding(BaseModel):
 
 
 class RecordingResponse(BaseModel):
+    #: The id asked for, and its kind — `musicbrainz_recording` unless the
+    #: request said `type=acoustid_track` (`ADR-0019` point 6).
     recording_mbid: str
+    type: str = CLAIM_MUSICBRAINZ
     embeddings: list[RecordingEmbedding]
 
 
@@ -1014,14 +1112,10 @@ async def claim_recording(
             status_code=404,
             detail="No embedding with that fingerprint_hash; contribute one first",
         )
-    await _record_claim(db, req.fingerprint_hash, req.recording_mbid, req.client_id)
+    await _record_claims(db, req.fingerprint_hash, req, req.client_id)
     await db.commit()
-    recording = (await _recordings_for(db, [req.fingerprint_hash])).get(req.fingerprint_hash)
-    return ClaimResponse(
-        status="claimed",
-        recording_mbid=recording[0] if recording else None,
-        recording_claims=recording[1] if recording else 0,
-    )
+    ids = (await _identities_for(db, [req.fingerprint_hash])).get(req.fingerprint_hash)
+    return ClaimResponse(status="claimed", **_named(ids))
 
 
 @router.get("/recordings/{recording_mbid}", response_model=RecordingResponse)
@@ -1031,6 +1125,7 @@ async def recording(
     recording_mbid: str,
     db: DbSession,
     pipeline_version: str | None = None,
+    type: str = CLAIM_MUSICBRAINZ,
 ) -> RecordingResponse:
     """What does recording X sound like — without holding X.
 
@@ -1041,8 +1136,20 @@ async def recording(
 
     A read, unauthenticated, on the lookup rate limit.
     """
+    # `type=acoustid_track` asks by the AcoustID track id instead — `ADR-0019`
+    # point 6's second way to name a recording, the same across decoders and
+    # `fpcalc` versions. The two are never mixed: an id is looked up as the kind
+    # the caller said it was.
+    if type not in (CLAIM_MUSICBRAINZ, CLAIM_ACOUSTID):
+        raise HTTPException(
+            status_code=422, detail=f"type must be {CLAIM_MUSICBRAINZ} or {CLAIM_ACOUSTID}"
+        )
     try:
-        mbid = _canonical_mbid(recording_mbid)
+        mbid = (
+            _canonical_mbid(recording_mbid)
+            if type == CLAIM_MUSICBRAINZ
+            else _canonical_acoustid(recording_mbid)
+        )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -1051,7 +1158,7 @@ async def recording(
             RecordingClaim.fingerprint_hash,
             func.count(func.distinct(RecordingClaim.client_id)).label("n"),
         )
-        .where(RecordingClaim.recording_mbid == mbid)
+        .where(RecordingClaim.claim_type == type, RecordingClaim.recording_id == mbid)
         .group_by(RecordingClaim.fingerprint_hash)
         .subquery()
     )
@@ -1065,9 +1172,12 @@ async def recording(
     rows = (await db.execute(stmt)).all()
     if not rows:
         raise HTTPException(status_code=404, detail="No embedding claimed under that recording")
-    agreements = await _recording_agreements_for(db, [(mbid, e.pipeline_version) for e, _ in rows])
+    agreements = await _recording_agreements_for(
+        db, [(type, mbid, e.pipeline_version) for e, _ in rows]
+    )
     return RecordingResponse(
         recording_mbid=mbid,
+        type=type,
         embeddings=[
             RecordingEmbedding(
                 fingerprint_hash=e.fingerprint_hash,
@@ -1075,8 +1185,10 @@ async def recording(
                 embedding=list(e.embedding),
                 contributor_count=e.contributor_count,
                 recording_claims=int(n),
-                recording_confirmations=agreements.get((mbid, e.pipeline_version), (0, 0))[0],
-                recording_contradictions=agreements.get((mbid, e.pipeline_version), (0, 0))[1],
+                recording_confirmations=agreements.get((type, mbid, e.pipeline_version), (0, 0))[0],
+                recording_contradictions=agreements.get((type, mbid, e.pipeline_version), (0, 0))[
+                    1
+                ],
             )
             for e, n in rows
         ],
@@ -1097,17 +1209,39 @@ class LookupKey(BaseModel):
 
     fingerprint_hash: str | None = Field(default=None, min_length=1, max_length=64)
     recording_mbid: str | None = Field(default=None, max_length=36)
+    #: `ADR-0019` point 6: the AcoustID track id as a third kind of key.
+    acoustid_track_id: str | None = Field(default=None, max_length=36)
 
     @field_validator("recording_mbid")
     @classmethod
     def _mbid_shape(cls, v: str | None) -> str | None:
         return None if v is None else _canonical_mbid(v)
 
+    @field_validator("acoustid_track_id")
+    @classmethod
+    def _acoustid_shape(cls, v: str | None) -> str | None:
+        return None if v is None else _canonical_acoustid(v)
+
     @model_validator(mode="after")
     def _exactly_one(self) -> "LookupKey":
-        if (self.fingerprint_hash is None) == (self.recording_mbid is None):
-            raise ValueError("a key is a fingerprint_hash or a recording_mbid, not both or neither")
+        given = [
+            k
+            for k in (self.fingerprint_hash, self.recording_mbid, self.acoustid_track_id)
+            if k is not None
+        ]
+        if len(given) != 1:
+            raise ValueError(
+                "a key is exactly one of fingerprint_hash, recording_mbid or acoustid_track_id"
+            )
         return self
+
+    @property
+    def identity(self) -> tuple[str, str] | None:
+        if self.recording_mbid:
+            return (CLAIM_MUSICBRAINZ, self.recording_mbid)
+        if self.acoustid_track_id:
+            return (CLAIM_ACOUSTID, self.acoustid_track_id)
+        return None
 
 
 class LookupBatchRequest(BaseModel):
@@ -1139,7 +1273,7 @@ class LookupBatchResponse(BaseModel):
 
 def _row_for(
     emb: Embedding,
-    recording: tuple[str, int] | None,
+    ids: dict[str, tuple[str, int]] | None,
     agreement: tuple[int, int],
     *,
     vectors: bool,
@@ -1150,8 +1284,7 @@ def _row_for(
         "clap_model_version": emb.clap_model_version,
         "pipeline_version": emb.pipeline_version,
         "contributor_count": emb.contributor_count,
-        "recording_mbid": recording[0] if recording else None,
-        "recording_claims": recording[1] if recording else 0,
+        **_named(ids),
         "recording_confirmations": agreement[0],
         "recording_contradictions": agreement[1],
     }
@@ -1188,7 +1321,7 @@ async def lookup_batch(
     pipeline = _decode_pipeline(req.pipeline_version) if req.pipeline_version is not None else None
 
     hashes = [k.fingerprint_hash for k in req.keys if k.fingerprint_hash is not None]
-    mbids = [k.recording_mbid for k in req.keys if k.recording_mbid is not None]
+    identities = sorted({k.identity for k in req.keys if k.identity is not None})
 
     # By hash: one row per hash, chosen as the single lookup chooses — most
     # confirmed, earliest, then pipeline, a total order — by taking the first
@@ -1208,24 +1341,31 @@ async def lookup_batch(
             by_hash.setdefault(emb.fingerprint_hash, emb)
 
     # By recording: the row most distinct clients have claimed under the id,
-    # then the most confirmed — the order `GET /v1/recordings/{mbid}` serves.
-    by_mbid: dict[str, Embedding] = {}
-    if mbids:
+    # then the most confirmed — the order `GET /v1/recordings/{id}` serves.
+    # An id is looked up as the kind the key said it was (`ADR-0019` point 6).
+    by_id: dict[tuple[str, str], Embedding] = {}
+    if identities:
         claimed = (
             select(
-                RecordingClaim.recording_mbid,
+                RecordingClaim.claim_type,
+                RecordingClaim.recording_id,
                 RecordingClaim.fingerprint_hash,
                 func.count(func.distinct(RecordingClaim.client_id)).label("n"),
             )
-            .where(RecordingClaim.recording_mbid.in_(mbids))
-            .group_by(RecordingClaim.recording_mbid, RecordingClaim.fingerprint_hash)
+            .where(tuple_(RecordingClaim.claim_type, RecordingClaim.recording_id).in_(identities))
+            .group_by(
+                RecordingClaim.claim_type,
+                RecordingClaim.recording_id,
+                RecordingClaim.fingerprint_hash,
+            )
             .subquery()
         )
         stmt = (
-            select(claimed.c.recording_mbid, Embedding)
+            select(claimed.c.claim_type, claimed.c.recording_id, Embedding)
             .join(claimed, claimed.c.fingerprint_hash == Embedding.fingerprint_hash)
             .order_by(
-                claimed.c.recording_mbid,
+                claimed.c.claim_type,
+                claimed.c.recording_id,
                 claimed.c.n.desc(),
                 Embedding.contributor_count.desc(),
                 Embedding.created_at,
@@ -1234,20 +1374,14 @@ async def lookup_batch(
         )
         if pipeline is not None:
             stmt = stmt.where(Embedding.pipeline_version == pipeline)
-        for mbid, emb in (await db.execute(stmt)).all():
-            by_mbid.setdefault(mbid, emb)
+        for t, i, emb in (await db.execute(stmt)).all():
+            by_id.setdefault((t, i), emb)
 
-    found = list(by_hash.values()) + list(by_mbid.values())
-    recordings = await _recordings_for(db, sorted({e.fingerprint_hash for e in found}))
+    found = list(by_hash.values()) + list(by_id.values())
+    ids_for = await _identities_for(db, sorted({e.fingerprint_hash for e in found}))
+    bests = {e.fingerprint_hash: _best_identity(ids_for.get(e.fingerprint_hash)) for e in found}
     agreements = await _recording_agreements_for(
-        db,
-        sorted(
-            {
-                (recordings[e.fingerprint_hash][0], e.pipeline_version)
-                for e in found
-                if e.fingerprint_hash in recordings
-            }
-        ),
+        db, sorted({(*b, e.pipeline_version) for e in found if (b := bests[e.fingerprint_hash])})
     )
     if found:
         now = datetime.utcnow()
@@ -1257,16 +1391,12 @@ async def lookup_batch(
 
     results = []
     for key in req.keys:
-        emb = (
-            by_hash.get(key.fingerprint_hash)
-            if key.fingerprint_hash
-            else by_mbid.get(key.recording_mbid)
-        )
+        emb = by_hash.get(key.fingerprint_hash) if key.fingerprint_hash else by_id.get(key.identity)
         row = None
         if emb:
-            rec = recordings.get(emb.fingerprint_hash)
-            agreement = agreements.get((rec[0], emb.pipeline_version), (0, 0)) if rec else (0, 0)
-            row = _row_for(emb, rec, agreement, vectors=req.vectors)
+            b = bests[emb.fingerprint_hash]
+            agreement = agreements.get((*b, emb.pipeline_version), (0, 0)) if b else (0, 0)
+            row = _row_for(emb, ids_for.get(emb.fingerprint_hash), agreement, vectors=req.vectors)
         results.append(LookupResult(key=key, row=row))
     return LookupBatchResponse(results=results)
 
@@ -1315,21 +1445,22 @@ async def claims_for_hash(request: Request, fingerprint_hash: str, db: DbSession
         raise HTTPException(status_code=404, detail="Embedding not found")
     stmt = (
         select(
-            RecordingClaim.recording_mbid,
+            RecordingClaim.claim_type,
+            RecordingClaim.recording_id,
             func.count(func.distinct(RecordingClaim.client_id)).label("n"),
         )
         .where(RecordingClaim.fingerprint_hash == fingerprint_hash)
-        .group_by(RecordingClaim.recording_mbid)
+        .group_by(RecordingClaim.claim_type, RecordingClaim.recording_id)
         .order_by(
             func.count(func.distinct(RecordingClaim.client_id)).desc(),
-            RecordingClaim.recording_mbid,
+            RecordingClaim.claim_type,
+            RecordingClaim.recording_id,
         )
     )
     return ClaimsResponse(
         fingerprint_hash=fingerprint_hash,
         claims=[
-            ClaimEntry(type="musicbrainz_recording", id=mbid, clients=int(n))
-            for mbid, n in (await db.execute(stmt)).all()
+            ClaimEntry(type=t, id=i, clients=int(n)) for t, i, n in (await db.execute(stmt)).all()
         ],
     )
 

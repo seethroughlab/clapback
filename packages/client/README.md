@@ -157,8 +157,16 @@ an AcoustID lookup's result — pass it as `recording_mbid=` on `contribute`, or
 `claim()` to a row you already sent. Never re-send the vector to add an id: a repeat contribution
 is recorded as agreement, and your library must not read as agreeing with itself.
 
+If your tool holds an **AcoustID track id** — Picard always does, beets' `chroma` stores it as
+`acoustid_id` — pass it as `acoustid_track_id=` beside the MBID, or alone. It is what AcoustID's
+matcher assigns to near-identical fingerprints, the same across decoders and `fpcalc` versions, so
+it joins two keys of one recording where there is no MusicBrainz match
+([`ADR-0019`](../../docs/decisions/ADR-0019-agreement-is-counted-per-recording-not-per-key.md)
+point 6). `lookup(acoustid_track_id=)` asks by it; in `lookup_many` pass `("acoustid", id)`,
+because an AcoustID id and an MBID are both UUIDs and cannot be told apart by looking.
+
 An id is a *claim*: the commons counts how many distinct clients assert it and never verifies it
-against MusicBrainz. Sending one tells the operator which recording you hold — so send it under
+against MusicBrainz or AcoustID. Sending one tells the operator which recording you hold — so send it under
 the same setting that sends the vector, and say so in your own "what leaves the machine".
 
 The commons is worth exactly its coverage of the library asking. Early on, expect misses.

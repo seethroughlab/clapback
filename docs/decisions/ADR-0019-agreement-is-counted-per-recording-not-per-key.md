@@ -66,6 +66,22 @@ Implementation:
   fixed: the instance carries two HNSW indexes on the same column (`ix_embeddings_hnsw_cosine`
   with `m=16, ef_construction=64`, and migration `009`'s `ix_embeddings_vector_cosine`), which
   is one index of RAM for nothing; `ADR-0003` point 11's budget should know.
+- **Point 6 is built** (2026-09-16, undeployed). Migration `015_claim_type`: `recording_claims`
+  gains `claim_type` (`musicbrainz_recording` for every existing row, or `acoustid_track`) as
+  part of the key, and its id column is renamed `recording_id` — both kinds are UUID text, and a
+  column called `recording_mbid` holding something that is not one is the trap `ADR-0012`
+  names. Contributions and claims accept `acoustid_track_id` beside or instead of
+  `recording_mbid`; point 2's join runs on either id the submission carries; every read
+  carries `acoustid_track_id` and `acoustid_claims` beside the MBID pair; the by-hash claims
+  route lists both kinds with their `type`; `GET /v1/recordings/{id}?type=acoustid_track` and
+  the batch key `{acoustid_track_id}` ask by it. A row is grouped for agreement and collapse
+  under its MBID when it has one, else its AcoustID id — the two namespaces are never mixed.
+  The export keeps `claims.csv.gz`'s columns (MusicBrainz claims only) and adds
+  `acoustid_claims.csv.gz` with a manifest entry, so schema_version 1 readers are untouched.
+  Client 0.4.0 (unreleased): `contribute(acoustid_track_id=)`, `claim(...)` taking either,
+  `lookup(acoustid_track_id=)`, `recording(id, type=)`, and `("acoustid", id)` tuples in
+  `lookup_many`. Five more database tests, the first of which is the point: a client holding
+  only the AcoustID id, under a new key, confirms a row that has both.
 - **Point 3 is built in the client** (2026-09-16, `clapback-client` 0.3.0, on PyPI the same day):
   `Corpus.lookup(recording_mbid=, pipeline_version=)` returns the most-claimed row under the id
   in the shape a hash lookup returns, `None` when nobody has claimed it, and refuses both keys

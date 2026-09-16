@@ -111,7 +111,8 @@ row = Corpus().lookup(key, pipeline_version)       # None on a miss — then emb
        "pipeline_version": "laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32",
        "vectors": false}'</code></pre>
     <p class="muted">
-        Up to 100 keys, hashes and MusicBrainz recording ids mixed, answered in order: the row if
+        Up to 100 keys — hashes, MusicBrainz recording ids and <code>acoustid_track_id</code>s
+        mixed — answered in order: the row if
         held, <code>null</code> if not, each entry naming the key it answered. A held entry is
         exactly what the single lookup returns for that key; <code>"vectors": false</code> leaves
         out the 512 floats, for a tool asking "which of these do you hold, and what are they
@@ -258,6 +259,18 @@ query  = embed_text("dreamy ambient with piano")   # the same space</code></pre>
         row's recording is whichever id the most distinct clients assert, and the count travels
         with it so a reader can see one client's word for what it is
         (<a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0012-a-contribution-can-name-its-recording.md">ADR-0012</a>).
+    </p>
+    <p class="muted">
+        <strong>A second kind of name: the AcoustID track id.</strong> Send
+        <code>acoustid_track_id</code> beside the MBID, or alone, on a contribution or a claim. It
+        is what AcoustID's own matcher assigns to a cluster of near-identical fingerprints — the
+        same across decoders, <code>fpcalc</code> versions and lossy re-encodes of one rip — so it
+        joins two keys of one recording where a tool has no MusicBrainz match. Admitted, not
+        required: it needs AcoustID's service and coverage, which the offline key does not. Reads
+        carry it as <code>acoustid_track_id</code> and <code>acoustid_claims</code>; the two kinds
+        are never mixed, and <code>?type=acoustid_track</code> asks the recording route by it
+        (<a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0019-agreement-is-counted-per-recording-not-per-key.md">ADR-0019</a>
+        point 6). As with the MBID: claim only what you established yourself.
     </p>
     <pre><code>curl https://{{ host }}/v1/recordings/1c6da765-da50-476b-a000-61e7cf45ded8</code></pre>
     <p class="muted">

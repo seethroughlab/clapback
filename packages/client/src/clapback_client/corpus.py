@@ -48,8 +48,18 @@ _HEX64 = re.compile(r"^[0-9a-f]{64}$")
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
-def _key_of(key: str) -> dict[str, str]:
-    """A batch key as the corpus wants it: by shape, a hash or a recording id."""
+def _key_of(key) -> dict[str, str]:
+    """A batch key as the corpus wants it: by shape, a hash or a recording MBID;
+    an AcoustID track id is a UUID too, so it is passed as `("acoustid", id)`
+    (`ADR-0019` point 6) — the two are never told apart by looking."""
+    if isinstance(key, tuple):
+        kind, value = key
+        v = value.strip().lower()
+        if kind == "acoustid" and _UUID.match(v):
+            return {"acoustid_track_id": v}
+        if kind in ("mbid", "recording") and _UUID.match(v):
+            return {"recording_mbid": v}
+        raise ValueError(f"not a key: {key!r}")
     k = key.strip().lower()
     if _HEX64.match(k):
         return {"fingerprint_hash": k}
@@ -130,6 +140,7 @@ class Corpus:
         pipeline_version: str | None = None,
         *,
         recording_mbid: str | None = None,
+        acoustid_track_id: str | None = None,
     ) -> dict | None:
         """The corpus's row for this recording from this pipeline, or None.
 
@@ -146,8 +157,11 @@ class Corpus:
         the recording. A MusicBrainz recording id is the same on every path.
         Asked by id, this returns the row most clients have claimed under it
         (then the most-confirmed), in the same shape a hash lookup returns, with
-        `recording_mbid` set to the id you asked by. Exactly one of the two keys
-        must be given.
+        `recording_mbid` set to the id you asked by. `acoustid_track_id=` asks
+        by the AcoustID track id instead (`ADR-0019` point 6) — what AcoustID's
+        matcher assigns to near-identical fingerprints, the same across
+        decoders and `fpcalc` versions — for a tool that has that and no
+        MusicBrainz match. Exactly one of the three keys must be given.
 
         With `pipeline_version`, only a row from the *same* pipeline is returned.
         Two vectors are comparable exactly when their pipeline identities match
@@ -167,15 +181,19 @@ class Corpus:
         # costs: a 404 that looks exactly like the recording being absent.
         from urllib.parse import quote
 
-        if (fingerprint_hash is None) == (recording_mbid is None):
+        given = [k for k in (fingerprint_hash, recording_mbid, acoustid_track_id) if k is not None]
+        if len(given) != 1:
             raise ValueError(
-                "lookup takes a fingerprint_hash or a recording_mbid, not both or neither"
+                "lookup takes exactly one of fingerprint_hash, recording_mbid or acoustid_track_id"
             )
         if recording_mbid is not None:
             rows = self.recording(recording_mbid, pipeline_version=pipeline_version)
-            if not rows:
-                return None
-            return {**rows[0], "recording_mbid": recording_mbid}
+            return {**rows[0], "recording_mbid": recording_mbid} if rows else None
+        if acoustid_track_id is not None:
+            rows = self.recording(
+                acoustid_track_id, pipeline_version=pipeline_version, type="acoustid_track"
+            )
+            return {**rows[0], "acoustid_track_id": acoustid_track_id} if rows else None
 
         path = f"/v1/embeddings/{fingerprint_hash}"
         if pipeline_version is not None:
@@ -276,6 +294,7 @@ class Corpus:
         clap_model_version: str | None = None,
         analysis_version: int = 1,
         recording_mbid: str | None = None,
+        acoustid_track_id: str | None = None,
     ) -> str:
         """POST one embedding. Returns a short word describing what happened.
 
@@ -311,6 +330,12 @@ class Corpus:
         }
         if recording_mbid:
             body["recording_mbid"] = recording_mbid
+        if acoustid_track_id:
+            # `ADR-0019` point 6: a second name, admitted not required. Picard
+            # always has one; beets' `chroma` stores it as `acoustid_id`. It
+            # joins keys across decoders and `fpcalc` versions where the MBID
+            # is missing, and is a claim like the MBID — send only your own.
+            body["acoustid_track_id"] = acoustid_track_id
         for attempt, delay in enumerate((*_RETRY_DELAYS, None)):
             status, payload = self._request("POST", "/v1/embeddings", body)
             if status in (200, 201):
@@ -385,6 +410,11 @@ class Corpus:
                         if row.get("recording_mbid")
                         else {}
                     ),
+                    **(
+                        {"acoustid_track_id": row["acoustid_track_id"]}
+                        if row.get("acoustid_track_id")
+                        else {}
+                    ),
                 }
             )
         body = {"contributions": contributions}
@@ -417,8 +447,17 @@ class Corpus:
             raise CorpusError(f"batch contribute returned {status}: {payload}")
         raise CorpusError("rate limited repeatedly; try again later")
 
-    def claim(self, *, fingerprint_hash: str, recording_mbid: str, client_id: str) -> dict:
+    def claim(
+        self,
+        *,
+        fingerprint_hash: str,
+        client_id: str,
+        recording_mbid: str | None = None,
+        acoustid_track_id: str | None = None,
+    ) -> dict:
         """Name a recording the corpus already holds — without re-sending its vector.
+
+        Either id, or both (`ADR-0019` point 6); at least one.
 
         `ADR-0012` point 4's second write path, and the one a tool uses to add ids
         to tracks it contributed earlier. **Never re-send the vector to do this**:
@@ -441,8 +480,9 @@ class Corpus:
             "/v1/recordings/claims",
             {
                 "fingerprint_hash": fingerprint_hash,
-                "recording_mbid": recording_mbid,
                 "client_id": client_id,
+                **({"recording_mbid": recording_mbid} if recording_mbid else {}),
+                **({"acoustid_track_id": acoustid_track_id} if acoustid_track_id else {}),
             },
         )
         if status == 201:
@@ -508,7 +548,13 @@ class Corpus:
             return list((payload or {}).get("pipelines", []))
         raise CorpusError(f"pipelines returned {status}: {payload}")
 
-    def recording(self, recording_mbid: str, *, pipeline_version: str | None = None) -> list[dict]:
+    def recording(
+        self,
+        recording_mbid: str,
+        *,
+        pipeline_version: str | None = None,
+        type: str = "musicbrainz_recording",
+    ) -> list[dict]:
         """What does recording X sound like — without holding X.
 
         `ADR-0012` point 5's third read. Every row any client has claimed under
@@ -519,9 +565,9 @@ class Corpus:
         """
         from urllib.parse import quote
 
-        path = f"/v1/recordings/{recording_mbid}"
+        path = f"/v1/recordings/{recording_mbid}?type={quote(type, safe='')}"
         if pipeline_version:
-            path += f"?pipeline_version={quote(pipeline_version, safe='')}"
+            path += f"&pipeline_version={quote(pipeline_version, safe='')}"
         status, payload = self._request("GET", path)
         if status == 200:
             return list((payload or {}).get("embeddings", []))
