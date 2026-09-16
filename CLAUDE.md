@@ -181,8 +181,11 @@ comparison in `_contribute_one`, and `recording_confirmations` / `recording_cont
 read that names a recording, backed by the suite's first database test (server CI now runs
 pgvector). **Point 4 too** (same day): `/v1/similar` folds named rows sharing a recording into the
 nearest and reports `collapsed` — and deploying it exposed that HNSW had capped every `limit` above
-40 at 40 since the index was built (`hnsw.ef_search`, now set per query). Point 6 is owed, and the
-two plug-ins passing the id they hold is owed as one release each.
+40 at 40 since the index was built (`hnsw.ef_search`, now set per query). **And point 6** (same
+day, migration `015`): the AcoustID track id is a second claim type, `claim_type` is part of the
+claims key, the join runs on either id, and `clapback-client` 0.4.0 carries it. **Every point of
+`ADR-0019` but 5 is deployed**; point 5 waits on `ADR-0007`. The two plug-ins passing the ids they
+hold is owed as one release each.
 
 `ADR-0008` closes `ADR-0001` deferred item 2 — the part the cross-machine measurement did not answer,
 being where the agreement threshold sits and what the corpus does with it.
@@ -201,7 +204,7 @@ nightly `pg_dump` to `s3://clapback-backup`, and a corpus of **25,886 rows, ever
 declares the pipeline that produced it and is keyed on a hash any client can reproduce from the
 audio — and 23,196 of which (89.6%) name their MusicBrainz recording**, up from 6.8% on
 2026-09-14, after Familiar's `ADR-0115` backfill. Four packages are on PyPI (`clapback-embed` 0.1.0,
-`clapback-client` 0.3.0, `clapback-cli` 0.1.1, `beets-clapback` 0.2.0) and the Picard plugin ships as a zip on a
+`clapback-client` 0.4.0, `clapback-cli` 0.1.1, `beets-clapback` 0.2.0) and the Picard plugin ships as a zip on a
 `picard-v*` release. The bare name `clapback` on PyPI belongs to an unrelated 2018 package; the
 CLI is `clapback-cli`.
 
@@ -234,12 +237,11 @@ green timer is evidence the check ran, not evidence anyone would hear it.**
 - **`ADR-0007`**, deliberately, until a second contributor exists.
 - **`ADR-0008`**, partly — confirmations and contradictions are served per recording since
   2026-09-16; the worst similarity and point 7 are not.
-- **`ADR-0019` point 6** — the AcoustID track id as a second claim type.
 - **`ADR-0013` point 7** — the import script.
 
-**The commons box is at `f801ce3` and migration `014` as of 2026-09-16 ~02:10 UTC.** The CLI
-(`<0.3`) and `beets-clapback` (`<0.3`) bound the client below 0.3.0; each widens the bound in the
-release that adopts `lookup_many` / `contribute_many`, and until then a fresh install of either
+**The commons box is at `6f3dbe5` and migration `015` as of 2026-09-16 ~02:55 UTC.** The CLI
+(`<0.3`) and `beets-clapback` (`<0.3`) bound the client below 0.3.0; each widens the bound to `<0.5` in
+the release that adopts `lookup_many` / `contribute_many` and the ids it holds, and until then a fresh install of either
 resolves to client 0.2.2, which still works.
 
 **`ADR-0011` point 5's outreach went out 2026-09-15** — beets#7032 and picard-plugins#436 (the

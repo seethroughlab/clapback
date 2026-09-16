@@ -11,7 +11,8 @@ Implementation:
   its migration and the two-keys-one-recording test), then collapsed similarity (point 4), then
   the AcoustID claim type (point 6); point 5 waits on `ADR-0007`. `ADR-0015` and `ADR-0018`,
   still proposed, each gain a point if accepted: batch lookup takes ids, and the by-hash claims
-  route serves the join.
+  route serves the join. **Points 1, 2, 3, 4 and 6 were all built and deployed on 2026-09-16;
+  only point 5 remains, with `ADR-0007`.**
 - **`ADR-0014`, `ADR-0015`, `ADR-0016` and `ADR-0018` were accepted 2026-09-16**, `ADR-0015`
   and `ADR-0018` with the amendments above written into their Implementation blocks.
 - **Point 1 is done** (2026-09-16, `e6124da`): the client README's first obligation and `/api`'s
@@ -66,7 +67,7 @@ Implementation:
   fixed: the instance carries two HNSW indexes on the same column (`ix_embeddings_hnsw_cosine`
   with `m=16, ef_construction=64`, and migration `009`'s `ix_embeddings_vector_cosine`), which
   is one index of RAM for nothing; `ADR-0003` point 11's budget should know.
-- **Point 6 is built** (2026-09-16, undeployed). Migration `015_claim_type`: `recording_claims`
+- **Point 6 is built and deployed** (2026-09-16 ~02:55 UTC; box at `6f3dbe5`, migration `015` applied — 23,198 claims typed `musicbrainz_recording`, counts unchanged; both export queries run against the live schema; `clapback-client` 0.4.0 on PyPI, verified cold). Migration `015_claim_type`: `recording_claims`
   gains `claim_type` (`musicbrainz_recording` for every existing row, or `acoustid_track`) as
   part of the key, and its id column is renamed `recording_id` — both kinds are UUID text, and a
   column called `recording_mbid` holding something that is not one is the trap `ADR-0012`
@@ -78,7 +79,7 @@ Implementation:
   under its MBID when it has one, else its AcoustID id — the two namespaces are never mixed.
   The export keeps `claims.csv.gz`'s columns (MusicBrainz claims only) and adds
   `acoustid_claims.csv.gz` with a manifest entry, so schema_version 1 readers are untouched.
-  Client 0.4.0 (unreleased): `contribute(acoustid_track_id=)`, `claim(...)` taking either,
+  Client 0.4.0: `contribute(acoustid_track_id=)`, `claim(...)` taking either,
   `lookup(acoustid_track_id=)`, `recording(id, type=)`, and `("acoustid", id)` tuples in
   `lookup_many`. Five more database tests, the first of which is the point: a client holding
   only the AcoustID id, under a new key, confirms a row that has both.
