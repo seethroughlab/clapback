@@ -200,6 +200,14 @@ thread's cross-checkpoint measurement (`packages/embed/scripts/measure_crosspipe
 at R@10 0.99 / top-10 overlap 0.56 — a published per-identity-pair bridge is a live question for a
 new record.
 
+**`ADR-0021` was proposed 2026-09-19, not accepted.** The corpus fits a linear bridge between every
+pair of identities sharing ≥ 200 recordings (Procrustes below 1,000 pairs, ridge above), publishes
+each as a 1 MB matrix in the weekly export with its held-out metrics and never a verdict, lists them
+at `GET /v1/bridges`, and — second, after one export cycle — lets `/v1/similar` take `across=true`
+with every translated neighbour labelled. Translated vectors are never stored. It answers
+`ADR-0002`'s reference question by not needing one. Nothing can be built until a second identity
+shares recordings with the first: zero cross-identity pairs exist.
+
 `ADR-0008` closes `ADR-0001` deferred item 2 — the part the cross-machine measurement did not answer,
 being where the agreement threshold sits and what the corpus does with it.
 
