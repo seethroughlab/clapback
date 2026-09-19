@@ -32,7 +32,13 @@ only wants to contribute must not have to install ONNX Runtime to do so.
 """
 
 from .corpus import DEFAULT_BASE_URL, Corpus, CorpusError
-from .fingerprint import FingerprintUnavailable, canonical, fingerprint_file, hash_fingerprint
+from .fingerprint import (
+    FingerprintUnavailable,
+    canonical,
+    fingerprint_file,
+    hash_fingerprint,
+    recording_key,
+)
 from .identity import ensure_client_id, mint_client_id
 
 __all__ = [
@@ -45,4 +51,5 @@ __all__ = [
     "fingerprint_file",
     "hash_fingerprint",
     "mint_client_id",
+    "recording_key",
 ]

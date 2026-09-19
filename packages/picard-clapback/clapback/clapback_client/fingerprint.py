@@ -77,6 +77,21 @@ def hash_fingerprint(fingerprint: str | bytes) -> str:
     return hashlib.sha256(canonical(fingerprint)).hexdigest()
 
 
+def recording_key(recording_mbid: str) -> str:
+    """The key of a row contributed with a recording id and no fingerprint —
+    `ADR-0020` point 1: `SHA256("musicbrainz_recording:" + mbid)`, hex.
+
+    The server derives this itself from `Corpus.contribute_recording`; a client
+    never sends it. It is here so a tool can address such a row afterwards —
+    `Corpus.claims(recording_key(mbid))`, a takedown request naming it — and so
+    the derivation is written down where a tool author will find it. The id is
+    lower-cased and stripped first, as the server does, so one recording is one
+    key however the id was typed.
+    """
+    mbid = recording_mbid.strip().lower()
+    return hashlib.sha256(f"musicbrainz_recording:{mbid}".encode()).hexdigest()
+
+
 def fingerprint_file(path: str) -> str:
     """The AcoustID fingerprint of one file, exactly as chromaprint gives it.
 

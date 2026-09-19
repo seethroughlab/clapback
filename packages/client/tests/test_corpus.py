@@ -668,3 +668,89 @@ class TestLookupWithoutAPipeline:
         c._request = fake  # type: ignore[method-assign]
         assert c.lookup(HASH, PIPELINE) is None
         assert "%2B" in seen["path"] and "+" not in seen["path"]
+
+
+class TestARowWithoutAFingerprint:
+    """`ADR-0020`: a vector for a track that was never fingerprinted goes under
+    its MusicBrainz recording id, by a separate method — the shape is the rule."""
+
+    def test_contribute_recording_sends_the_id_and_no_hash(self, wire):
+        wire.answer(201, {"status": "created", "key_type": "musicbrainz_recording"})
+        out = Corpus("https://x.invalid").contribute_recording(
+            recording_mbid=MBID, embedding=VECTOR, pipeline_version=PIPELINE, client_id="c-1"
+        )
+        assert out == "contributed"
+        body = json.loads(wire.requests[-1].data)
+        assert "fingerprint_hash" not in body
+        assert body["recording_mbid"] == MBID
+        assert body["client_id"] == "c-1"
+        assert body["clap_model_version"] == PIPELINE.split("+")[0]
+        assert urlsplit(wire.requests[-1].full_url).path == "/v1/embeddings"
+
+    def test_contribute_still_requires_a_hash(self):
+        """Point 5: a tool that has a fingerprint keys on it, always — and the
+        only way to not send one is to call the other method by name."""
+        import inspect
+
+        params = inspect.signature(Corpus.contribute).parameters
+        assert params["fingerprint_hash"].default is inspect.Parameter.empty
+        assert params["fingerprint_hash"].kind is inspect.Parameter.KEYWORD_ONLY
+
+    def test_the_derived_key_is_the_one_the_record_states(self):
+        import hashlib
+
+        from clapback_client import recording_key
+
+        assert (
+            recording_key(MBID)
+            == hashlib.sha256(f"musicbrainz_recording:{MBID}".encode()).hexdigest()
+        )
+        assert recording_key(MBID.upper()) == recording_key(MBID)
+
+    def test_a_batch_row_may_be_keyed_on_its_recording(self, wire):
+        wire.answer(
+            200,
+            {
+                "results": [
+                    {
+                        "fingerprint_hash": HASH,
+                        "key_type": "fingerprint",
+                        "status": "created",
+                        "code": 201,
+                    },
+                    {
+                        "fingerprint_hash": "f" * 64,
+                        "key_type": "musicbrainz_recording",
+                        "status": "created",
+                        "code": 201,
+                    },
+                ]
+            },
+        )
+        rows = [
+            {
+                "fingerprint_hash": HASH,
+                "embedding": VECTOR,
+                "pipeline_version": PIPELINE,
+                "client_id": "c-1",
+            },
+            {
+                "recording_mbid": MBID,
+                "embedding": VECTOR,
+                "pipeline_version": PIPELINE,
+                "client_id": "c-1",
+            },
+        ]
+        got = list(Corpus("https://x.invalid").contribute_many(rows))
+        sent = json.loads(wire.requests[-1].data)["contributions"]
+        assert "fingerprint_hash" not in sent[1] and sent[1]["recording_mbid"] == MBID
+        assert [g["key_type"] for g in got] == ["fingerprint", "musicbrainz_recording"]
+
+    def test_a_batch_row_with_neither_is_refused_before_sending(self, wire):
+        with pytest.raises(ValueError):
+            list(
+                Corpus("https://x.invalid").contribute_many(
+                    [{"embedding": VECTOR, "pipeline_version": PIPELINE, "client_id": "c-1"}]
+                )
+            )
+        assert wire.requests == []

@@ -12,7 +12,27 @@ Implementation:
   (`packages/embed/scripts/measure_crosspipe.py`, results beside it): the two checkpoints are
   orthogonal spaces, and a linear map fitted on ~400 paired tracks searches across them at R@10
   0.99 with a top-10 overlap of 0.56 — more than a windowing change within one checkpoint keeps.
-  A published bridge between identities is therefore a live question, and a separate record.
+  A published bridge between identities is therefore a live question, and a separate record
+  — `ADR-0021`, proposed the same day.
+- **Built 2026-09-19, points 1–7 and 9, the same day.** Not yet deployed. Migration `016` adds
+  `key_type` (`NOT NULL DEFAULT 'fingerprint'`, additive, touches no row). `recording_key()` in
+  `packages/server/app/api/routes.py` is the digest of point 1; `EmbeddingRequest.fingerprint_hash`
+  is optional and a request with neither key is a 422 naming this record; `_contribute_one` writes
+  against `req.key` and the row's `key_type`, and the self-claim of point 3 turned out to need no
+  code at all — `_record_claims` already wrote a claim for every id a request named, so a
+  recording-keyed row claims itself by the same line a fingerprint-keyed one does, and
+  `_record_cross_key_agreements` and `/v1/similar`'s collapse followed without change. `key_type`
+  is on `EmbeddingResponse`, `Neighbour`, `RecordingEmbedding`, the batch lookup row, both
+  contribute responses, and `/v1/pipelines` gained `recording_keyed`. The export carries it as a
+  new column between `named` and `pipeline_version`, `schema_version` 2; the runbook's import SQL
+  and `/export` and `/api` say so. `tests/test_recording_keyed_rows.py`: six pure tests on the
+  shape and six against Postgres — point 10's two-client test, the second recording-keyed client
+  confirming at the key, the batch taking either shape, the pipelines count, and the self-claim
+  in the table. 213 server tests pass. Client 0.5.0 (unreleased): `Corpus.contribute_recording()`
+  — a separate method, point 5 — `recording_key()`, `contribute_many` rows of either shape refused
+  locally when they have neither, and the README's "A track you never fingerprinted"; the Picard
+  plug-in's vendored copy is synced. Owed: deploying `016`, releasing the client, and the first
+  count of recording-keyed rows.
 
 Extends [ADR-0012](ADR-0012-a-contribution-can-name-its-recording.md) and
 [ADR-0019](ADR-0019-agreement-is-counted-per-recording-not-per-key.md); qualifies the title of

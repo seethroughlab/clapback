@@ -75,6 +75,9 @@
         One gzipped CSV per pipeline identity, so you take only the vectors you can compare with.
         Columns: <code>fingerprint_hash</code> (the SHA256 of an AcoustID fingerprint — the key),
         <code>named</code> (whether any client has claimed a recording id for it),
+        <code>key_type</code> (<code>fingerprint</code>, or <code>musicbrainz_recording</code>
+        for a row contributed with a recording id and no fingerprint and keyed on the digest of
+        that id — a claim all the way down, ADR-0020),
         <code>pipeline_version</code>, <code>contributor_count</code> (how many independent
         installations confirmed the vector), <code>created</code> (the day it arrived), and
         <code>embedding</code> (512 floats, as pgvector prints them). The claims file maps hashes

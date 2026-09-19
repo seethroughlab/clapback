@@ -455,15 +455,19 @@ box and the file carries `contributor_count`, so the row means what it meant:
 ```bash
 docker compose up -d postgres && uv run alembic upgrade head
 gunzip -c embeddings-*.csv.gz | docker compose exec -T postgres psql -U cache cache -c "
-  CREATE TEMP TABLE e (fingerprint_hash text, named bool, pipeline_version text,
+  CREATE TEMP TABLE e (fingerprint_hash text, named bool, key_type text, pipeline_version text,
                        contributor_count int, created date, embedding text);
   COPY e FROM STDIN WITH (FORMAT csv, HEADER);
-  INSERT INTO embeddings (fingerprint_hash, pipeline_version, embedding, analysis_version,
+  INSERT INTO embeddings (fingerprint_hash, key_type, pipeline_version, embedding, analysis_version,
                           clap_model_version, contributor_count, created_at, last_accessed_at)
-  SELECT fingerprint_hash, pipeline_version, embedding::vector, 1,
+  SELECT fingerprint_hash, key_type, pipeline_version, embedding::vector, 1,
          split_part(pipeline_version, '+', 1), contributor_count, created, created
   FROM e ON CONFLICT DO NOTHING;"
 ```
+
+(`key_type` arrived with `schema_version` 2 on 2026-09-19, `ADR-0020`; an export from before
+it has six columns, no `key_type`, and every row is `fingerprint` — drop the column from the
+temp table and insert the literal.)
 
 `ADR-0013` point 7's `scripts/import_export.py` will wrap that for a whole
 manifest, claims included; until it exists the SQL above is the import path, and

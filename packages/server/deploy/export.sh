@@ -8,10 +8,12 @@
 #
 # What it produces, in one dated prefix:
 #   embeddings-<pipeline slug>.csv.gz   one per pipeline_version; columns
-#                                       fingerprint_hash, named, pipeline_version,
+#                                       fingerprint_hash, named, key_type, pipeline_version,
 #                                       contributor_count, created, embedding
 #                                       — hash first, vector last, which is the
-#                                       shape scripts/build_map.py already reads
+#                                       shape scripts/build_map.py already reads.
+#                                       key_type (ADR-0020, schema_version 2) is
+#                                       `fingerprint` or `musicbrainz_recording`
 #   claims.csv.gz                       fingerprint_hash, recording_mbid, claim_count
 #   manifest.json                       date, licence, per-file row counts
 #
@@ -73,6 +75,7 @@ while IFS= read -r PIPELINE; do
 	    SELECT e.fingerprint_hash,
 	           EXISTS (SELECT 1 FROM recording_claims c
 	                    WHERE c.fingerprint_hash = e.fingerprint_hash) AS named,
+	           e.key_type,
 	           e.pipeline_version,
 	           e.contributor_count,
 	           e.created_at::date AS created,
@@ -110,7 +113,7 @@ ACOUSTID_ROWS=$(( $(gunzip -c "$OUT/acoustid_claims.csv.gz" | wc -l) - 1 ))
 
 cat > "$OUT/manifest.json" <<EOF
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "generated": "$NOW",
   "licence": "CC0-1.0",
   "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",

@@ -202,6 +202,19 @@ query  = embed_text("dreamy ambient with piano")   # the same space</code></pre>
         (<a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0008-the-corpus-serves-agreement-not-a-verdict.md">ADR-0008</a>,
         <a href="https://github.com/seethroughlab/clapback/blob/main/docs/decisions/ADR-0019-agreement-is-counted-per-recording-not-per-key.md">ADR-0019</a>).
     </p>
+    <p class="muted">
+        <strong>Every row says what kind of key it has.</strong> <code>key_type</code> is
+        <code>fingerprint</code> — the SHA256 of an AcoustID fingerprint, a function of the audio
+        — on every row contributed before 2026-09-19 and most after. It is
+        <code>musicbrainz_recording</code> on a row contributed with a recording id and no
+        fingerprint: <code>POST /v1/embeddings</code> with <code>recording_mbid</code> and no
+        <code>fingerprint_hash</code> keys the row on <code>SHA256("musicbrainz_recording:" +
+        mbid)</code>, which the server derives and so can verify. Such a row claims its own
+        recording and joins the counts above like any other, but it can never be confirmed by an
+        audio-derived key — it is a claim all the way down, and the field exists so a reader who
+        wants only audio-keyed evidence can filter it out (ADR-0020). A tool that holds a
+        fingerprint sends it, always.
+    </p>
 </div>
 
 <div class="card">

@@ -336,6 +336,53 @@ class Corpus:
             # joins keys across decoders and `fpcalc` versions where the MBID
             # is missing, and is a claim like the MBID — send only your own.
             body["acoustid_track_id"] = acoustid_track_id
+        return self._post_contribution(body)
+
+    def contribute_recording(
+        self,
+        *,
+        recording_mbid: str,
+        embedding: list[float],
+        pipeline_version: str,
+        client_id: str,
+        clap_model_version: str | None = None,
+        analysis_version: int = 1,
+    ) -> str:
+        """POST one embedding for a track that was **never fingerprinted**,
+        keyed on its MusicBrainz recording id — `ADR-0020`.
+
+        This is a separate method on purpose (point 5): a tool that holds a
+        fingerprint calls `contribute`, always. The corpus cannot tell the two
+        apart and does not try; the shape of this API is the enforcement. Use
+        this for the vector you already computed for a track you identified
+        through MusicBrainz and never ran through chromaprint — a backlog, or a
+        pipeline with no fingerprinting step at all.
+
+        What the corpus does with it: the row's key is
+        `SHA256("musicbrainz_recording:" + mbid)` (`recording_key`), derived by
+        the server, so a second install that never fingerprinted the same
+        recording lands on the same row and confirms it. The row claims its own
+        recording, so it agrees with — and is collapsed into similarity results
+        with — every fingerprint-keyed row other clients have claimed under the
+        same id (`ADR-0019`). It carries `key_type` `musicbrainz_recording` on
+        every read, because it can never be confirmed by an audio-derived key:
+        it is a claim all the way down, and a reader may want to know.
+
+        What leaves the machine is the same as `contribute` with a
+        `recording_mbid`, minus the hash: the vector, the identity string, the
+        recording id and this client's id. CC0, as everything is.
+        """
+        body = {
+            "recording_mbid": recording_mbid,
+            "embedding": embedding,
+            "pipeline_version": pipeline_version,
+            "clap_model_version": clap_model_version or pipeline_version.split("+")[0],
+            "analysis_version": analysis_version,
+            "client_id": client_id,
+        }
+        return self._post_contribution(body)
+
+    def _post_contribution(self, body: dict) -> str:
         for attempt, delay in enumerate((*_RETRY_DELAYS, None)):
             status, payload = self._request("POST", "/v1/embeddings", body)
             if status in (200, 201):
@@ -361,8 +408,13 @@ class Corpus:
         `ADR-0016`. Each row is the keyword arguments `contribute` takes —
         `fingerprint_hash`, `embedding`, `pipeline_version`, `client_id`, and
         optionally `recording_mbid`, `clap_model_version`, `analysis_version` —
-        and `client_id` is required on every one: a contribution nobody can
-        confirm is admissible one at a time and not by the hundred (point 5).
+        or the arguments `contribute_recording` takes, for a row that was never
+        fingerprinted (`ADR-0020`: `recording_mbid` and no `fingerprint_hash`;
+        the result's `fingerprint_hash` is then the key the server derived and
+        its `key_type` is `musicbrainz_recording`). A row with neither is
+        refused here, before anything is sent. `client_id` is required on every
+        one: a contribution nobody can confirm is admissible one at a time and
+        not by the hundred (point 5).
         Sent in batches of 100 to `POST /v1/embeddings/batch`, which runs every
         per-row guarantee per row in the same code the single endpoint uses.
 
@@ -396,10 +448,18 @@ class Corpus:
                 raise ValueError(
                     "client_id is required on every row of contribute_many (ADR-0016 point 5)"
                 )
+            if not row.get("fingerprint_hash") and not row.get("recording_mbid"):
+                raise ValueError(
+                    "a row needs a fingerprint_hash, or a recording_mbid to be keyed on (ADR-0020)"
+                )
             pipeline = row["pipeline_version"]
             contributions.append(
                 {
-                    "fingerprint_hash": row["fingerprint_hash"],
+                    **(
+                        {"fingerprint_hash": row["fingerprint_hash"]}
+                        if row.get("fingerprint_hash")
+                        else {}
+                    ),
                     "embedding": row["embedding"],
                     "pipeline_version": pipeline,
                     "clap_model_version": row.get("clap_model_version") or pipeline.split("+")[0],

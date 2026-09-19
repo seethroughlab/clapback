@@ -93,6 +93,18 @@ class Embedding(Base):
     #: anything, including itself later.
     pipeline_version: Mapped[str] = mapped_column(String(200), primary_key=True)
 
+    #: What kind of key `fingerprint_hash` is — `ADR-0020` point 2. `fingerprint`
+    #: for the SHA256 of an AcoustID fingerprint, which is every row before
+    #: 2026-09-19 and most after; `musicbrainz_recording` for a row contributed
+    #: with a recording id and no fingerprint, whose key is the digest of that id
+    #: (`recording_key()` in `app.api.routes`). Not part of the key: the two
+    #: digest spaces are disjoint, so the column's only job is to let a reader
+    #: tell audio-keyed evidence from a claim all the way down. Served everywhere
+    #: a row is.
+    key_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="fingerprint", default="fingerprint"
+    )
+
     # Metadata
     contributor_count: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

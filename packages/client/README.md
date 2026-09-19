@@ -129,6 +129,35 @@ library re-sent by the hundred manufactures a hundred agreements of one install 
 One `client_id` may write 50,000 rows — created or confirmed — in a rolling 24 hours, ten percent
 of the corpus ceiling; past that each row is refused with a `retry_after`.
 
+## A track you never fingerprinted
+
+A tool that identifies tracks through MusicBrainz and never runs chromaprint — or one with a
+backlog of vectors computed before it had a fingerprinting step — has a vector and a recording
+id and no key. Since 2026-09-19 that is enough
+([`ADR-0020`](../../docs/decisions/ADR-0020-a-contribution-without-a-fingerprint-is-keyed-on-its-recording.md)):
+
+```python
+corpus.contribute_recording(recording_mbid=mbid, embedding=vector,
+                            pipeline_version=PIPELINE, client_id=client_id)
+```
+
+The corpus keys the row on `SHA256("musicbrainz_recording:" + mbid)` (`recording_key(mbid)`,
+if you need to address it later), a second install that never fingerprinted the same recording
+lands on the same row and confirms it, and the row claims its own recording — so it agrees with,
+and is folded into similarity results with, every fingerprint-keyed row anyone has claimed under
+the same id. Every read serves `key_type`: `fingerprint` for a row keyed on the audio,
+`musicbrainz_recording` for one keyed this way. The difference matters to a reader: a
+recording-keyed row can never be confirmed by an audio-derived key. It is a claim all the way
+down, and a mistagged file becomes a vector *at* the recording rather than a contradicting claim
+beside one. The corpus counts it as one voice among the rows naming that recording and says what
+kind of key it has; it does not pretend otherwise, and neither should you.
+
+**This is a separate method on purpose.** A tool that has a fingerprint calls `contribute` with
+it, always — the fingerprint is the key that is a function of the audio, and the corpus cannot
+tell whether you had one. `contribute_many` takes rows of either shape; the result for a
+recording-keyed row carries the derived key as its `fingerprint_hash` and `key_type`
+`musicbrainz_recording`.
+
 ## Which recording is this?
 
 Every `lookup` result carries `recording_mbid` — the MusicBrainz recording id the most independent
@@ -271,4 +300,5 @@ fingerprints — beets' `chroma` plugin stores them, Picard computes them native
 Nothing in this package sends anything until you call `contribute` or `claim`. A tool that embeds
 this should keep contribution a separate, explicit setting from lookup, and should tell the user
 what leaves the machine — a 512-float vector, a one-way hash, and a MusicBrainz recording id if
-you pass one; never audio, filenames, or other tags — before the first time it does.
+you pass one (for `contribute_recording`, the id in place of the hash); never audio, filenames,
+or other tags — before the first time it does.

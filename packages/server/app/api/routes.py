@@ -95,6 +95,24 @@ def _canonical_mbid(value: str) -> str:
 CLAIM_MUSICBRAINZ = "musicbrainz_recording"
 CLAIM_ACOUSTID = "acoustid_track"
 
+#: `ADR-0020` point 2: what kind of key a row's `fingerprint_hash` is.
+KEY_FINGERPRINT = "fingerprint"
+KEY_RECORDING = CLAIM_MUSICBRAINZ
+
+
+def recording_key(mbid: str) -> str:
+    """The key of a row contributed with a recording id and no fingerprint —
+    `ADR-0020` point 1: `SHA256("musicbrainz_recording:" + mbid)`, hex.
+
+    A 64-hex digest like every fingerprint hash, cryptographically disjoint
+    from all of them, so the primary key and every index are unchanged. The
+    server derives it — a client never sends it — which makes it the first key
+    the server can verify: `ADR-0010` point 7 says a fingerprint hash is
+    believed; this one is computed."""
+    import hashlib
+
+    return hashlib.sha256(f"{CLAIM_MUSICBRAINZ}:{_canonical_mbid(mbid)}".encode()).hexdigest()
+
 
 def _canonical_acoustid(value: str) -> str:
     v = value.strip().lower()
@@ -198,7 +216,7 @@ async def _record_cross_key_agreements(db, req: "EmbeddingRequest") -> int:
                 select(Embedding).where(
                     Embedding.fingerprint_hash.in_(claimed),
                     Embedding.pipeline_version == req.pipeline_version,
-                    Embedding.fingerprint_hash != req.fingerprint_hash,
+                    Embedding.fingerprint_hash != req.key,
                 )
             )
         )
@@ -212,7 +230,7 @@ async def _record_cross_key_agreements(db, req: "EmbeddingRequest") -> int:
             continue
         db.add(
             SubmissionAgreement(
-                fingerprint_hash=req.fingerprint_hash,
+                fingerprint_hash=req.key,
                 other_hash=row.fingerprint_hash,
                 analysis_version=req.analysis_version,
                 clap_model_version=req.clap_model_version,
@@ -330,6 +348,8 @@ class Neighbour(BaseModel):
     """One result. A hash, not a recording — see `similar`'s docstring."""
 
     fingerprint_hash: str
+    #: `ADR-0020` point 2, as on `EmbeddingResponse`.
+    key_type: str = KEY_FINGERPRINT
     similarity: float
     analysis_version: int
     clap_model_version: str
@@ -373,7 +393,13 @@ class SimilarResponse(BaseModel):
 class EmbeddingRequest(BaseModel):
     """Request to contribute an embedding."""
 
-    fingerprint_hash: str = Field(..., min_length=64, max_length=64)
+    #: The key, when the client fingerprinted the audio — `ADR-0010`. Optional
+    #: since `ADR-0020` point 7: a request without it must carry a
+    #: `recording_mbid`, and is keyed on that (`recording_key`). A request with
+    #: both is a fingerprint-keyed contribution with a claim, exactly as before.
+    #: **A client that has a fingerprint sends it, always** (point 5); the
+    #: server cannot tell, so the client library enforces it by shape.
+    fingerprint_hash: str | None = Field(default=None, min_length=64, max_length=64)
     embedding: list[float] = Field(..., min_length=512, max_length=512)
     analysis_version: int = Field(..., ge=1)
     clap_model_version: str = Field(..., min_length=1, max_length=100)
@@ -418,11 +444,37 @@ class EmbeddingRequest(BaseModel):
     def _acoustid_shape(cls, v: str | None) -> str | None:
         return None if v is None else _canonical_acoustid(v)
 
+    @model_validator(mode="after")
+    def _has_a_key(self):
+        # `ADR-0020` point 7: neither is a 422 that says so, not a bare schema error.
+        if self.fingerprint_hash is None and self.recording_mbid is None:
+            raise ValueError(
+                "a contribution needs a fingerprint_hash, or a recording_mbid to be keyed on "
+                "(ADR-0020)"
+            )
+        return self
+
+    @property
+    def key(self) -> str:
+        """The row key this request lands on: its fingerprint hash, or the
+        digest of its recording id when it has no fingerprint."""
+        return self.fingerprint_hash or recording_key(self.recording_mbid)  # type: ignore[arg-type]
+
+    @property
+    def key_type(self) -> str:
+        return KEY_FINGERPRINT if self.fingerprint_hash else KEY_RECORDING
+
 
 class EmbeddingResponse(BaseModel):
     """Response containing an embedding."""
 
     fingerprint_hash: str
+    #: `ADR-0020` point 2: `fingerprint` when the key is the SHA256 of an
+    #: AcoustID fingerprint; `musicbrainz_recording` when the row was contributed
+    #: with a recording id and no fingerprint and is keyed on the digest of that
+    #: id — a claim all the way down, never confirmable by an audio-derived key.
+    #: A reader who wants only audio-keyed evidence filters on this.
+    key_type: str = KEY_FINGERPRINT
     embedding: list[float]
     analysis_version: int
     clap_model_version: str
@@ -453,6 +505,11 @@ class ContributeResponse(BaseModel):
 
     status: str
     contributor_count: int | None = None
+    #: The key the row is under, and what kind — `ADR-0020`. For a fingerprint
+    #: contribution, what was sent; for a recording-keyed one, the digest the
+    #: server derived, which the client did not have until now.
+    fingerprint_hash: str | None = None
+    key_type: str | None = None
 
 
 # --- Features models ---
@@ -552,6 +609,7 @@ async def lookup_embedding(
         agreement = (await _recording_agreements_for(db, [key])).get(key, (0, 0))
     return EmbeddingResponse(
         fingerprint_hash=emb.fingerprint_hash,
+        key_type=emb.key_type,
         embedding=list(emb.embedding),
         analysis_version=emb.analysis_version,
         clap_model_version=emb.clap_model_version,
@@ -654,9 +712,14 @@ async def _contribute_one(db, req: EmbeddingRequest) -> ContributeResponse:
     if req.client_id:
         await _check_client_quota(db, req.client_id)
 
+    # `ADR-0020` point 1: the key is the fingerprint hash the client sent, or —
+    # when it sent none — the digest of the recording id it named. Everything
+    # below is written against `key`; nothing below cares which it was, except
+    # the row's `key_type`, which says so forever.
+    key = req.key
     result = await db.execute(
         select(Embedding).where(
-            Embedding.fingerprint_hash == req.fingerprint_hash,
+            Embedding.fingerprint_hash == key,
             Embedding.pipeline_version == req.pipeline_version,
         )
     )
@@ -685,8 +748,8 @@ async def _contribute_one(db, req: EmbeddingRequest) -> ContributeResponse:
         if similarity is not None and comparable:
             db.add(
                 SubmissionAgreement(
-                    fingerprint_hash=req.fingerprint_hash,
-                    other_hash=req.fingerprint_hash,
+                    fingerprint_hash=key,
+                    other_hash=key,
                     analysis_version=req.analysis_version,
                     clap_model_version=req.clap_model_version,
                     pipeline_version=req.pipeline_version,
@@ -704,11 +767,13 @@ async def _contribute_one(db, req: EmbeddingRequest) -> ContributeResponse:
             # a row for this recording under another fingerprinting path is
             # compared too, and the agreement is counted per recording.
             await _record_cross_key_agreements(db, req)
-            await _record_claims(db, req.fingerprint_hash, req, req.client_id)
+            await _record_claims(db, key, req, req.client_id)
         await db.commit()
         return ContributeResponse(
             status="confirmed",
             contributor_count=existing.contributor_count,
+            fingerprint_hash=key,
+            key_type=existing.key_type,
         )
 
     # **The ceiling is checked here and not above.** A submission that confirms an
@@ -733,7 +798,9 @@ async def _contribute_one(db, req: EmbeddingRequest) -> ContributeResponse:
 
     # Create new embedding
     emb = Embedding(
-        fingerprint_hash=req.fingerprint_hash,
+        fingerprint_hash=key,
+        # `ADR-0020` point 2: says which kind of key this is, forever.
+        key_type=req.key_type,
         embedding=req.embedding,
         analysis_version=req.analysis_version,
         clap_model_version=req.clap_model_version,
@@ -750,11 +817,16 @@ async def _contribute_one(db, req: EmbeddingRequest) -> ContributeResponse:
         # `ADR-0019` point 2, and this is the branch that matters: a second
         # client on another fingerprinting path lands here, under a new key,
         # and without this its vector would agree with nothing.
+        # `ADR-0020` point 3: a recording-keyed row claims its own recording
+        # here, by the same line — that self-claim is how it joins everything
+        # else, and there is no other code for it.
         await _record_cross_key_agreements(db, req)
-        await _record_claims(db, req.fingerprint_hash, req, req.client_id)
+        await _record_claims(db, key, req, req.client_id)
     await db.commit()
 
-    return ContributeResponse(status="created", contributor_count=1)
+    return ContributeResponse(
+        status="created", contributor_count=1, fingerprint_hash=key, key_type=req.key_type
+    )
 
 
 @router.post("/embeddings", status_code=201, response_model=ContributeResponse)
@@ -810,6 +882,9 @@ class ContributeResult(BaseModel):
     was created or confirmed, or the refusal it would have been alone."""
 
     fingerprint_hash: str
+    #: `ADR-0020`: what kind of key the row went under. For a recording-keyed
+    #: row `fingerprint_hash` above is the digest the server derived.
+    key_type: str = KEY_FINGERPRINT
     status: str
     contributor_count: int | None = None
     #: The HTTP status the row would have got alone — 201, 429, 507, 422 — so
@@ -856,7 +931,8 @@ async def contribute_batch(
             outcome = await _contribute_one(db, row)
             results.append(
                 ContributeResult(
-                    fingerprint_hash=row.fingerprint_hash,
+                    fingerprint_hash=row.key,
+                    key_type=outcome.key_type or row.key_type,
                     status=outcome.status,
                     contributor_count=outcome.contributor_count,
                     code=201,
@@ -867,7 +943,8 @@ async def contribute_batch(
             retry = (exc.headers or {}).get("Retry-After")
             results.append(
                 ContributeResult(
-                    fingerprint_hash=row.fingerprint_hash,
+                    fingerprint_hash=row.key,
+                    key_type=row.key_type,
                     status="refused",
                     code=exc.status_code,
                     detail=str(exc.detail),
@@ -878,7 +955,8 @@ async def contribute_batch(
             await db.rollback()
             results.append(
                 ContributeResult(
-                    fingerprint_hash=row.fingerprint_hash,
+                    fingerprint_hash=row.key,
+                    key_type=row.key_type,
                     status="refused",
                     code=500,
                     detail=f"{type(exc).__name__}: {exc}"[:200],
@@ -957,6 +1035,7 @@ async def similar(
     """
     stmt = select(
         Embedding.fingerprint_hash,
+        Embedding.key_type,
         Embedding.analysis_version,
         Embedding.clap_model_version,
         Embedding.pipeline_version,
@@ -1005,6 +1084,7 @@ async def similar(
         neighbours=[
             Neighbour(
                 fingerprint_hash=r.fingerprint_hash,
+                key_type=r.key_type,
                 similarity=float(r.similarity),
                 analysis_version=r.analysis_version,
                 clap_model_version=r.clap_model_version,
@@ -1069,6 +1149,9 @@ class RecordingEmbedding(BaseModel):
     corpus holds from two pipelines is two rows that are not comparable."""
 
     fingerprint_hash: str
+    #: `ADR-0020` point 2. A `musicbrainz_recording` row here *is* the recording
+    #: asked for, keyed on it; a `fingerprint` row was fingerprinted and claimed.
+    key_type: str = KEY_FINGERPRINT
     pipeline_version: str
     embedding: list[float]
     contributor_count: int
@@ -1181,6 +1264,7 @@ async def recording(
         embeddings=[
             RecordingEmbedding(
                 fingerprint_hash=e.fingerprint_hash,
+                key_type=e.key_type,
                 pipeline_version=e.pipeline_version,
                 embedding=list(e.embedding),
                 contributor_count=e.contributor_count,
@@ -1280,6 +1364,7 @@ def _row_for(
 ) -> LookupRow:
     fields: dict = {
         "fingerprint_hash": emb.fingerprint_hash,
+        "key_type": emb.key_type,
         "analysis_version": emb.analysis_version,
         "clap_model_version": emb.clap_model_version,
         "pipeline_version": emb.pipeline_version,
@@ -1475,6 +1560,10 @@ class PipelineEntry(BaseModel):
     rows: int
     #: Rows under this identity that any client has claimed a recording for.
     named: int
+    #: `ADR-0020` point 2: of `rows`, how many are keyed on a recording id
+    #: rather than a fingerprint — claims all the way down, counted in `named`
+    #: too, since each claims itself.
+    recording_keyed: int = 0
     first_contributed_at: datetime
     last_contributed_at: datetime
 
@@ -1493,6 +1582,9 @@ async def _fetch_pipelines(db) -> list[PipelineEntry]:
             Embedding.pipeline_version,
             func.count().label("rows"),
             func.count(claimed.c.h).label("named"),
+            func.count(Embedding.key_type)
+            .filter(Embedding.key_type == KEY_RECORDING)
+            .label("recording_keyed"),
             func.min(Embedding.created_at).label("first"),
             func.max(Embedding.created_at).label("last"),
         )
@@ -1505,10 +1597,11 @@ async def _fetch_pipelines(db) -> list[PipelineEntry]:
             pipeline_version=pv,
             rows=int(rows),
             named=int(named),
+            recording_keyed=int(rkeyed),
             first_contributed_at=first,
             last_contributed_at=last,
         )
-        for pv, rows, named, first, last in (await db.execute(stmt)).all()
+        for pv, rows, named, rkeyed, first, last in (await db.execute(stmt)).all()
     ]
 
 
