@@ -31,9 +31,31 @@ plus scipy:
 
     uv venv leadin && uv pip install --python leadin/bin/python \
         torch torchvision torchaudio transformers laion_clap soundfile soxr huggingface_hub scipy
-    ssh nas 'find /path/to/music -type f \( -name "*.flac" -o -name "*.mp3" \) | sed "s|^/path/to/music/||"' > library.txt
+    ssh nas 'find /path/to/music -type f -name "*.flac" -o -name "*.mp3" | sed "s|^/path/to/music/||"' > library.txt
     leadin/bin/python scripts/measure_crosspipe.py --list library.txt --root /Volumes/silo/music --n 500
     leadin/bin/python scripts/measure_crosspipe.py --summary
+
+Results from the run of 2026-09-19 (493 tracks, one per album, FLAC and MP3 mixed, M4 Max;
+the music checkpoint through laion_clap's PyTorch implementation, not Kalinka's ONNX export)
+are beside this file as `measure_crosspipe.results-2026-09-19.csv`, one row per track with the
+same-track cross-space cosine and top-10 overlap for every pair. The summary:
+
+  raw, corpus vs Kalinka   same-track cosine median -0.009 (a different track: -0.006); in a
+                           mixed index 0 of a query's top 10 are from the other space and its
+                           own other-space vector ranks a median 769th of 985 — below random.
+  neighbour agreement      top-10 overlap 0.34, Spearman rho 0.72 — against 0.53 / 0.94 for a
+                           windowing change within one checkpoint (whole vs frag3).
+  bridge, corpus → Kalinka ridge λ=0.03, 5-fold CV: R@1 0.86, R@10 0.99, same-track cosine
+                           median 0.876 (min 0.34), top-10 overlap 0.56 — more than the
+                           windowing change alone preserves (0.53). Kalinka → corpus: 0.85 /
+                           0.98 / 0.947 / 0.58. Checkpoint only (both whole-track): 0.96 /
+                           1.00 / 0.92 / 0.64. Procrustes is close behind with no parameter.
+  in words                 the two checkpoints are orthogonal coordinate systems over largely
+                           the same structure; a linear map fitted on ~400 paired tracks
+                           carries a search across them about as well as a windowing change
+                           does within one. R@1 rose from 0.76 to 0.86 between 200 and 493
+                           tracks, so more pairs help — which is what `ADR-0019`'s recording
+                           claims would supply if two identities ever overlap in the corpus.
 
 Writes crosspipe.json incrementally (every pooled vector per pipeline and track), so a run
 interrupted at 300 tracks still summarises. Decoding is ffmpeg → 48 kHz mono float32, identical
@@ -55,6 +77,10 @@ SR = 48_000
 WIN = 480_000
 OUT = Path.cwd() / "crosspipe.json"
 K = 10
+#: Windows per forward pass. Per-window outputs are independent, so this changes
+#: nothing but memory — an 80-minute mix is ~480 windows, which one batch on MPS
+#: cannot hold.
+BATCH = 32
 
 
 # ---------- audio ----------
@@ -116,13 +142,16 @@ class Reference:
         self.model = ClapModel.from_pretrained("laion/clap-htsat-unfused").to(self.device).eval()
 
     def __call__(self, windows: list[np.ndarray]) -> np.ndarray:
+        out = []
         with self.torch.no_grad():
-            enc = self.proc(audio=[w for w in windows], sampling_rate=SR, return_tensors="pt")
-            feats = enc["input_features"].to(self.device)
-            longer = enc["is_longer"].to(self.device)
-            o = self.model.get_audio_features(input_features=feats, is_longer=longer)
-            o = o.pooler_output if hasattr(o, "pooler_output") else o
-            return o.float().cpu().numpy()
+            for i in range(0, len(windows), BATCH):
+                enc = self.proc(audio=windows[i:i + BATCH], sampling_rate=SR, return_tensors="pt")
+                feats = enc["input_features"].to(self.device)
+                longer = enc["is_longer"].to(self.device)
+                o = self.model.get_audio_features(input_features=feats, is_longer=longer)
+                o = o.pooler_output if hasattr(o, "pooler_output") else o
+                out.append(o.float().cpu().numpy())
+        return np.concatenate(out)
 
 
 class Music:
@@ -138,9 +167,12 @@ class Music:
         self.model.eval()
 
     def __call__(self, windows: list[np.ndarray]) -> np.ndarray:
+        out = []
         with self.torch.no_grad():
-            x = np.stack(windows).astype(np.float32)
-            return self.model.get_audio_embedding_from_data(x=x, use_tensor=False)
+            for i in range(0, len(windows), BATCH):
+                x = np.stack(windows[i:i + BATCH]).astype(np.float32)
+                out.append(self.model.get_audio_embedding_from_data(x=x, use_tensor=False))
+        return np.concatenate(out)
 
 
 PIPELINES = {
@@ -180,6 +212,7 @@ def run(args) -> None:
     for i, rel in enumerate(files):
         if rel in done:
             continue
+        t1 = time.time()
         try:
             audio = decode(root / rel)
         except subprocess.CalledProcessError as e:
@@ -188,10 +221,14 @@ def run(args) -> None:
         if audio.size < 30 * SR:
             print(f"skip (<30 s): {rel}", flush=True)
             continue
+        t_dec = time.time() - t1
+        t1 = time.time()
         for name, (enc, winfn) in PIPELINES.items():
             vecs = encoders[enc](winfn(audio))
             results.setdefault(name, {})[rel] = pool(vecs).tolist()
         n_done += 1
+        if args.verbose:
+            print(f"  decode {t_dec:5.1f} s  embed {time.time() - t1:5.1f} s  {audio.size / SR / 60:5.1f} min  {rel}", flush=True)
         if n_done % 10 == 0 or i == len(files) - 1:
             OUT.write_text(json.dumps(results))
             el = time.time() - t0
@@ -326,7 +363,7 @@ def summary() -> None:
     pairs = [("A ref/whole", "B music/frag3"), ("B music/frag3", "A ref/whole"),
              ("A ref/whole", "C music/whole"), ("C music/whole", "A ref/whole")]
     fits = {"procrustes": procrustes}
-    for lam in (0.1, 1.0, 10.0):
+    for lam in (0.01, 0.03, 0.1, 1.0):
         fits[f"ridge λ={lam}"] = (lambda l: lambda x, y: ridge(x, y, l))(lam)
     print(f"{'from → to':<34}{'fit':<14}{'R@1':>6}{'R@10':>6}{'same med':>10}{'same min':>10}{'top10 ovl':>11}")
     for src, dst in pairs:
@@ -356,6 +393,7 @@ if __name__ == "__main__":
     ap.add_argument("--n", type=int, default=500)
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--summary", action="store_true")
+    ap.add_argument("--verbose", action="store_true", help="print each track's timing")
     a = ap.parse_args()
     if a.summary:
         summary()
