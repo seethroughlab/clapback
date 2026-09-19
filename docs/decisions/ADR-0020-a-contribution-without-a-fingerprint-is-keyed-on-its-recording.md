@@ -31,8 +31,17 @@ Implementation:
   in the table. 213 server tests pass. Client 0.5.0 (unreleased): `Corpus.contribute_recording()`
   — a separate method, point 5 — `recording_key()`, `contribute_many` rows of either shape refused
   locally when they have neither, and the README's "A track you never fingerprinted"; the Picard
-  plug-in's vendored copy is synced. Owed: deploying `016`, releasing the client, and the first
-  count of recording-keyed rows.
+  plug-in's vendored copy is synced.
+- **Deployed 2026-09-19 ~15:47 UTC** (box at `ff3cca0`, migration `016` at head): the image was
+  built first, the migration run from a one-off container while the old API kept serving —
+  additive, so the old code never saw a column it lacked — then the API swapped. Verified cold:
+  `/v1/pipelines` serves `recording_keyed: 0` over 25,930 rows, a contribution with neither key
+  is refused with the 422 naming this record, and `/api` carries the paragraph. The same deploy
+  carried the site wording from `95fd2e0` that had waited since 2026-09-16.
+  **`clapback-client` 0.5.0 on PyPI** the same hour (`client-v0.5.0`, run 35452935876, first try),
+  verified in a fresh venv: `contribute_recording`, `recording_key`, one live `pipelines()` call.
+  Both dependents bound `<0.5` and keep resolving 0.4.0 until they adopt the method. Owed: the
+  first count of recording-keyed rows, which is Kalinka's backlog or nothing.
 
 Extends [ADR-0012](ADR-0012-a-contribution-can-name-its-recording.md) and
 [ADR-0019](ADR-0019-agreement-is-counted-per-recording-not-per-key.md); qualifies the title of

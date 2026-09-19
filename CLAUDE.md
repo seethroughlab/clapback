@@ -187,8 +187,8 @@ claims key, the join runs on either id, and `clapback-client` 0.4.0 carries it. 
 `ADR-0019` but 5 is deployed**; point 5 waits on `ADR-0007`. The three plug-in releases that carry
 the ids and the batch calls went out the same day.
 
-**`ADR-0020` was proposed, accepted and built 2026-09-19 (points 1–7 and 9); migration `016` is
-not yet deployed and `clapback-client` 0.5.0 is not yet released.** The prospective second
+**`ADR-0020` was proposed, accepted, built and deployed 2026-09-19 (points 1–7 and 9; box at
+`ff3cca0`, migration `016`; `clapback-client` 0.5.0 on PyPI). Owed: the first recording-keyed row.** The prospective second
 contributor (KalinkaPlayer#128, third comment) holds vectors and MusicBrainz recording ids for tracks
 it never fingerprinted and asked to contribute them as they are. A contribution with an MBID and no
 fingerprint is keyed on the recording — `SHA256("musicbrainz_recording:" + mbid)` in the existing key
@@ -219,14 +219,14 @@ being where the agreement threshold sits and what the corpus does with it.
 | 4 | The recording-id key | `ADR-0002` point 4 makes it a prerequisite: similarity search over a hash-keyed corpus returns hashes nobody can resolve |
 | 6 | The rename, and what the domain serves | Cheap, and last on purpose — nothing above depends on it |
 
-### What is actually running, as of 2026-09-16
+### What is actually running, as of 2026-09-19
 
 The commons is public at **https://clapback.seethroughlab.com** — one AWS instance, TLS via Caddy,
-nightly `pg_dump` to `s3://clapback-backup`, and a corpus of **25,886 rows, every one of which
+nightly `pg_dump` to `s3://clapback-backup`, and a corpus of **25,930 rows (2026-09-19), every one of which
 declares the pipeline that produced it and is keyed on a hash any client can reproduce from the
 audio — and 23,196 of which (89.6%) name their MusicBrainz recording**, up from 6.8% on
 2026-09-14, after Familiar's `ADR-0115` backfill. Four packages are on PyPI (`clapback-embed` 0.1.0,
-`clapback-client` 0.4.0, `clapback-cli` 0.2.0, `beets-clapback` 0.3.0) and the Picard plugin ships as a zip on a
+`clapback-client` 0.5.0, `clapback-cli` 0.2.0, `beets-clapback` 0.3.0) and the Picard plugin ships as a zip on a
 `picard-v*` release (`picard-v0.2.0`). The bare name `clapback` on PyPI belongs to an unrelated 2018 package; the
 CLI is `clapback-cli`.
 
@@ -261,8 +261,8 @@ green timer is evidence the check ran, not evidence anyone would hear it.**
   2026-09-16; the worst similarity and point 7 are not.
 - **`ADR-0013` point 7** — the import script.
 
-**The commons box is at `6f3dbe5` and migration `015` as of 2026-09-16 ~02:55 UTC; the site
-wording in `95fd2e0` is not yet deployed.** All three plug-ins were released 2026-09-16 on
+**The commons box is at `ff3cca0` and migration `016` as of 2026-09-19 ~15:47 UTC, site wording
+included.** All three plug-ins were released 2026-09-16 on
 `clapback-client` 0.4.0: they look up by recording id, then AcoustID id, then hash; send and
 claim both ids; and use the batch calls (Picard contributes as it scans, on the single call).
 
