@@ -1,8 +1,18 @@
 # ADR-0020: A Contribution Without a Fingerprint Is Keyed on Its Recording
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-19
+
+Implementation:
+- **Accepted 2026-09-19**, the day it was proposed, before the reply that points KalinkaPlayer#128
+  at it went out — so the maintainer reads a decision, not a deferral. Nothing is built. The order
+  is point 10's: migration `016` and the request schema first, with the two-client database test.
+- The cross-checkpoint measurement this record's last Follow-up refers to finished the same day
+  (`packages/embed/scripts/measure_crosspipe.py`, results beside it): the two checkpoints are
+  orthogonal spaces, and a linear map fitted on ~400 paired tracks searches across them at R@10
+  0.99 with a top-10 overlap of 0.56 — more than a windowing change within one checkpoint keeps.
+  A published bridge between identities is therefore a live question, and a separate record.
 
 Extends [ADR-0012](ADR-0012-a-contribution-can-name-its-recording.md) and
 [ADR-0019](ADR-0019-agreement-is-counted-per-recording-not-per-key.md); qualifies the title of

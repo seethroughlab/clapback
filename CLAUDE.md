@@ -187,15 +187,18 @@ claims key, the join runs on either id, and `clapback-client` 0.4.0 carries it. 
 `ADR-0019` but 5 is deployed**; point 5 waits on `ADR-0007`. The three plug-in releases that carry
 the ids and the batch calls went out the same day.
 
-**`ADR-0020` was proposed 2026-09-19, not yet accepted.** The prospective second contributor
-(KalinkaPlayer#128, third comment) holds vectors and MusicBrainz recording ids for tracks it never
-fingerprinted and asked to contribute them as they are. The record says a contribution with an MBID
-and no fingerprint is keyed on the recording — `SHA256("musicbrainz_recording:" + mbid)` in the
-existing key column, a `key_type` column saying so on every read and in the export, a self-claim so
-`ADR-0019`'s join and collapse apply with no new read code — and that a client holding a fingerprint
-keys on it, always. It qualifies `ADR-0010`'s title without superseding any point of it. Nothing is
-built; the same thread's cross-checkpoint measurement (`packages/embed/scripts/measure_crosspipe.py`)
-was running when it was written.
+**`ADR-0020` was proposed and accepted 2026-09-19; nothing is built.** The prospective second
+contributor (KalinkaPlayer#128, third comment) holds vectors and MusicBrainz recording ids for tracks
+it never fingerprinted and asked to contribute them as they are. A contribution with an MBID and no
+fingerprint is keyed on the recording — `SHA256("musicbrainz_recording:" + mbid)` in the existing key
+column, a `key_type` column saying so on every read and in the export, a self-claim so `ADR-0019`'s
+join and collapse apply with no new read code — and a client holding a fingerprint keys on it,
+always. It qualifies `ADR-0010`'s title without superseding any point of it. First to build:
+migration `016`, the optional `fingerprint_hash`, and the two-client database test. The same
+thread's cross-checkpoint measurement (`packages/embed/scripts/measure_crosspipe.py`, results dated
+2026-09-19 beside it) found the two checkpoints orthogonal and a fitted linear bridge crossing them
+at R@10 0.99 / top-10 overlap 0.56 — a published per-identity-pair bridge is a live question for a
+new record.
 
 `ADR-0008` closes `ADR-0001` deferred item 2 — the part the cross-machine measurement did not answer,
 being where the agreement threshold sits and what the corpus does with it.

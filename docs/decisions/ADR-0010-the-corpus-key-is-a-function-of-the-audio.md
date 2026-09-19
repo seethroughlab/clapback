@@ -80,6 +80,13 @@ Implementation:
   the client's documentation says which path it uses and that another path may not confirm it.
   The 2026-09-15 reply in KalinkaPlayer#128 said "two rips hash differently, by construction" and
   was right for the wrong reason: two *decoders* of one rip do too.
+- **The title holds for fingerprint-keyed rows, and since 2026-09-19 a row can be keyed
+  otherwise.** [`ADR-0020`](ADR-0020-a-contribution-without-a-fingerprint-is-keyed-on-its-recording.md),
+  accepted that day, admits a contribution that carries a MusicBrainz recording id and no
+  fingerprint, keyed on a digest derived from the id, with a `key_type` column saying which
+  kind of key each row has. No point here is superseded — every fingerprint-keyed row is still
+  governed by all seven — and a client that has a fingerprint keys on it, always (`ADR-0020`
+  point 5).
 
 Extends [ADR-0006](ADR-0006-the-pipeline-identity-is-the-corpus-key.md), which made
 `(fingerprint_hash, pipeline_version)` the key and fixed the half of it that describes the pipeline.
