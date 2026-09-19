@@ -205,6 +205,55 @@ rows each has: if yours exists, contributing under it joins that population; if 
 one. The server does not validate the grammar. A string that ignores it is still a valid key —
 just one nobody else will land on.
 
+## When your model changes
+
+A new checkpoint, a new windowing rule, a new pooling rule — anything that moves the vectors — is
+a new identity string. Mint it and carry on; there is nobody to coordinate with and nothing to
+ask of the commons. What happens next is the same for every tool, and it is worth knowing before
+you commit a library to one identity
+([`ADR-0006`](../../docs/decisions/ADR-0006-the-pipeline-identity-is-the-corpus-key.md)):
+
+- **Old rows stay.** The corpus never relabels or migrates a row to a new identity, and never
+  deletes one because a newer identity exists. An install still running the old model keeps
+  getting hits under the old string for as long as it names it.
+- **The new identity starts empty and fills once per population, not once per install.** A
+  lookup names the identity it wants. The first install to re-embed a recording under the new
+  string contributes it; every other install's re-index of that recording is a lookup hit. The
+  join is the recording id, not the fingerprint, so an install on a different `fpcalc` build
+  still finds it. For a popular recording most installs never run the new model at all — which
+  is the founding premise of the commons applied to the case that hurts most.
+- **Do not reuse the old string.** The one thing that damages the corpus is a vector under an
+  identity that did not produce it: the key asserts comparability and the assertion is false.
+  A forgotten bump is the realistic failure; make the string a function of the pipeline in code,
+  not a constant beside it.
+- **Ask first.** `Corpus.pipelines()` says whether the identity you are about to mint already
+  exists — another tool on the same checkpoint may have moved before you, and joining its
+  population is worth more than starting your own.
+
+So the shape of a re-index is the shape of a first index: look up under the new identity, compute
+on a miss, contribute what you computed.
+
+```python
+row = corpus.lookup(fingerprint_hash, NEW_PIPELINE, recording_mbid=mbid)
+if row is None:
+    vector = embed(path)                       # the new model, on this machine
+    corpus.contribute(fingerprint_hash=fingerprint_hash, embedding=vector,
+                      pipeline_version=NEW_PIPELINE, client_id=client_id,
+                      recording_mbid=mbid)
+```
+
+**What the corpus does not do** is search across identities. While a library is half re-indexed
+it is two spaces, and a query in one finds nothing in the other — not approximately, not at all:
+measured 2026-09-19 on 493 tracks, a vector from `laion/clap-htsat-unfused` and one from the
+`music_audioset` checkpoint for the *same track* have a cosine of −0.009, and in a mixed index the
+track's own other-model vector ranks below random. The two spaces do agree about which tracks are
+neighbours, and a linear map fitted on a few hundred tracks embedded under both carries a search
+across them about as well as a windowing change does within one model (R@10 0.99, top-10 overlap
+0.56; `packages/embed/scripts/measure_crosspipe.py`, results beside it). Whether the commons
+fits and publishes such a bridge between identities is not decided; until it is, a tool that
+needs one during a transition fits it from tracks it holds under both, and the ranking it gets
+back is a translation, not a measurement.
+
 ## Fingerprinting needs chromaprint, and only fingerprinting does
 
 ```bash

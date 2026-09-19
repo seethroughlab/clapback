@@ -27,7 +27,11 @@ Implementation:
   1; the README's example is `…+frag3x10s+meanl2+fp32`. Either is a valid key; only one is the
   convention, and the thread should be told which before Kalinka contributes.
 - Owed: the landing page's count broken down by identity once a second one has rows (Follow-up),
-  and the "for plug-in authors" section (Follow-up), which `ADR-0018` also feeds.
+  and the "for plug-in authors" section (Follow-up), which `ADR-0018` also feeds. **Half of that
+  section landed 2026-09-19** as "When your model changes" in `packages/client/README.md`, written
+  for KalinkaPlayer#128's upgrade question: old rows stay, a new identity fills once per population
+  through lookup-then-contribute, never reuse a string, ask `/v1/pipelines` first — and that the
+  corpus does not search across identities, with the measured cross-checkpoint figures.
 
 Extends [ADR-0006](ADR-0006-the-pipeline-identity-is-the-corpus-key.md) and
 [ADR-0011](ADR-0011-the-commons-is-what-other-tools-plug-into.md) point 3. One of five records
