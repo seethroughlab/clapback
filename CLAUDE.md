@@ -276,7 +276,7 @@ green timer is evidence the check ran, not evidence anyone would hear it.**
 - **`ADR-0013` point 7** — the import script.
 - **`ADR-0022`** point 6 — the next maintainer message, in the discovery framing. Everything else is done.
 
-**The commons box is at `5cff52e` and migration `016` as of 2026-09-20 ~15:20 UTC — `ADR-0022`'s site and
+**The commons box is at `aa1aa67` and migration `016` as of 2026-09-20 ~15:40 UTC — `ADR-0022`'s site and
 README included.** All three plug-ins were released 2026-09-16 on
 `clapback-client` 0.4.0: they look up by recording id, then AcoustID id, then hash; send and
 claim both ids; and use the batch calls (Picard contributes as it scans, on the single call).

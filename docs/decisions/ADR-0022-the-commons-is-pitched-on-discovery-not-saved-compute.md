@@ -21,7 +21,7 @@ Implementation:
   nothing about similarity, because point 7 is not built.
 - **Deployed 2026-09-20 ~15:20 UTC**: box at `5cff52e`, migration `016` unchanged (no schema
   change), live `<title>` and card order verified; 25,930 rows, one contributing installation.
-- **Point 7 built and released 2026-09-20 ~16:10 UTC: `clapback-cli` 0.3.0 on PyPI**
+- **Point 7 built and released 2026-09-20 ~15:30 UTC: `clapback-cli` 0.3.0 on PyPI**
   (`cli-v0.3.0`, first try). `clapback similar <track>` sends the stored vector — no model run,
   no fingerprint taken — asks for one more than the limit and drops the seed's own row (by hash,
   or by a similarity ≥ 0.99999, which no mere duplicate reaches), and shows each neighbour as
