@@ -75,3 +75,17 @@ class TestItReimplementsNothing:
 
     def test_the_store_records_which_pipeline_made_it(self):
         assert "PIPELINE_VERSION" in inspect.getsource(cli.cmd_index)
+
+
+class TestTheVersionIsOneFact:
+    def test_the_package_and_the_module_agree(self):
+        """`__version__` sat at 0.1.1 through the 0.2.0 release; nothing read it, so
+        nothing noticed. The release workflow checks the tag against pyproject, and
+        this checks the module against pyproject, so the three cannot drift apart."""
+        import tomllib
+        from pathlib import Path
+
+        import clapback_cli
+
+        pyproject = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text())
+        assert clapback_cli.__version__ == pyproject["project"]["version"]

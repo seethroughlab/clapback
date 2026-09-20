@@ -1,6 +1,6 @@
 [project]
 name = "clapback-cli"
-version = "0.2.0"
+version = "0.3.0"
 description = "Search your own music by description, and find duplicates across formats and masters"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -16,19 +16,20 @@ license-files = ["LICENSE"]
 # move it, so `<0.2` takes fixes and refuses the release that would silently
 # change what every stored vector means.
 #
-# `clapback-client` is `>=0.4,<0.5`: 0.3 added the batch calls this command is
-# built on (`lookup_many`, `contribute_many`; `ADR-0015`, `ADR-0016`) and 0.4 the
-# AcoustID claim type. `beets-clapback` moves in step so the two can share an
-# environment. The contract package is additive between minors until a record
-# says otherwise; the embedder is the one whose minor can move what a vector
-# means.
+# `clapback-client` is `>=0.4,<0.6`: 0.3 added the batch calls this command is
+# built on (`lookup_many`, `contribute_many`; `ADR-0015`, `ADR-0016`), 0.4 the
+# AcoustID claim type, and 0.5 (`ADR-0020`) only recording-keyed contribution,
+# which this tool does not use — the bound is widened so it can share an
+# environment with a tool that does. `beets-clapback` moves in step. The
+# contract package is additive between minors until a record says otherwise;
+# the embedder is the one whose minor can move what a vector means.
 #
 # **No faiss, no hnswlib.** `ADR-0009` point 3, measured: a numpy matrix-vector
 # product answers a query in 0.3 ms across 26,000 tracks and 5.5 ms across
 # 500,000. An index buys nothing at personal-library scale and costs a compiled
 # wheel in a tool whose adoption argument is that it installs cleanly.
 dependencies = [
-    "clapback-client>=0.4.0,<0.5",
+    "clapback-client>=0.4.0,<0.6",
     "clapback-embed>=0.1.0,<0.2",
     "numpy>=1.24.0",
 ]

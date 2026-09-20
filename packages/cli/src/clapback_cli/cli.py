@@ -2,11 +2,14 @@
 
 `ADR-0009` point 8 of `ADR-0001` is the brief: **the tool must be worth running
 with the corpus empty.** So everything here works offline, against your own
-files, with the commons unreachable. Contributing is something it can also do.
+files, with the commons unreachable. Contributing is something it can also do,
+and — `ADR-0022` point 7 — so is asking the commons what sounds like a track,
+including recordings you do not own.
 
     clapback index ~/Music
     clapback search "dreamy ambient with piano"
     clapback duplicates
+    clapback similar "Gantz Graf"
 """
 
 from __future__ import annotations
@@ -129,6 +132,100 @@ def cmd_duplicates(args: argparse.Namespace) -> int:
         print(f"{score:.4f}")
         print(f"  {store.entries[i].path}")
         print(f"  {store.entries[j].path}")
+    return 0
+
+
+#: A neighbour this close to the seed *is* the seed: the same vector, held by the
+#: corpus under a key this store never learned (contributed from another install,
+#: or before this store cached its hash). Two rips of one recording measure at
+#: most 0.9995, so nothing that is merely a duplicate is hidden by this.
+SAME_VECTOR = 0.99999
+
+
+def _find_seed(store: Store, track: str) -> int:
+    """The store row for a path — exact first, then a unique substring of one."""
+    key = str(Path(track).expanduser().resolve())
+    for i, e in enumerate(store.entries):
+        if e.path == key:
+            return i
+    matches = [i for i, e in enumerate(store.entries) if track.lower() in e.path.lower()]
+    if len(matches) == 1:
+        return matches[0]
+    if not matches:
+        sys.exit(f"not indexed: {track}\nTry: clapback index <directory>")
+    sys.exit(
+        f"{len(matches)} indexed tracks match {track!r}; be more specific:\n"
+        + "\n".join(f"  {store.entries[i].path}" for i in matches[:10])
+    )
+
+
+def cmd_similar(args: argparse.Namespace) -> int:
+    """`ADR-0022` point 7 — what sounds like this, across every library the commons holds.
+
+    The reason to reach the commons that is not altruism. The seed's vector is
+    already in the store, so this needs neither the embedder nor a fingerprint; it
+    needs the network, and says so plainly when it cannot get there. A
+    neighbour is shown as your own file when its hash is one this store has
+    cached — which means one it has contributed — as a MusicBrainz recording
+    you can open when someone has named it, and as the bare hash it still is
+    otherwise. It says *sounds like*, never *will like*, and where to hear a
+    recording you do not hold is not this tool's business (`ADR-0009` point 9).
+    """
+    from clapback_client import Corpus, CorpusError
+
+    store = Store(args.home).load()
+    if not len(store.vectors):
+        sys.exit("Nothing indexed yet. Try: clapback index ~/Music")
+    seed = _find_seed(store, args.track)
+    vector = [float(x) for x in store.vectors[seed]]
+
+    corpus = Corpus(args.url)
+    try:
+        # One more than asked, because the seed's own row comes back first
+        # whenever this library has contributed it. Only vectors comparable
+        # with this store's are asked for (`ADR-0006`).
+        neighbours = corpus.similar(
+            vector, limit=args.limit + 1, pipeline_version=store.pipeline_version
+        )
+    except CorpusError as exc:
+        sys.exit(f"corpus unreachable: {exc}")
+
+    seed_hash = store.entries[seed].fingerprint_hash
+    mine = {e.fingerprint_hash: e.path for e in store.entries if e.fingerprint_hash}
+    print(f"sounds like: {store.entries[seed].path}")
+    shown = owned = named = unnamed = 0
+    for n in neighbours:
+        if n["fingerprint_hash"] == seed_hash or n["similarity"] >= SAME_VECTOR:
+            continue
+        if n["fingerprint_hash"] in mine:
+            what = f"{mine[n['fingerprint_hash']]}  (in your library)"
+            owned += 1
+        elif n.get("recording_mbid"):
+            claims = n.get("recording_claims", 0)
+            what = (
+                f"https://musicbrainz.org/recording/{n['recording_mbid']}"
+                f"  ({claims} claim{'s' if claims != 1 else ''})"
+            )
+            named += 1
+        else:
+            what = f"{n['fingerprint_hash'][:16]}…  (not yet named by anyone)"
+            unnamed += 1
+        print(f"{n['similarity']:.4f}  {what}")
+        shown += 1
+        if shown >= args.limit:
+            break
+
+    if not shown:
+        print("nothing comparable in the corpus yet — yours would be the first")
+        return 0
+    # The number `ADR-0022` turns on: how much of what came back is past the
+    # edge of this library. A library that has never contributed cannot be
+    # told apart from one that owns none of these, and the count says so.
+    print(
+        f"\n{shown} shown · in your library {owned} · not in your library {named + unnamed}"
+        f" ({unnamed} not yet named)"
+        + ("" if mine else " · this store has contributed nothing, so nothing can be recognised as yours")
+    )
     return 0
 
 
@@ -292,6 +389,14 @@ def main() -> None:
     du = sub.add_parser("duplicates", help="find near-duplicates across formats and masters")
     du.add_argument("--threshold", type=float, default=DEFAULT_DUPLICATE_THRESHOLD)
     du.set_defaults(func=cmd_duplicates)
+
+    si = sub.add_parser(
+        "similar", help="what sounds like a track, across every library the commons holds"
+    )
+    si.add_argument("track", help="an indexed file, or a unique part of its path")
+    si.add_argument("--limit", type=int, default=10)
+    si.add_argument("--url", default=DEFAULT_CORPUS_URL, help="corpus base URL")
+    si.set_defaults(func=cmd_similar)
 
     co = sub.add_parser("contribute", help="send your embeddings to the commons (opt-in)")
     co.add_argument("--url", default=DEFAULT_CORPUS_URL, help="corpus base URL")

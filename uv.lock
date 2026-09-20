@@ -488,7 +488,7 @@ wheels = [
 
 [[package]]
 name = "clapback-cli"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "packages/cli" }
 dependencies = [
     { name = "clapback-client" },
@@ -515,7 +515,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "clapback-client"
-version = "0.4.0"
+version = "0.5.0"
 source = { editable = "packages/client" }
 
 [package.optional-dependencies]
