@@ -209,6 +209,20 @@ with every translated neighbour labelled. Translated vectors are never stored. I
 `ADR-0002`'s reference question by not needing one. Nothing can be built until a second identity
 shares recordings with the first: zero cross-identity pairs exist.
 
+**`ADR-0022` was accepted 2026-09-20, the day it was proposed; nothing is built yet.** It is the
+second record about what the commons is *for*, and it changes the pitch, not a decision: the
+commons is introduced as discovery — a tool tells its user what sounds like a track they own,
+including recordings they do not, from a catalogue nobody had to assemble — and saved compute is
+a supporting fact stated after, never the lead. The argument is that the cold start *inverts*:
+lookup value needs overlap, discovery value needs non-overlap, so the same 25,930 rows are a
+near-zero hit rate and a 25,930-recording catalogue for the second user on the same day. It was
+`ADR-0001`'s own framing (Familiar's `ADR-0102`: music *nobody here owns*, rankable by how it
+sounds), buried under the cache pitch on the site, in the README and in the outreach. It promises
+*by how it sounds*, never *what you will like*, and leaves the last mile — where to hear it — to
+the client. Owed, in order: the site tagline and landing order plus the README lead (one change),
+a `similar` command in `clapback-cli` (neither the reference client nor Familiar has ever called
+`/v1/similar`), then the next maintainer message in the new framing.
+
 `ADR-0008` closes `ADR-0001` deferred item 2 — the part the cross-machine measurement did not answer,
 being where the agreement threshold sits and what the corpus does with it.
 
@@ -260,6 +274,7 @@ green timer is evidence the check ran, not evidence anyone would hear it.**
 - **`ADR-0008`**, partly — confirmations and contradictions are served per recording since
   2026-09-16; the worst similarity and point 7 are not.
 - **`ADR-0013` point 7** — the import script.
+- **`ADR-0022`**, all of it — site and README lead, `clapback-cli similar`, the maintainer message.
 
 **The commons box is at `ff3cca0` and migration `016` as of 2026-09-19 ~15:47 UTC, site wording
 included.** All three plug-ins were released 2026-09-16 on
