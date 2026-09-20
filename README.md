@@ -30,7 +30,7 @@ and the way in is a package with no dependency beyond the standard library
 | use **beets** | `pip install beets-clapback` | `absubmit` reborn: look up, else embed; contribute if you say so; `beet clapback-similar`. [README](packages/beets-clapback/) |
 | use **Picard** | the zip from a [`picard-v*` release](https://github.com/seethroughlab/clapback/releases?q=picard-v) | Right-click: look up, name, contribute; *what sounds like this*. Works with no embedder installed, and says so. [README](packages/picard-clapback/) |
 | write a **tool** | `pip install clapback-client` | The contract — canonical hashing, lookup-before-contribute, `client_id`, backoff — as code. Stdlib only, so a tool with its own embedder needs no ONNX Runtime. [README](packages/client/) |
-| want a **command line** | `pip install clapback-cli` | The reference client: index a directory, search it by description, find duplicates, contribute. [README](packages/cli/) |
+| want a **command line** | `pip install clapback-cli` | The reference client: index a directory, search it by description, find duplicates, `clapback similar` — what sounds like a track, including what you don’t own — and contribute. [README](packages/cli/) |
 | need the **embedder** | `pip install clapback-embed` | The reference pipeline. ONNX Runtime, no `torch`. [README](packages/embed/) |
 
 A tool that already computes CLAP vectors can contribute under its own pipeline

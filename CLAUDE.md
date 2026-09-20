@@ -209,8 +209,8 @@ with every translated neighbour labelled. Translated vectors are never stored. I
 `ADR-0002`'s reference question by not needing one. Nothing can be built until a second identity
 shares recordings with the first: zero cross-identity pairs exist.
 
-**`ADR-0022` was accepted 2026-09-20, the day it was proposed; points 4 and 5 (site, README) were
-built and deployed the same day.** It is the
+**`ADR-0022` was accepted 2026-09-20, the day it was proposed; points 4, 5 and 7 (site, README,
+`clapback-cli similar` as 0.3.0) were built, deployed and released the same day.** It is the
 second record about what the commons is *for*, and it changes the pitch, not a decision: the
 commons is introduced as discovery — a tool tells its user what sounds like a track they own,
 including recordings they do not, from a catalogue nobody had to assemble — and saved compute is
@@ -220,9 +220,8 @@ near-zero hit rate and a 25,930-recording catalogue for the second user on the s
 `ADR-0001`'s own framing (Familiar's `ADR-0102`: music *nobody here owns*, rankable by how it
 sounds), buried under the cache pitch on the site, in the README and in the outreach. It promises
 *by how it sounds*, never *what you will like*, and leaves the last mile — where to hear it — to
-the client. Owed, in order:
-a `similar` command in `clapback-cli` (neither the reference client nor Familiar has ever called
-`/v1/similar`), then the next maintainer message in the new framing.
+the client. Owed: only point 6 — the next maintainer message, whenever one is written, leads with
+discovery. Familiar still never calls `/v1/similar`; that is Familiar's decision.
 
 `ADR-0008` closes `ADR-0001` deferred item 2 — the part the cross-machine measurement did not answer,
 being where the agreement threshold sits and what the corpus does with it.
@@ -241,7 +240,7 @@ nightly `pg_dump` to `s3://clapback-backup`, and a corpus of **25,930 rows (2026
 declares the pipeline that produced it and is keyed on a hash any client can reproduce from the
 audio — and 23,196 of which (89.6%) name their MusicBrainz recording**, up from 6.8% on
 2026-09-14, after Familiar's `ADR-0115` backfill. Four packages are on PyPI (`clapback-embed` 0.1.0,
-`clapback-client` 0.5.0, `clapback-cli` 0.2.0, `beets-clapback` 0.3.0) and the Picard plugin ships as a zip on a
+`clapback-client` 0.5.0, `clapback-cli` 0.3.0, `beets-clapback` 0.3.0) and the Picard plugin ships as a zip on a
 `picard-v*` release (`picard-v0.2.0`). The bare name `clapback` on PyPI belongs to an unrelated 2018 package; the
 CLI is `clapback-cli`.
 
@@ -275,7 +274,7 @@ green timer is evidence the check ran, not evidence anyone would hear it.**
 - **`ADR-0008`**, partly — confirmations and contradictions are served per recording since
   2026-09-16; the worst similarity and point 7 are not.
 - **`ADR-0013` point 7** — the import script.
-- **`ADR-0022`** points 6 and 7 — `clapback-cli similar`, the maintainer message. The site and README are done.
+- **`ADR-0022`** point 6 — the next maintainer message, in the discovery framing. Everything else is done.
 
 **The commons box is at `5cff52e` and migration `016` as of 2026-09-20 ~15:20 UTC — `ADR-0022`'s site and
 README included.** All three plug-ins were released 2026-09-16 on

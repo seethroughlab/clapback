@@ -21,7 +21,18 @@ Implementation:
   nothing about similarity, because point 7 is not built.
 - **Deployed 2026-09-20 ~15:20 UTC**: box at `5cff52e`, migration `016` unchanged (no schema
   change), live `<title>` and card order verified; 25,930 rows, one contributing installation.
-- Point 7 (`clapback-cli similar`) and point 6 (the maintainer message) are not built.
+- **Point 7 built and released 2026-09-20 ~16:10 UTC: `clapback-cli` 0.3.0 on PyPI**
+  (`cli-v0.3.0`, first try). `clapback similar <track>` sends the stored vector — no model run,
+  no fingerprint taken — asks for one more than the limit and drops the seed's own row (by hash,
+  or by a similarity ≥ 0.99999, which no mere duplicate reaches), and shows each neighbour as
+  the user's file when the store contributed it and so knows its hash, a MusicBrainz recording
+  when named, or the bare hash. The closing line counts how much of what came back is past the
+  edge of the library — the number this record turns on, per query. Verified cold from the index
+  against the live corpus. The CLI's card on the landing page and the root README row now say so.
+  Found on the way: `__version__` had sat at 0.1.1 through the 0.2.0 release; a test now pins it
+  to `pyproject.toml`. Familiar still does not call `/v1/similar`; that is Familiar's decision.
+- Point 6 is not owed until the next message to a maintainer is written; KalinkaPlayer#128 is
+  waiting on its maintainer as of 2026-09-20.
 
 Extends [ADR-0001](ADR-0001-clapback-is-a-public-clap-embedding-commons.md) point 1 and
 [ADR-0011](ADR-0011-the-commons-is-what-other-tools-plug-into.md) point 1. It decides no schema and
