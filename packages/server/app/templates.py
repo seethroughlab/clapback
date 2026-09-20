@@ -9,16 +9,18 @@ from datetime import datetime
 from fastapi.templating import Jinja2Templates
 
 #: Said once, used everywhere: the header, `<meta name="description">`, the OG
-#: card, the OpenAPI description. The pun is the name's — CLAP, and what a
-#: contribution does — and the sentence carries the exchange without explaining it.
+#: card, the OpenAPI description. The sentence is the pitch `ADR-0022` decided:
+#: discovery past the edge of one library, promised as *how it sounds* and
+#: never as what you will like. Saved compute is stated after, not here.
 SITE = {
     "name": "clapback",
-    "tagline": "Compute it once. Every tool gets it back.",
+    "tagline": "Find what you don’t own, by how it sounds.",
     "description": (
         "A public commons of CLAP audio embeddings: one 512-float vector per recording, "
-        "keyed on a hash any tool can reproduce from the audio. Look it up before you run "
-        "the model; contribute what you compute; ask what sounds like it across every "
-        "library that has plugged in. Reads need no key; contribution is open and opt-in."
+        "keyed on a hash any tool can reproduce from the audio. Ask what sounds like a "
+        "track you own and be shown recordings you don’t, from every library that has "
+        "plugged in; contribute what yours computes and it is what others can be shown. "
+        "Reads need no key; contribution is open and opt-in."
     ),
     "url": "https://clapback.seethroughlab.com",
 }

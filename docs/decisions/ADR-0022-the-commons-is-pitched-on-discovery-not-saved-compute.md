@@ -6,9 +6,20 @@ Date: 2026-09-20
 
 Implementation:
 
-- Accepted 2026-09-20, the day it was proposed. Nothing is built yet: the site and README still
-  lead with the cache pitch, `clapback-cli` still has no `similar` command, and the tagline is
-  not chosen. Each point below records here when it lands.
+- Accepted 2026-09-20, the day it was proposed.
+- **Points 4 and 5 built 2026-09-20.** The tagline is **"Find what you don’t own, by how it
+  sounds."** — it carries point 3's qualifier in its own words, and uses a typographic
+  apostrophe because Jinja's autoescape turns a straight one into `&#39;` and the test that the
+  tagline appears verbatim would fail. The landing `<h1>` is *"What sounds like this — including
+  what you don't own."* (the beets plugin's line since it shipped); the hero snippet now shows
+  `Corpus().similar()` before `contribute()` rather than `lookup()`; "Why plug your tool in"
+  runs *Recommendations past the edge of one library* → *Somewhere to submit to again* → *Skip
+  the recompute*, the last saying in its own text why it is last; the "corpus, dated" paragraph
+  states the inversion. `test_it_makes_the_case_in_order` pins the new order. The README lead is
+  rewritten around the streaming comparison, and the compute argument moved under "The reference
+  pipeline", where the case for one implementation lives. The CLI's card on the page still says
+  nothing about similarity, because point 7 is not built.
+- Point 7 (`clapback-cli similar`) and point 6 (the maintainer message) are not built.
 
 Extends [ADR-0001](ADR-0001-clapback-is-a-public-clap-embedding-commons.md) point 1 and
 [ADR-0011](ADR-0011-the-commons-is-what-other-tools-plug-into.md) point 1. It decides no schema and

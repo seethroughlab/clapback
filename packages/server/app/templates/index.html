@@ -5,16 +5,19 @@
 {% block body %}
 <section class="hero">
     <div class="hero__copy">
-        <h1>A public commons of CLAP audio embeddings.</h1>
+        <h1>What sounds like this — including what you don’t own.</h1>
         <p class="lede">
-            One 512-float vector per recording, describing what it sounds like, keyed on a hash any
-            tool can reproduce from the audio. Look it up before you run the model. Contribute what
-            you compute. Ask what sounds like it across every library that has plugged in.
+            A public commons of CLAP audio embeddings: one 512-float vector per recording, keyed on
+            a hash any tool can reproduce from the audio. A tool that manages music its user owns
+            can ask what sounds like a track and be shown recordings from every library that has
+            plugged in. What your library contributes is what others can be shown, and the reverse.
         </p>
-<pre><code><span class="dim">from clapback_client import Corpus, fingerprint_file, hash_fingerprint</span>
+<pre><code><span class="dim">from clapback_client import Corpus</span>
 
-key = hash_fingerprint(fingerprint_file(path))   <span class="dim"># SHA256 of the AcoustID fingerprint</span>
-row = Corpus().lookup(key, PIPELINE_VERSION)     <span class="dim"># 512 floats, or None — then run your model</span>
+for n in Corpus().similar(vector, limit=10):     <span class="dim"># nearest recordings, every library, ~{{ similarity_ms }} ms</span>
+    print(n["similarity"], n["recording_mbid"]   <span class="dim"># a MusicBrainz recording you can open —</span>
+          or n["fingerprint_hash"])              <span class="dim"># or the hash, when nobody has named it yet</span>
+
 Corpus().contribute(fingerprint_hash=key, embedding=vector,
                     pipeline_version=PIPELINE_VERSION, client_id=client_id)</code></pre>
         <div class="hero__actions">
@@ -66,22 +69,27 @@ Corpus().contribute(fingerprint_hash=key, embedding=vector,
     </div>
     <div class="grid-3">
         <div class="card">
-            <h3>Skip the recompute</h3>
-            <p>A hit is 512 floats. A miss is seconds of CPU and a 600 MB model — minutes per album
-            on a laptop, longer on a Pi. Look up first; run the model only for what nobody has
-            computed.</p>
-        </div>
-        <div class="card">
-            <h3>Similarity across libraries, not one user's</h3>
-            <p><code>/v1/similar</code> answers in {{ similarity_ms }} ms over every library that has
-            plugged in, and {{ top.named_pct|fmt_pct(0) }} of results carry a MusicBrainz recording id
-            a person can read. The rest are hashes, shown as hashes.</p>
+            <h3>Recommendations past the edge of one library</h3>
+            <p>A streaming service recommends from a catalogue it holds. A tool that manages music
+            its user owns has none, so its suggestions stop at the last track. <code>/v1/similar</code>
+            answers in {{ similarity_ms }} ms over every library that has plugged in, and
+            {{ top.named_pct|fmt_pct(0) }} of results are a MusicBrainz recording a person can open.
+            The rest are hashes, shown as hashes. It says <em>sounds like</em>, never <em>will
+            like</em>; where to hear it is your tool's call.</p>
         </div>
         <div class="card">
             <h3>Somewhere to submit to again</h3>
             <p>beets and Picard shipped exactly this fetch-and-submit pair and lost it when
             AcousticBrainz closed in 2022. This corpus carries embeddings — reconcilable between
-            contributors — not the estimates that could not be.</p>
+            contributors — not the estimates that could not be. What your users contribute is what
+            everyone's users can be shown.</p>
+        </div>
+        <div class="card">
+            <h3>Skip the recompute</h3>
+            <p>A hit is 512 floats. A miss is seconds of CPU and a 600 MB model — minutes per album
+            on a laptop, longer on a Pi. Look up first; run the model only for what nobody has
+            computed. This is the smaller reason: the saving needs the commons to already hold your
+            track, and the catalogue above does not.</p>
         </div>
     </div>
 </section>
@@ -202,10 +210,12 @@ else:
         <div class="stack">
             <div><span class="delta">+{{ "{:,}".format(velocity.last_7d) }}</span> in the past 7 days
                 <span class="muted">· {{ "{:,}".format(velocity.last_24h) }} in the past 24 hours</span></div>
-            <p class="muted">Almost every vector here came from one library. The mechanism for
-            finding out whether independent contributors agree is in place ahead of the evidence,
-            on purpose — and a second contributor is the single most valuable thing that could
-            happen to it.</p>
+            <p class="muted">Almost every vector here came from one library, so what the corpus
+            can show you today is one collection's worth. The mechanism for finding out whether
+            independent contributors agree is in place ahead of the evidence, on purpose — and a
+            second contributor is the single most valuable thing that could happen to it. For that
+            contributor, every row here they do not hold is already a recording they can be shown;
+            the lookup hit rate, which needs overlap, is the part that has to wait.</p>
             <p class="muted">Every row declares the pipeline that produced it and is keyed on a
             hash any client can reproduce from the audio. The corpus is smaller than it has ever
             been, and the first version where a disagreement is about the recording rather than

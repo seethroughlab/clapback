@@ -73,13 +73,18 @@ class TestTheLandingPage:
     def test_it_makes_the_case_in_order(self):
         html = render("index.html", **INDEX_CTX)
         order = [
-            "A public commons of CLAP audio embeddings.",
+            "<h1>What sounds like this — including what you don’t own.</h1>",
+            "A tool that manages music its user owns",
             "pip install clapback-client",
             "recordings held",
             "resolve to a MusicBrainz recording",
             "to ask what sounds like a vector",
             "yours would be the second",
             "Why plug your tool in",
+            # ADR-0022: discovery leads, the saved compute is stated last.
+            "Recommendations past the edge of one library",
+            "Somewhere to submit to again",
+            "Skip the recompute",
             "What plugging in takes",
             "Already plugged in",
             "<h2>Explore the corpus</h2>",

@@ -3,13 +3,17 @@
 A public commons of **CLAP audio embeddings**, and the reference implementation that
 produces them.
 
-An embedding is a 512-dimensional vector describing what a recording *sounds like*.
-Computing one costs seconds of CPU and a 600 MB model; comparing two is a dot product.
-So it is worth computing once and sharing — provided everybody computes the same thing.
+A streaming service can recommend music because it holds the catalogue. A tool that
+manages music its user *owns* — beets, Picard, a self-hosted player — holds one library,
+so its recommendations stop at the last track. This corpus is the catalogue those tools
+do not have: one 512-dimensional vector per recording, describing what it *sounds like*,
+contributed by every library that has plugged in. Ask what sounds like a track you own
+and be shown recordings you don't, by how they sound — never by what you will like, which
+nothing here knows. What your library contributes is what others can be shown, and the
+reverse ([`ADR-0022`](docs/decisions/ADR-0022-the-commons-is-pitched-on-discovery-not-saved-compute.md)).
 
-That proviso is the whole design. `clapback-embed` exists so there is exactly one
-implementation: if two contributors disagree about a recording, the disagreement is
-about the audio, not about whose code ran.
+A result is a MusicBrainz recording you can open, or a hash when nobody has named it yet.
+Where to hear it is the tool's job; the commons holds no titles, no audio and no links.
 
 The commons is public at **https://clapback.seethroughlab.com**. Reads need no key and no
 account. Contribution is open, opt-in in every client, and sends a vector and a one-way
@@ -49,6 +53,14 @@ No `torch`, no `transformers` — it runs on ONNX Runtime, and optionally on a G
 Everything that could vary is pinned and versioned: the mel front-end, the windowing
 rule, the pooling, the checkpoint and the precision. `PIPELINE_VERSION` is the identity
 of all of it together, and it travels with every contribution.
+
+Computing a vector costs seconds of CPU and a 600 MB model; comparing two is a dot
+product. So a vector is worth computing once and sharing — provided everybody computes the
+same thing, and that proviso is why this package exists. There is exactly one reference
+implementation so that when two contributors disagree about a recording, the disagreement
+is about the audio and not about whose code ran. A tool that looks up before it runs the
+model gets a hit for free; that is the smaller reason to plug in, because it needs the
+commons to already hold the track, and the catalogue above does not.
 
 Measured, not asserted:
 
