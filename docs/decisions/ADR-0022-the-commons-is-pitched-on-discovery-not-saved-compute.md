@@ -19,6 +19,8 @@ Implementation:
   rewritten around the streaming comparison, and the compute argument moved under "The reference
   pipeline", where the case for one implementation lives. The CLI's card on the page still says
   nothing about similarity, because point 7 is not built.
+- **Deployed 2026-09-20 ~15:20 UTC**: box at `5cff52e`, migration `016` unchanged (no schema
+  change), live `<title>` and card order verified; 25,930 rows, one contributing installation.
 - Point 7 (`clapback-cli similar`) and point 6 (the maintainer message) are not built.
 
 Extends [ADR-0001](ADR-0001-clapback-is-a-public-clap-embedding-commons.md) point 1 and
