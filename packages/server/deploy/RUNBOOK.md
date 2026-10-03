@@ -57,7 +57,7 @@ The instance uses Lightsail's default key pair, which you may never have
 downloaded. Fetch it rather than hunting for it:
 
 ```bash
-aws lightsail download-default-key-pair --profile admin --region us-east-1 \
+aws lightsail download-default-key-pair --profile jeff --region us-east-1 \
 	--query 'privateKeyBase64' --output text > ~/.ssh/clapback-lightsail.pem
 chmod 600 ~/.ssh/clapback-lightsail.pem
 ```
@@ -199,9 +199,34 @@ on the instance. So administration is a tunnel, and needs SSH — which is the
 point: anyone who can reach it already owns the box.
 
 ```bash
-ssh -i ~/.ssh/clapback-lightsail.pem -L 8000:127.0.0.1:8000 ubuntu@clapback.seethroughlab.com
+ssh -L 8000:127.0.0.1:8000 clapback      # over Tailscale; see 6c
 # then, locally: http://127.0.0.1:8000/admin
 ```
+
+## 6c. SSH is over Tailscale only
+
+Since 2026-10-02 the instance's public firewall opens **80 and 443 only**; port 22
+is reachable only over the tailnet, where the instance is `clapback`
+(100.83.113.16, key expiry disabled). `~/.ssh/config` on jeffbook has a `Host
+clapback` entry carrying the user, the key and `HostKeyAlias
+clapback.seethroughlab.com`, so the host key trusted before the move still applies.
+Every `ssh … ubuntu@clapback.seethroughlab.com` in this runbook is now `ssh clapback`
+— except on a freshly provisioned box (section 3), which is not on the tailnet yet:
+install Tailscale there (`curl -fsSL https://tailscale.com/install.sh | sh && sudo
+tailscale up --hostname=clapback`, then disable key expiry in the admin console)
+before closing 22.
+
+**If Tailscale is down on the box**, reopen 22 for as long as the repair takes, and
+close it again after:
+
+```bash
+aws lightsail open-instance-public-ports --profile jeff --region us-east-1 \
+	--instance-name clapback --port-info fromPort=22,toPort=22,protocol=tcp,cidrs=$(curl -s https://checkip.amazonaws.com)/32
+aws lightsail close-instance-public-ports --profile jeff --region us-east-1 \
+	--instance-name clapback --port-info fromPort=22,toPort=22,protocol=tcp
+```
+
+Lightsail's browser SSH console also needs 22 open, so it is not a way around this.
 
 `CACHE_ADMIN_PASSWORD` is not recovered from anywhere — it is an environment
 variable compared with `secrets.compare_digest`, stored in no database, so a new
