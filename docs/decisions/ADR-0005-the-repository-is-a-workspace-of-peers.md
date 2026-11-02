@@ -60,6 +60,10 @@ Implementation:
   with every other beets plugin — so its wheel must never ship a `beetsplug/__init__.py`, and does
   not. It depends on both `clapback-client` and `clapback-embed` from the index, which puts it last
   in release order after them.
+- **The `fly.toml` follow-up is closed: deleted 2026-11-02.** It had moved to
+  `packages/server/fly.toml` with the server and still configured `familiar-cache`, scale-to-zero,
+  generated 2026-01-15. Checked the same day: `flyctl apps list` has no such app, nothing in the
+  repository reads the file, and no workflow deploys to Fly.
 
 ## Context
 
