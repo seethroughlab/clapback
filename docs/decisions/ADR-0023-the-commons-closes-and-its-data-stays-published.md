@@ -7,8 +7,34 @@ Date: 2026-11-02
 Implementation:
 
 - **Point 3, first half, done 2026-11-02.** The maintainer's Familiar has lookup and contribution
-  switched off (Familiar `ADR-0159` point 6). No contribution arrives after this. Familiar's
-  `ADR-0159` code change and release are outstanding; nothing on this side has changed yet.
+  switched off (Familiar `ADR-0159` point 6). No contribution arrives after this.
+- **Point 3, second half, done 2026-11-03.** Familiar `ADR-0159` shipped in Familiar
+  `v0.2.0-beta22` (released 2026-11-03 01:24 UTC). The maintainer's installation runs it.
+- **Point 4 done 2026-11-03.** The final export ran by hand at 13:24 UTC: 26,401 embeddings and
+  23,648 claims, matching `GET /v1/pipelines` (last contribution 2026-10-26). Each file was
+  downloaded through its public URL and hashed, and the URLs and SHA256s are in the README. The
+  five earlier weekly exports, the `monthly/` copies and `latest/` were deleted.
+  **The point missed something:** both buckets had expiry lifecycle rules (`exports/` after 35
+  days, dumps after 90), which would have deleted the "permanent" export around 2026-12-08. Both
+  rules were replaced with ones that expire only noncurrent versions and stale delete markers.
+  The export and backup timers were disabled before the instance went, so neither wrote again.
+- **Point 5 done 2026-11-03.** `postgres/clapback-2026-11-03.sql.gz` (04:12 UTC, after the last
+  contribution) is kept, checked by decompressing it in full: 8 tables. The 59 older dumps were
+  deleted.
+- **Bill confirmed 2026-11-03.** October's Lightsail charge was $13.73: $11.99 for the
+  `small_3_0` bundle, $1.73 for snapshots. The two buckets cost cents.
+- **Points 2 and 1 done 2026-11-03, in that order.** The `A` record `clapback` →
+  `184.192.136.180` was deleted at Porkbun. All four Porkbun nameservers, 1.1.1.1 and 8.8.8.8
+  answered `NXDOMAIN` before the instance was touched. Then the instance (with its seven automatic
+  snapshots), the static IP `clapback-ip` and the manual snapshot
+  `clapback-pre-hardening-2026-10-02` were deleted. Lightsail holds nothing.
+- **Point 7 overstated what is kept.** It says the self-hosting path "still works" from
+  `packages/server/`. `ADR-0013` point 7's import script was never written. What exists is the
+  `COPY` SQL in `deploy/RUNBOOK.md`. A revival restores from point 5's dump, or writes the script.
+- **Point 6 done 2026-11-03** in this repository: the README carries the final export and says
+  the commons is closed, and the four server-dependent packages' READMEs say so. Still owed: the
+  GitHub repository description and the `picard-v0.2.0` release notes.
+- **Point 8 owed.** The maintainer writes both notes.
 
 Supersedes [ADR-0003](ADR-0003-the-commons-runs-on-one-small-server.md),
 [ADR-0011](ADR-0011-the-commons-is-what-other-tools-plug-into.md) point 1,

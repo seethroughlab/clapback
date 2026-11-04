@@ -3,6 +3,40 @@
 A public commons of **CLAP audio embeddings**, and the reference implementation that
 produces them.
 
+> **The commons is closed.** The server at `clapback.seethroughlab.com` was shut down in
+> November 2026 because no library besides its maintainer's ever contributed
+> ([`ADR-0023`](docs/decisions/ADR-0023-the-commons-closes-and-its-data-stays-published.md)).
+> Its data stays published under CC0 (see [The final export](#the-final-export) below). The
+> embedder, `clapback-embed`, is still maintained. The other packages get no further releases.
+
+## The final export
+
+Taken 2026-11-03 13:24 UTC, after the last contribution (2026-10-26). These files are
+permanent and are the only form the corpus now takes. Licence: [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
+No `client_id` and no address is included
+([`ADR-0013`](docs/decisions/ADR-0013-the-corpus-is-public-data-not-just-a-public-endpoint.md)).
+
+| File | Rows | SHA256 |
+|---|---|---|
+| [`embeddings-laion_clap_htsat_unfused_frontend1_artifact1_pool1_fp32.csv.gz`](https://clapback-export.s3.us-east-1.amazonaws.com/exports/2026-11-03/embeddings-laion_clap_htsat_unfused_frontend1_artifact1_pool1_fp32.csv.gz) | 26,401 | `cd76e5a7e715e3386e63ae749c2397010ddf7834090f4d8e155ba02340d5ef0e` |
+| [`claims.csv.gz`](https://clapback-export.s3.us-east-1.amazonaws.com/exports/2026-11-03/claims.csv.gz) | 23,648 | `fd648291e8ba9ce9a47f562a721b71ac3420ebf28af7517533471d586b686644` |
+| [`acoustid_claims.csv.gz`](https://clapback-export.s3.us-east-1.amazonaws.com/exports/2026-11-03/acoustid_claims.csv.gz) | 0 | `ede39b651189ac67d75201c4de650a5836c7d4185ad4b2cdea61aca943447b45` |
+| [`manifest.json`](https://clapback-export.s3.us-east-1.amazonaws.com/exports/2026-11-03/manifest.json) | | `49e0b57af4cadfaac12fb661ada193dae5b02080c1cea69f285f4f887875c4a2` |
+
+Every embedding is from one pipeline identity,
+`laion/clap-htsat-unfused+frontend1+artifact1+pool1+fp32`. Each row is keyed on the SHA256 of a
+canonical AcoustID fingerprint. Rows that name a MusicBrainz recording do so through
+`claims.csv.gz`. A revival would start from the server code in `packages/server/` and the
+`COPY` statements in its `deploy/RUNBOOK.md`. The import script `ADR-0013` point 7 promised was
+never written.
+
+## What this was
+
+Everything below describes the commons as it was built and run from September to November
+2026. None of it is running. The API section documents a server that no longer exists, kept
+because `packages/server/` still implements it.
+
+
 A streaming service can recommend music because it holds the catalogue. A tool that
 manages music its user *owns* — beets, Picard, a self-hosted player — holds one library,
 so its recommendations stop at the last track. This corpus is the catalogue those tools
@@ -15,17 +49,20 @@ reverse ([`ADR-0022`](docs/decisions/ADR-0022-the-commons-is-pitched-on-discover
 A result is a MusicBrainz recording you can open, or a hash when nobody has named it yet.
 Where to hear it is the tool's job; the commons holds no titles, no audio and no links.
 
-The commons is public at **https://clapback.seethroughlab.com**. Reads need no key and no
-account. Contribution is open, opt-in in every client, and sends a vector and a one-way
+The commons was public at `https://clapback.seethroughlab.com`. Reads needed no key and no
+account. Contribution was open, opt-in in every client, and sent a vector and a one-way
 hash — never audio, never a filename.
 
-## Take part
+## The packages
 
-The commons is the product. It is meant to be reached from the tools people already run,
-and the way in is a package with no dependency beyond the standard library
+The commons was meant to be reached from the tools people already run, through a package with
+no dependency beyond the standard library
 ([`ADR-0011`](docs/decisions/ADR-0011-the-commons-is-what-other-tools-plug-into.md)).
+**Every package below except `clapback-embed` needs the server, and gets no further
+releases.** They stay on PyPI. `clapback-embed` needs no server and is still maintained:
+Familiar depends on it.
 
-| If you… | Install | What it is |
+| If you… | Install | What it was |
 |---|---|---|
 | use **beets** | `pip install beets-clapback` | `absubmit` reborn: look up, else embed; contribute if you say so; `beet clapback-similar`. [README](packages/beets-clapback/) |
 | use **Picard** | the zip from a [`picard-v*` release](https://github.com/seethroughlab/clapback/releases?q=picard-v) | Right-click: look up, name, contribute; *what sounds like this*. Works with no embedder installed, and says so. [README](packages/picard-clapback/) |
@@ -33,8 +70,8 @@ and the way in is a package with no dependency beyond the standard library
 | want a **command line** | `pip install clapback-cli` | The reference client: index a directory, search it by description, find duplicates, `clapback similar` — what sounds like a track, including what you don’t own — and contribute. [README](packages/cli/) |
 | need the **embedder** | `pip install clapback-embed` | The reference pipeline. ONNX Runtime, no `torch`. [README](packages/embed/) |
 
-A tool that already computes CLAP vectors can contribute under its own pipeline
-identity; they sit beside the reference's rather than being compared with it.
+A tool that already computed CLAP vectors could contribute under its own pipeline
+identity; they sat beside the reference's rather than being compared with it.
 
 ## The reference pipeline
 
@@ -76,9 +113,16 @@ machine computed them. See [`packages/embed/`](packages/embed/) for the details 
 [`packages/embed/scripts/compare_vectors.py`](packages/embed/scripts/compare_vectors.py)
 for the cross-machine check.
 
-## Where this actually stands
+## Where it ended
 
-Early, and worth being plain about. As of 2026-09-15:
+At shutdown, measured 2026-11-02: **26,401 embeddings, all from one pipeline identity and one
+contributor** (the maintainer's Familiar), 0 recording-keyed rows, and 0 downloads of the Picard
+plugin. Four maintainer proposals went out on 2026-09-15; none led to a second contributor.
+[`ADR-0023`](docs/decisions/ADR-0023-the-commons-closes-and-its-data-stays-published.md) has the
+numbers and the reasons, including a structural one: an export of a young pipeline identity is
+one person's library.
+
+What this section said on 2026-09-15:
 
 - **25,886 embeddings, all from a single contributor.** Every row declares the pipeline
   that produced it and is keyed on a hash any client can reproduce from the audio —
@@ -129,13 +173,13 @@ Two licences, because they cover two different things.
   vector, and a recording id if you attach one. There is nobody to attribute — contributors are
   installations, not people — so no attribution or share-alike licence could be complied with.
   [`ADR-0013`](docs/decisions/ADR-0013-the-corpus-is-public-data-not-just-a-public-endpoint.md)
-  is the decision; it also commits to a weekly public export and a documented path to running
-  your own copy, both of which are owed rather than built as of 2026-09-15.
+  is the decision. The weekly export it committed to ran from 2026-09-15 to 2026-11-03; the
+  final one is [above](#the-final-export) and is permanent. The import script it promised was
+  never written.
 
 ## API
 
-Full reference at [`/api`](https://clapback.seethroughlab.com/api); schema at
-[`/docs`](https://clapback.seethroughlab.com/docs).
+The server that answered these is gone. This is what `packages/server/` implements.
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -317,8 +361,9 @@ Read the relevant ones before changing anything they govern.
 
 [`ADR-0003`](docs/decisions/ADR-0003-the-commons-runs-on-one-small-server.md) chose one
 small AWS instance running both Postgres and the application, sized by index RAM rather
-than corpus size, with the upgrade path written down. That is what runs: TLS via Caddy,
-nightly `pg_dump` to S3, a disk alert that delivers to a phone. `docker-compose.aws.yml`
+than corpus size, with the upgrade path written down. That is what ran, from 2026-09-04 until
+it was deleted on 2026-11-03: TLS via Caddy, nightly `pg_dump` to S3, a disk alert that
+delivered to a phone. `docker-compose.aws.yml`
 is the configuration and [`deploy/RUNBOOK.md`](packages/server/deploy/RUNBOOK.md) is
 how it was brought up and how it is operated.
 
@@ -370,5 +415,5 @@ Environment variables (prefix: `CACHE_`):
 - **API**: FastAPI + uvicorn, SQLAlchemy 2.0 async, Alembic migrations.
 - **Database**: PostgreSQL with pgvector; `(fingerprint_hash, pipeline_version)` is the
   key, HNSW over the vectors, and recording ids in a claims table beside them.
-- **Hosting**: one AWS Lightsail instance, per `ADR-0003`. No auto-deploy; the runbook
-  is the deploy.
+- **Hosting**: one AWS Lightsail instance, per `ADR-0003`, deleted 2026-11-03 (`ADR-0023`).
+  No auto-deploy; the runbook was the deploy.

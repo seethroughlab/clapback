@@ -1,5 +1,9 @@
 # clapback-client
 
+> **The clapback commons is closed.** Its server, `clapback.seethroughlab.com`, was shut down on
+> 2026-11-03 ([`ADR-0023`](../../docs/decisions/ADR-0023-the-commons-closes-and-its-data-stays-published.md)). This package exists to talk to that server. It stays on PyPI and gets no further releases. The corpus's data stays published under CC0 as
+> [a final export](https://github.com/seethroughlab/clapback#the-final-export).
+
 The contract a tool follows to take part in the [clapback](https://clapback.seethroughlab.com)
 commons — look up before you contribute, send what the records require, back off when told to —
 with no dependency beyond the standard library.

@@ -1,6 +1,6 @@
 # ADR-0013: The Corpus Is Public Data, Not Just a Public Endpoint
 
-Status: accepted
+Status: accepted — points 3 and 6 superseded by [ADR-0023](ADR-0023-the-commons-closes-and-its-data-stays-published.md)
 
 Date: 2026-09-15
 
