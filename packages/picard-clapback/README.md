@@ -1,5 +1,9 @@
 # Clapback for MusicBrainz Picard
 
+> **The clapback commons is closed.** Its server, `clapback.seethroughlab.com`, was shut down on
+> 2026-11-03 ([`ADR-0023`](../../docs/decisions/ADR-0023-the-commons-closes-and-its-data-stays-published.md)). This plugin's lookup, naming, contribution and *what sounds like this* all need that server, so it does nothing useful now. The release zip stays up, and there will be no further releases. The corpus's data stays published under CC0 as
+> [a final export](https://github.com/seethroughlab/clapback#the-final-export).
+
 Look up, name, and — if you say so — contribute CLAP audio embeddings for your files in the
 [clapback](https://clapback.seethroughlab.com) commons, and ask what sounds like a track across
 every library it holds. `ADR-0011` point 5's second integration: Picard already fingerprints every

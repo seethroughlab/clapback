@@ -1,6 +1,6 @@
 # ADR-0011: The Commons Is What Other Tools Plug Into
 
-Status: accepted
+Status: accepted — point 1 superseded by [ADR-0023](ADR-0023-the-commons-closes-and-its-data-stays-published.md)
 
 Date: 2026-09-13
 

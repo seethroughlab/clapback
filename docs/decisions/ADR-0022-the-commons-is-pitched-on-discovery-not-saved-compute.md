@@ -1,6 +1,6 @@
 # ADR-0022: The Commons Is Pitched on Discovery, Not Saved Compute
 
-Status: accepted
+Status: superseded by [ADR-0023](ADR-0023-the-commons-closes-and-its-data-stays-published.md)
 
 Date: 2026-09-20
 

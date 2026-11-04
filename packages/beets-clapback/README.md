@@ -1,5 +1,9 @@
 # beets-clapback
 
+> **The clapback commons is closed.** Its server, `clapback.seethroughlab.com`, was shut down on
+> 2026-11-03 ([`ADR-0023`](../../docs/decisions/ADR-0023-the-commons-closes-and-its-data-stays-published.md)). This plugin's lookup, `clapback-similar` and contribution all need that server, so it does nothing useful now. It stays on PyPI and gets no further releases. The corpus's data stays published under CC0 as
+> [a final export](https://github.com/seethroughlab/clapback#the-final-export).
+
 Look up, embed, and — if you say so — contribute CLAP embeddings for your beets library to the
 [clapback](https://clapback.seethroughlab.com) commons. `absubmit` reborn, with a payload that can
 actually be reconciled across contributors.

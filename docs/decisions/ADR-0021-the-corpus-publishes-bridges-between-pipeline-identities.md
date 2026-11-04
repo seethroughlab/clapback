@@ -1,6 +1,6 @@
 # ADR-0021: The Corpus Publishes Bridges Between Pipeline Identities
 
-Status: proposed
+Status: rejected by [ADR-0023](ADR-0023-the-commons-closes-and-its-data-stays-published.md)
 
 Date: 2026-09-19
 

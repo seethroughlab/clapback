@@ -1,5 +1,9 @@
 # clapback
 
+> **The clapback commons is closed.** Its server, `clapback.seethroughlab.com`, was shut down on
+> 2026-11-03 ([`ADR-0023`](../../docs/decisions/ADR-0023-the-commons-closes-and-its-data-stays-published.md)). `clapback similar` and `clapback contribute` need that server and no longer work. `index`, `search` and `duplicates` run locally and still do. The package stays on PyPI and gets no further releases. The corpus's data stays published under CC0 as
+> [a final export](https://github.com/seethroughlab/clapback#the-final-export).
+
 Search your own music by description, find duplicates across formats and masters,
 and ask the commons what sounds like a track — including recordings you don't own.
 

@@ -5,6 +5,14 @@ embedding is a 512-dimensional vector describing what a recording sounds like: e
 trivial to compare, and therefore worth computing once and sharing — provided everybody computes the
 same thing.
 
+**The commons is closed, as of 2026-11-03** (`ADR-0023`). The server, its DNS record and its
+snapshots are deleted. What remains: this repository, `clapback-embed` (still maintained, because
+Familiar depends on it), one permanent CC0 export in `s3://clapback-export/exports/2026-11-03/`
+(URLs and SHA256s in the README), and one private final dump,
+`s3://clapback-backup/postgres/clapback-2026-11-03.sql.gz`. Neither bucket expires anything current
+any more. Most of what follows is the record of the project as it ran from September to November
+2026, in the present tense it was written in.
+
 ## Architecture
 
 - **Server** (`app/`): FastAPI + PostgreSQL (pgvector) + SQLAlchemy 2.0 async, Alembic migrations.
@@ -226,14 +234,20 @@ discovery. Familiar still never calls `/v1/similar`; that is Familiar's decision
 `ADR-0008` closes `ADR-0001` deferred item 2 — the part the cross-machine measurement did not answer,
 being where the agreement threshold sits and what the corpus does with it.
 
-**What is still owed, in execution order:**
+**`ADR-0023` was accepted 2026-11-02 and executed 2026-11-03: the commons closed.** In two months
+it had one contributor, the maintainer's Familiar: 26,401 rows, one pipeline identity, 0
+recording-keyed rows, 0 Picard downloads. None of the four outreach threads produced a second
+contributor. KalinkaPlayer#128 was parked on 2026-09-21 and closed on 2026-10-29, for reasons
+worth keeping: the cold start, and that an export of a young identity is one person's library.
+Familiar `ADR-0159` (released in Familiar `v0.2.0-beta22`) removed Familiar's client first. Then
+came the final export and dump, the DNS record deleted before the instance so old clients fail
+instantly, and the instance, IP and snapshots deleted. The Implementation block records each step,
+and two corrections: the buckets' expiry rules would have deleted the "permanent" export, and
+`ADR-0013` point 7's import script never existed. `ADR-0021` is rejected. **Nothing is owed except
+the maintainer's notes on picard-plugins#436 and dj-track-similarity#2.** A revival starts with `ADR-0023`'s Follow-ups: madenvel's three export
+conditions and the missing export test, before any outreach.
 
-| ADR-0001 item | Decision | Why here |
-|---|---|---|
-| 4 | The recording-id key | `ADR-0002` point 4 makes it a prerequisite: similarity search over a hash-keyed corpus returns hashes nobody can resolve |
-| 6 | The rename, and what the domain serves | Cheap, and last on purpose — nothing above depends on it |
-
-### What is actually running, as of 2026-09-19
+### What was running, until 2026-11-03 (as written 2026-09-19)
 
 The commons is public at **https://clapback.seethroughlab.com** — one AWS instance, TLS via Caddy,
 nightly `pg_dump` to `s3://clapback-backup`, and a corpus of **25,930 rows (2026-09-19), every one of which
@@ -291,8 +305,8 @@ which it was. The Implementation block records what that corrected — **message
 maintainers are written by Jeff, AI use is disclosed where a project asks, and a project's AI
 policy is read before anything is sent.**
 
-**The bottleneck is a second contributor, not a decision, and not a build.** Everything queued
-that this project can do alone is done; the next step is somebody else replying.
+**The bottleneck was a second contributor, not a decision, and not a build.** Nobody replied in a
+way that produced one, and `ADR-0023` closed the commons on 2026-11-03.
 
 **The pattern worth keeping.** For most of this project's life the decisions ran far ahead of the
 code, and the `Implementation:` block is the only thing that kept that legible. Write one the day
@@ -301,7 +315,8 @@ and are marked so rather than quietly overtaken.
 
 ## Compatibility with Familiar
 
-[Familiar](https://github.com/seethroughlab/familiar) is the only client. `ADR-0001` point 1 says it
+[Familiar](https://github.com/seethroughlab/familiar) was the only client of the server, and is
+still the only dependant of the package. `ADR-0001` point 1 says it
 does not own this project; it does constrain it. **Check both surfaces before changing either, and
 verify against the sibling checkout rather than from memory** — the audit in `ADR-0005` is dated and
 will go stale.
@@ -313,10 +328,11 @@ from the top level, and reaches into two submodules by path: `clapback_embed.art
 is part of the contract**, not an implementation detail. `ADR-0005` point 11 widens `__all__` to
 match.
 
-**The server.** Familiar calls `/v1/embeddings`, `/v1/features` and `/v1/analysis-detail` — GET and
-POST on each — plus `/health`. **The features and analysis-detail endpoints are legacy for the
-corpus but live for the client.** `ADR-0001` point 7 decided no existing feature rows migrate; that
-is a statement about what the corpus carries, and it does not license removing the endpoints.
+**The server.** Familiar no longer calls it: Familiar `ADR-0159` (Familiar `v0.2.0-beta22`)
+removed its client. Before that it called `/v1/embeddings`, `/v1/features` and
+`/v1/analysis-detail` (GET and POST on each) plus `/health`. Installations older than beta22 still
+try. They fail instantly, because the name no longer resolves, and analyse locally. **The package
+surface above is the only contract left.**
 
 **The API is the only way in.** Clients and tools — Familiar, the CLI of `ADR-0001` point 3,
 anything else — reach the corpus over HTTP and never over a database connection. Every guarantee the
