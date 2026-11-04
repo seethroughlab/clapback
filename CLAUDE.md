@@ -244,8 +244,7 @@ came the final export and dump, the DNS record deleted before the instance so ol
 instantly, and the instance, IP and snapshots deleted. The Implementation block records each step,
 and two corrections: the buckets' expiry rules would have deleted the "permanent" export, and
 `ADR-0013` point 7's import script never existed. `ADR-0021` is rejected. **Nothing is owed except
-the GitHub description, the Picard release notes, and the maintainer's notes on picard-plugins#436 and
-dj-track-similarity#2.** A revival starts with `ADR-0023`'s Follow-ups: madenvel's three export
+the maintainer's notes on picard-plugins#436 and dj-track-similarity#2.** A revival starts with `ADR-0023`'s Follow-ups: madenvel's three export
 conditions and the missing export test, before any outreach.
 
 ### What was running, until 2026-11-03 (as written 2026-09-19)
