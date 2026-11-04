@@ -34,8 +34,8 @@ Implementation:
 - **Point 6 done 2026-11-03** in this repository: the README carries the final export and says
   the commons is closed, and the four server-dependent packages' READMEs say so. The GitHub
   repository description and the `picard-v0.2.0` release notes say the same.
-- **Point 8 done 2026-11-03.** The maintainer posted both notes, written by him: on
-  picard-plugins#436, which he closed, and on dj-track-similarity#2. **Every point is done.**
+- **Point 8 done 2026-11-03.** The maintainer wrote and posted both notes: on
+  picard-plugins#436, closing it, and on dj-track-similarity#2. **Every point is done.**
 
 Supersedes [ADR-0003](ADR-0003-the-commons-runs-on-one-small-server.md),
 [ADR-0011](ADR-0011-the-commons-is-what-other-tools-plug-into.md) point 1,
