@@ -243,8 +243,8 @@ Familiar `ADR-0159` (released in Familiar `v0.2.0-beta22`) removed Familiar's cl
 came the final export and dump, the DNS record deleted before the instance so old clients fail
 instantly, and the instance, IP and snapshots deleted. The Implementation block records each step,
 and two corrections: the buckets' expiry rules would have deleted the "permanent" export, and
-`ADR-0013` point 7's import script never existed. `ADR-0021` is rejected. **Nothing is owed except
-the maintainer's notes on picard-plugins#436 and dj-track-similarity#2.** A revival starts with `ADR-0023`'s Follow-ups: madenvel's three export
+`ADR-0013` point 7's import script never existed. `ADR-0021` is rejected. **Nothing is owed:** the
+maintainer's notes on picard-plugins#436 and dj-track-similarity#2 went out the same day. A revival starts with `ADR-0023`'s Follow-ups: madenvel's three export
 conditions and the missing export test, before any outreach.
 
 ### What was running, until 2026-11-03 (as written 2026-09-19)
